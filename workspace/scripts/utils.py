@@ -127,7 +127,14 @@ def run_mapper(
             log_to=os.path.join(output_dir, "accelergy.log"),
         )
 
-    return MacroOutputStats.from_output_stats(mapper_result)
+    stats = MacroOutputStats.from_output_stats(mapper_result)
+    # Expose the Timeloop output directory so downstream tools (e.g., the
+    # placement-aware overlay) can parse timeloop-mapper.stats.txt for
+    # per-component fanout / access counts / interconnect energy.
+    # NOTE: get_run_dir() reuses (and wipes) this dir on the next run_mapper
+    # call in the same thread, so parse it before the next run.
+    stats.output_dir = output_dir
+    return stats
 
 
 def quick_run(
