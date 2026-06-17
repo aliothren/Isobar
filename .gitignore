@@ -21,3 +21,8 @@ workspace/.jupyter
 workspace/.local
 workspace/.local
 *-checkpoint*
+# Local docker env (uid/gid/arch)
+.env
+
+# Standalone NeuroSim (separate repo, large)
+workspace/tutorials/DNN_NeuroSim_V1.3/
