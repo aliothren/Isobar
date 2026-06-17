@@ -1,3 +1,58 @@
+# cimsim — System-Level CIM Simulator for LLM Inference (fork of CiMLoop)
+
+This is a **fork of [CiMLoop](https://github.com/mit-emze/cimloop)** used as the
+baseline for a system-level Compute-In-Memory (CIM) simulator targeting LLM
+inference. We keep CiMLoop's mapping / architecture / macro modeling untouched as
+the lower layer, and add a thin, decoupled **placement / topology-aware** layer
+on top so that physical layout (where tiles/cores/dies sit, and how far data
+travels) becomes a first-class, configurable cost — something CiMLoop abstracts
+away.
+
+### What this fork adds
+
+- **`workspace/scripts/placement_aware.py`** — a decoupled overlay on top of a
+  CiMLoop run: `perceive(stats) → placement prior → distance model → re-aggregate`.
+  It reads the per-component data movement CiMLoop already produced, assigns
+  physical coordinates to instances, and reports a position-aware communication
+  cost next to the position-blind baseline. Placement priors (`place_grid`,
+  `place_linear`, ...) and communication patterns (`DISTANCE_MODELS`:
+  `to_center` / `tree` / `all_to_all` / `neighbor`) are **pluggable** so we can
+  explore different settings before the real topology is confirmed. Distance is
+  applied ONLY to true interconnect (router / `inter_*_spatial`), never to
+  compute or storage.
+- **`workspace/scripts/mlx_system.py`** — pins the hardware we currently model
+  (a 256×256 4-bit ReRAM crossbar, `wan_nature_2022`, placed in a tile/chip/DRAM
+  system), documents the company-chip → CiMLoop level mapping, holds the assumed
+  physical `LAYOUT`, and provides `run_mlx_layer()` / `run_mlx_dnn()` that run a
+  layer and return baseline + position-aware cost.
+- **`workspace/scripts/utils.py`** — one-line change so `run_mapper` exposes its
+  Timeloop output directory (the overlay parses `timeloop-mapper.stats.txt`).
+- **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
+  standalone NeuroSim) that are intentionally not committed.
+
+### Local setup notes (differ from upstream)
+
+- Use **`docker compose`** (v2 plugin), not the obsolete `docker-compose`.
+- UID/GID are overridable via a local `.env` (`USER_UID` / `USER_GID` /
+  `DOCKER_ARCH`); `.env` is git-ignored.
+- Upstream CiMLoop is kept as the `upstream` git remote for pulling updates.
+
+### Quick example
+
+```python
+from scripts import mlx_system as mlx
+from scripts import placement_aware as pa
+
+layer = mlx.list_layers("resnet18")[0]
+r = mlx.run_mlx_layer(layer, place_fn=pa.place_grid)     # one mapper run
+pa.print_report(r["analysis"], title="grid / to_center")
+# swap placement prior or LAYOUT["router"]["pattern"] to compare settings.
+```
+
+---
+
+The original CiMLoop README follows.
+
 # CiMLoop (Timeloop+Accelergy v4)
 
 Welcome to the repository for "CiMLoop: A Flexible, Accurate, and Fast

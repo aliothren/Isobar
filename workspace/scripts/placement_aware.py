@@ -110,14 +110,69 @@ def place_linear(n: int) -> List[Tuple[float, float]]:
 # ---------------------------------------------------------------------------
 # 3. Distance model
 # ---------------------------------------------------------------------------
-def avg_hops(coords: List[Tuple[float, float]]) -> float:
-    """Average Manhattan distance from the centroid -- a representative hop count
-    for a reduction-to-center / multicast-from-center communication pattern."""
+def _manhattan(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+# --- communication-pattern models: coords -> representative hops PER transfer ---
+# Each returns an average hop count (>=1) so that
+#     position_aware_energy = baseline_energy * hops * hop_scale
+# stays comparable across patterns. We do NOT yet know the real topology, so
+# these are PLUGGABLE: pick one per component in LAYOUT, or register your own.
+
+def hops_to_center(coords):
+    """Reduction-to-center / multicast-from-center: every instance talks to a
+    single central point. hops = avg Manhattan distance to the centroid."""
     if len(coords) <= 1:
         return 1.0
     cx = sum(x for x, _ in coords) / len(coords)
     cy = sum(y for _, y in coords) / len(coords)
-    return max(1.0, sum(abs(x - cx) + abs(y - cy) for x, y in coords) / len(coords))
+    return max(1.0, sum(_manhattan(c, (cx, cy)) for c in coords) / len(coords))
+
+
+def hops_tree(coords):
+    """Reduction TREE: hierarchical pairwise merge. hops = avg distance per
+    merge step (cheaper than to-center for large fanout)."""
+    pts = list(coords)
+    total, n_merges = 0.0, 0
+    while len(pts) > 1:
+        nxt = []
+        for i in range(0, len(pts) - 1, 2):
+            total += _manhattan(pts[i], pts[i + 1]); n_merges += 1
+            nxt.append(((pts[i][0] + pts[i + 1][0]) / 2,
+                        (pts[i][1] + pts[i + 1][1]) / 2))
+        if len(pts) % 2:
+            nxt.append(pts[-1])
+        pts = nxt
+    return max(1.0, total / max(n_merges, 1))
+
+
+def hops_all_to_all(coords):
+    """All-to-all: every instance talks to every other. hops = avg pairwise
+    Manhattan distance (worst case, e.g. unstructured exchange)."""
+    n = len(coords)
+    if n <= 1:
+        return 1.0
+    total = sum(_manhattan(coords[i], coords[j])
+                for i in range(n) for j in range(i + 1, n))
+    return max(1.0, total / (n * (n - 1) / 2))
+
+
+def hops_neighbor(coords):
+    """Nearest-neighbor / mesh-local: only adjacent instances communicate."""
+    return 1.0
+
+
+# Registry: name -> model. Add your own with DISTANCE_MODELS["foo"] = fn.
+DISTANCE_MODELS = {
+    "to_center": hops_to_center,   # reduction/multicast via a hub (default)
+    "tree":      hops_tree,        # hierarchical reduction tree
+    "all_to_all": hops_all_to_all, # unstructured all-to-all exchange
+    "neighbor":  hops_neighbor,    # mesh-local nearest-neighbor
+}
+
+# Back-compat alias.
+avg_hops = hops_to_center
 
 
 # ---------------------------------------------------------------------------
@@ -146,18 +201,22 @@ def position_aware_cost(
     levels: Dict[str, dict],
     layout: Dict[str, dict] = None,
     place_fn: Callable[[int], List[Tuple[float, float]]] = place_grid,
+    default_pattern: str = "to_center",
 ) -> dict:
     """
     Apply the placement/distance overlay to perceived components.
 
     Args:
         levels:   output of perceive().
-        layout:   {component_name: {"hop_scale": float, ...}} -- per-level
-                  physical cost from the hardware layout spec. Default scale 1.0.
+        layout:   {component_name: {"pattern": str, "hop_scale": float, ...}}.
+                  `pattern` selects a model from DISTANCE_MODELS (multicast/
+                  reduction is "to_center"/"tree"; "all_to_all"; "neighbor").
+                  `hop_scale` is the per-hop physical cost from the layout spec.
         place_fn: placement prior mapping instance-count -> coordinates.
+        default_pattern: pattern used when a component has none set in `layout`.
 
     Returns dict with:
-        rows:           list of (name, fanout, baseline_J, avg_hops, position_aware_J)
+        rows:           list of (name, fanout, baseline_J, hops, position_aware_J)
         baseline:       sum of baseline communication energy (position-blind)
         position_aware: sum of position-aware communication energy
         ratio:          position_aware / baseline
@@ -168,9 +227,13 @@ def position_aware_cost(
     for name, info in levels.items():
         if not _is_comm_component(name, info):
             continue
+        cfg = layout.get(name, {})
+        pattern = cfg.get("pattern", default_pattern)
+        hops_fn = DISTANCE_MODELS.get(pattern, hops_to_center)
+
         base = info["volume"] * info["unit_pJ"] * 1e-12  # Joules, position-blind
-        hops = avg_hops(place_fn(info["fanout"]))
-        hop_scale = layout.get(name, {}).get("hop_scale", 1.0)
+        hops = hops_fn(place_fn(info["fanout"]))
+        hop_scale = cfg.get("hop_scale", 1.0)
         pa = base * hops * hop_scale
         rows.append((name, info["fanout"], base, hops, pa))
         tot_base += base
@@ -199,9 +262,11 @@ def print_report(res: dict, title: str = ""):
 # ---------------------------------------------------------------------------
 # TODOs to make this less of a first-cut approximation
 # ---------------------------------------------------------------------------
-# - Communication pattern: distinguish multicast / reduction / unicast from the
-#   container's spatial_must_reuse_* constraint (or parse map+stats.xml), instead
-#   of assuming reduction-to-center for everything.
+# - Communication pattern: patterns are now PLUGGABLE (DISTANCE_MODELS, chosen
+#   per component via LAYOUT["..."]["pattern"]). Still TODO: AUTO-DETECT the real
+#   pattern (multicast/reduction/unicast) from the container's
+#   spatial_must_reuse_* constraint or map+stats.xml, instead of configuring it
+#   by hand. Confirm the actual on-chip topology with the hardware team.
 # - Placement: add locality-aware priors and (later) an outer search/agent that
 #   optimizes placement using this cost as the objective.
 # - Latency: also overlay a hop-latency term (hop_latency_ns in LAYOUT), not just

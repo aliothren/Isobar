@@ -83,12 +83,17 @@ def mlx_callfunc(spec):
 # energy, so distance acts there). hop_scale = relative physical cost per hop.
 # Fill per-level values once the exact die->macro->core hierarchy exists.
 # ---------------------------------------------------------------------------
+# Per-interconnect physical layout. `pattern` selects a communication model
+# (placement_aware.DISTANCE_MODELS): "to_center"/"tree" for reduction/multicast,
+# "all_to_all", or "neighbor". We do NOT have the confirmed topology yet, so this
+# is intentionally PLUGGABLE -- swap pattern/hop_scale per level to explore.
 LAYOUT = {
-    "router": {"topology": "mesh_2d", "hop_scale": 1.0, "hop_latency_ns": 1.0},
+    "router": {"topology": "mesh_2d", "pattern": "to_center",
+               "hop_scale": 1.0, "hop_latency_ns": 1.0},
     # Phase 2 examples (cheaper inside, costlier across):
-    # "inter_core_in_macro":  {"topology": "mesh_2d", "hop_scale": 0.3},
-    # "inter_macro_in_die":   {"topology": "mesh_2d", "hop_scale": 1.0},
-    # "inter_die_in_package": {"topology": "mesh_2d", "hop_scale": 8.0},
+    # "inter_core_in_macro":  {"pattern": "tree",      "hop_scale": 0.3},
+    # "inter_macro_in_die":   {"pattern": "to_center", "hop_scale": 1.0},
+    # "inter_die_in_package": {"pattern": "all_to_all","hop_scale": 8.0},
 }
 
 
