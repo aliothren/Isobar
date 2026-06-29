@@ -79,35 +79,83 @@ def mlx_callfunc(spec):
 
 
 # ---------------------------------------------------------------------------
+# Phase-2 hardware configuration: explicit die -> macro -> core -> crossbar
+# (one die; package level not modeled). Uses the arch files we wrote:
+#   chip = 3_chip/mlx_die.yaml,  tile = 2_tile/mlx_core.yaml,
+#   macro = wan_nature_2022 (the 256x256 4-bit ReRAM crossbar).
+# ---------------------------------------------------------------------------
+N_MACROS_PER_DIE = 8     # macro_in_die.meshX
+N_CORES_PER_MACRO = 4    # core_in_macro.meshX
+CROSSBARS_PER_CORE = 8   # crossbar_in_core.meshX (~2 Mbit core, if 2M == 2 Mbit)
+
+MLX_DIE_CONFIG = dict(
+    macro="wan_nature_2022",
+    tile="mlx_core",          # core: local I/O buffer + crossbars
+    chip="mlx_die",           # die: 8 MB glb + 8 macros + router + 4 cores
+    system="fetch_weights_lpddr4",
+)
+
+
+def mlx_die_callfunc(spec):
+    """Size the explicit die hierarchy (8 macros/die, 4 cores/macro, 8
+    crossbars/core) and relax the same default constraints."""
+    for name, mesh in [("macro_in_die", N_MACROS_PER_DIE),
+                       ("core_in_macro", N_CORES_PER_MACRO),
+                       ("crossbar_in_core", CROSSBARS_PER_CORE)]:
+        c = spec.architecture.find(name)
+        c.spatial.meshX = mesh
+        c.attributes.has_power_gating = True
+        c.constraints.spatial.no_reuse = []
+    spec.architecture.find("output_buffer").constraints.temporal.iter_only = []
+
+
+# ---------------------------------------------------------------------------
 # Assumed physical LAYOUT (Phase 1: only the `router` interconnect has fanout +
 # energy, so distance acts there). hop_scale = relative physical cost per hop.
 # Fill per-level values once the exact die->macro->core hierarchy exists.
 # ---------------------------------------------------------------------------
-# Per-interconnect physical layout. `pattern` selects a communication model
-# (placement_aware.DISTANCE_MODELS): "to_center"/"tree" for reduction/multicast,
-# "all_to_all", or "neighbor". We do NOT have the confirmed topology yet, so this
-# is intentionally PLUGGABLE -- swap pattern/hop_scale per level to explore.
+# Per-interconnect physical layout.
+#   pattern         : communication model (placement_aware.DISTANCE_MODELS) --
+#                     "to_center"/"tree" (reduction/multicast), "all_to_all",
+#                     "neighbor".
+#   hop_scale       : per-hop physical cost multiplier (from the layout spec).
+#   reference_hops  : how many hops CiMLoop's BASELINE per-word energy already
+#                     represents. CiMLoop charges a fixed per-word energy for ONE
+#                     router traversal with NO distance term, so reference_hops=1
+#                     treats the baseline as "one hop" (a multi-hop mesh then
+#                     costs `hops` x more). If the router energy was instead
+#                     calibrated to an average R-hop transfer, set reference_hops=R
+#                     so good placement falls BELOW baseline and bad ABOVE.
+#                     >>> UNCONFIRMED: verify what the isaac_router energy means. <<<
+# Topology + these values are PLUGGABLE -- swap per level to explore settings.
 LAYOUT = {
     "router": {"topology": "mesh_2d", "pattern": "to_center",
-               "hop_scale": 1.0, "hop_latency_ns": 1.0},
+               "hop_scale": 1.0, "hop_latency_ns": 1.0, "reference_hops": 1.0},
     # Phase 2 examples (cheaper inside, costlier across):
-    # "inter_core_in_macro":  {"pattern": "tree",      "hop_scale": 0.3},
-    # "inter_macro_in_die":   {"pattern": "to_center", "hop_scale": 1.0},
-    # "inter_die_in_package": {"pattern": "all_to_all","hop_scale": 8.0},
+    # "inter_core_in_macro":  {"pattern": "tree",      "hop_scale": 0.3, "reference_hops": 1.0},
+    # "inter_macro_in_die":   {"pattern": "to_center", "hop_scale": 1.0, "reference_hops": 1.0},
+    # "inter_die_in_package": {"pattern": "all_to_all","hop_scale": 8.0, "reference_hops": 1.0},
 }
 
 
 # ---------------------------------------------------------------------------
 # Run one layer + perceive + position-aware overlay
 # ---------------------------------------------------------------------------
-def run_mlx_layer(layer_path, place_fn=pa.place_grid, layout=None):
+def run_mlx_layer(layer_path, place_fn=pa.place_grid, layout=None,
+                  config=None, callfunc=None):
     """Run a single workload layer on the MLX-style system and return both the
     raw CiMLoop result and the position-aware communication analysis.
+
+    config/callfunc default to the Phase-1 setup (MLX_CONFIG / mlx_callfunc);
+    pass MLX_DIE_CONFIG / mlx_die_callfunc for the explicit die->macro->core->
+    crossbar hierarchy.
 
     The stats file is parsed IMMEDIATELY (the run dir is wiped on the next
     run_mapper call in the same thread), so this is loop-safe.
     """
-    result = utl.run_layer(layer=layer_path, callfunc=mlx_callfunc, **MLX_CONFIG)
+    config = config or MLX_CONFIG
+    callfunc = callfunc or mlx_callfunc
+    result = utl.run_layer(layer=layer_path, callfunc=callfunc, **config)
     levels = pa.perceive_result(result)                 # capture before next run
     analysis = pa.position_aware_cost(levels, layout or LAYOUT, place_fn)
     return {

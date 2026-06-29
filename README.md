@@ -10,23 +10,46 @@ away.
 
 ### What this fork adds
 
-- **`workspace/scripts/placement_aware.py`** — a decoupled overlay on top of a
-  CiMLoop run: `perceive(stats) → placement prior → distance model → re-aggregate`.
-  It reads the per-component data movement CiMLoop already produced, assigns
-  physical coordinates to instances, and reports a position-aware communication
-  cost next to the position-blind baseline. Placement priors (`place_grid`,
-  `place_linear`, ...) and communication patterns (`DISTANCE_MODELS`:
-  `to_center` / `tree` / `all_to_all` / `neighbor`) are **pluggable** so we can
-  explore different settings before the real topology is confirmed. Distance is
-  applied ONLY to true interconnect (router / `inter_*_spatial`), never to
-  compute or storage.
-- **`workspace/scripts/mlx_system.py`** — pins the hardware we currently model
-  (a 256×256 4-bit ReRAM crossbar, `wan_nature_2022`, placed in a tile/chip/DRAM
-  system), documents the company-chip → CiMLoop level mapping, holds the assumed
-  physical `LAYOUT`, and provides `run_mlx_layer()` / `run_mlx_dnn()` that run a
-  layer and return baseline + position-aware cost.
-- **`workspace/scripts/utils.py`** — one-line change so `run_mapper` exposes its
-  Timeloop output directory (the overlay parses `timeloop-mapper.stats.txt`).
+**Hardware model (the company chip as CiMLoop arch files; package level TBD):**
+
+- **`models/arch/3_chip/mlx_die.yaml`** — a DIE: 8 MB on-chip SRAM (`glb`) +
+  8 macros + inter-macro `router` + 4 cores/macro.
+- **`models/arch/2_tile/mlx_core.yaml`** — a CORE: local input/output buffers +
+  N crossbars (default 8 ≈ 2 Mbit/core).
+- A crossbar = the 256×256 4-bit ReRAM macro `wan_nature_2022` (reused).
+  So the hierarchy is `die → macro → core → crossbar`.
+
+**Scripts (`workspace/scripts/`):**
+
+- **`mlx_system.py`** — single source of truth for the hardware config + the
+  assumed physical `LAYOUT`. `MLX_CONFIG`/`mlx_callfunc` (Phase-1, reuses verified
+  generic levels) and `MLX_DIE_CONFIG`/`mlx_die_callfunc` (explicit die hierarchy
+  above). `run_mlx_layer()` / `run_mlx_dnn()` run a layer and return the CiMLoop
+  result + position-aware analysis.
+- **`placement_aware.py`** — the decoupled topology-aware overlay:
+  `perceive(stats) → placement prior → distance model → re-aggregate`. Placement
+  priors (`place_grid`, `place_linear`) and communication patterns
+  (`DISTANCE_MODELS`: `to_center` / `tree` / `all_to_all` / `neighbor`) are
+  **pluggable**. The key explicit assumption is `reference_hops` (how many hops
+  CiMLoop's fixed per-word interconnect energy already represents); absolute
+  multipliers depend on it, but **relative** placement/pattern comparisons do
+  not. Distance is applied ONLY to true interconnect, never compute/storage.
+- **`crossbar_stats.py`** — per-CROSSBAR statistics: compute / weight / input /
+  output per crossbar (average), per-level bus traffic (NoC / SRAM / DRAM), and
+  the communication STRUCTURE per spatial level (multicast vs reduction vs
+  bit-slice, parsed from the mapping).
+- **`crossbar_comm.py`** — per-PAIR (node↔node) communication: lays the crossbars
+  on a nested floorplan, walks the multicast/reduction tree to produce
+  `(src → dst, volume, distance)` flows, and reports per-crossbar communication
+  **cost that varies by physical position** (same volume, different cost) + a
+  floorplan heatmap. This is the bridge from aggregate bus traffic to "which
+  crossbar talks to which, how much, how far."
+- **`analyze_position_aware.py`** — real-DNN case study: runs a DNN layer-by-layer
+  (sequential, 1 core), caches per-layer perceived data, and compares
+  communication cost across placements × patterns (relative, with charts/CSV).
+- **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output
+  directory (the overlay/stats parse `timeloop-mapper.stats.txt`).
+
 - **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
   standalone NeuroSim) that are intentionally not committed.
 
@@ -36,17 +59,34 @@ away.
 - UID/GID are overridable via a local `.env` (`USER_UID` / `USER_GID` /
   `DOCKER_ARCH`); `.env` is git-ignored.
 - Upstream CiMLoop is kept as the `upstream` git remote for pulling updates.
+- ⚠️ The analysis scripts run mappers; keep them **sequential / 1 core**
+  (`run_mlx_dnn` already does) so they don't starve other workloads.
 
-### Quick example
+### Quick examples (run inside the container)
 
 ```python
 from scripts import mlx_system as mlx
 from scripts import placement_aware as pa
+from scripts import crossbar_stats as cbs
+from scripts import crossbar_comm as cc
 
 layer = mlx.list_layers("resnet18")[0]
-r = mlx.run_mlx_layer(layer, place_fn=pa.place_grid)     # one mapper run
-pa.print_report(r["analysis"], title="grid / to_center")
-# swap placement prior or LAYOUT["router"]["pattern"] to compare settings.
+
+# 1) one layer on the explicit die hierarchy, with position-aware cost
+r = mlx.run_mlx_layer(layer, config=mlx.MLX_DIE_CONFIG, callfunc=mlx.mlx_die_callfunc)
+pa.print_report(r["analysis"], title="die / grid / to_center")
+
+# 2) per-crossbar stats + communication structure
+cbs.report(r["result"].output_dir)
+
+# 3) per-pair (node↔node) flows + per-crossbar position cost + heatmap
+cc.summarize_and_plot(r["result"].output_dir, layer_name="00")
+```
+
+Whole-DNN placement/pattern comparison (writes charts/CSV to `analysis/`):
+
+```bash
+python3 scripts/analyze_position_aware.py resnet18
 ```
 
 ---

@@ -202,24 +202,47 @@ def position_aware_cost(
     layout: Dict[str, dict] = None,
     place_fn: Callable[[int], List[Tuple[float, float]]] = place_grid,
     default_pattern: str = "to_center",
+    default_reference_hops: float = 1.0,
 ) -> dict:
     """
-    Apply the placement/distance overlay to perceived components.
+    Apply the placement/distance overlay to perceived communication components.
+
+    Cost model (per interconnect component)
+    ---------------------------------------
+        baseline_comm = volume * per_word_energy        # what CiMLoop reports.
+                                                         # CiMLoop has NO distance
+                                                         # term: it is volume x a
+                                                         # FIXED per-word energy
+                                                         # (one router traversal),
+                                                         # i.e. position-blind.
+        position_aware = baseline_comm * (hops / reference_hops) * hop_scale
+
+    The key, EXPLICIT assumption is `reference_hops` = how many hops the baseline
+    per-word energy already represents:
+      * reference_hops = 1  -> interpret CiMLoop's energy as a SINGLE hop /
+                               router traversal (the model literally charges one
+                               traversal). Then a multi-hop mesh costs `hops` x
+                               more, and good vs bad placement is good<bad above
+                               baseline. Use this if the real interconnect is a
+                               multi-hop NoC and the per-word energy is one hop.
+      * reference_hops = R  -> interpret CiMLoop's energy as the AVERAGE of an
+                               R-hop transfer (already distance-inclusive). Then
+                               good placement falls BELOW baseline and bad ABOVE.
+                               Use this once you know what the router energy was
+                               calibrated to (ask the hardware team / inspect the
+                               component model).
+
+    This must be pinned down before the absolute multipliers are trustworthy;
+    the RELATIVE good-vs-bad placement comparison is robust either way.
 
     Args:
         levels:   output of perceive().
-        layout:   {component_name: {"pattern": str, "hop_scale": float, ...}}.
-                  `pattern` selects a model from DISTANCE_MODELS (multicast/
-                  reduction is "to_center"/"tree"; "all_to_all"; "neighbor").
-                  `hop_scale` is the per-hop physical cost from the layout spec.
+        layout:   {component_name: {"pattern": str, "hop_scale": float,
+                  "reference_hops": float, ...}} -- from the hardware layout spec.
         place_fn: placement prior mapping instance-count -> coordinates.
-        default_pattern: pattern used when a component has none set in `layout`.
+        default_pattern / default_reference_hops: used when not set per-component.
 
-    Returns dict with:
-        rows:           list of (name, fanout, baseline_J, hops, position_aware_J)
-        baseline:       sum of baseline communication energy (position-blind)
-        position_aware: sum of position-aware communication energy
-        ratio:          position_aware / baseline
+    Returns dict with rows, baseline, position_aware, ratio (see print_report).
     """
     layout = layout or {}
     rows = []
@@ -230,12 +253,13 @@ def position_aware_cost(
         cfg = layout.get(name, {})
         pattern = cfg.get("pattern", default_pattern)
         hops_fn = DISTANCE_MODELS.get(pattern, hops_to_center)
+        ref_hops = max(cfg.get("reference_hops", default_reference_hops), 1e-9)
+        hop_scale = cfg.get("hop_scale", 1.0)
 
         base = info["volume"] * info["unit_pJ"] * 1e-12  # Joules, position-blind
         hops = hops_fn(place_fn(info["fanout"]))
-        hop_scale = cfg.get("hop_scale", 1.0)
-        pa = base * hops * hop_scale
-        rows.append((name, info["fanout"], base, hops, pa))
+        pa = base * (hops / ref_hops) * hop_scale
+        rows.append((name, info["fanout"], base, hops / ref_hops, pa))
         tot_base += base
         tot_pa += pa
     return {

@@ -1,0 +1,50 @@
+{{include_text('defines.yaml')}}
+
+# =============================================================================
+# MLX-style CORE: a local input/output buffer + several crossbars (~2M).
+#   core
+#    +-- input_buffer / output_buffer : core-local SRAM staging
+#    +-- crossbar_in_core (xN)        : N crossbars per core
+#         (each crossbar = the 256x256 4-bit ReRAM macro, wan_nature_2022)
+#
+# N = CROSSBARS_PER_CORE. One crossbar = 256*256*4b = 256 Kbit, so a ~2 Mbit
+# core holds ~8 crossbars (set below; adjust if "2M" turns out to be 2 MB).
+#
+# Modeled on 2_tile/input_output_bufs.yaml (verified).
+# =============================================================================
+architecture:
+  nodes:
+  - !Container # Core top-level
+    name: core
+    <<<: [*container_defaults]
+    attributes: {has_power_gating: True}
+
+  - !Component # Core-local input buffer
+    name: input_buffer
+    <<<: [*component_defaults]
+    subclass: smartbuffer_sram
+    attributes:
+      n_crossbars: crossbar_in_core.spatial.meshX * crossbar_in_core.spatial.meshY
+      width: n_crossbars * SUPPORTED_INPUT_BITS
+      depth: ARRAY_PARALLEL_INPUTS * SUPPORTED_INPUT_BITS * n_crossbars // width
+      multiple_buffering: 1 / CIM_UNIT_DEPTH_CELLS
+    constraints: {dataspace: {keep_only: [Inputs]}, temporal: {factors_only: []}}
+    enabled: True
+
+  - !Component # Core-local output buffer
+    name: output_buffer
+    <<<: [*component_defaults]
+    subclass: smartbuffer_sram
+    attributes:
+      n_crossbars: crossbar_in_core.spatial.meshX * crossbar_in_core.spatial.meshY
+      width: n_crossbars * SUPPORTED_OUTPUT_BITS
+      depth: ARRAY_PARALLEL_OUTPUTS * SUPPORTED_OUTPUT_BITS * n_crossbars // width
+      multiple_buffering: 1 / CIM_UNIT_DEPTH_CELLS
+    constraints: {dataspace: {keep_only: [Outputs]}, temporal: {factors_only: []}}
+    enabled: True
+
+  - !Container # N crossbars per core (each crossbar = the ReRAM macro)
+    name: crossbar_in_core
+    <<<: [*container_defaults, *spatial_map_all_weights]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: 8}   # CROSSBARS_PER_CORE (~2 Mbit core); override in callfunc
