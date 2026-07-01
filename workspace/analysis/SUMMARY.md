@@ -105,8 +105,10 @@ CiMLoop 能量**数值相关**:每层 `histograms` 决定 ReRAM 模拟电流/ADC
 
 | phase | attention 占比(能量) | attention 占比(延迟) | 写延迟占整块 |
 |---|---|---|---|
-| prefill S=512 | 22.8% | **35.6%** | 21% |
-| decode S=512 | 8.9% | **47.8%** | 22% |
+| prefill S=512 | 33.7% | **35.6%** | 21% |
+| decode S=512 | **87.8%** | 47.8% | 22% |
+
+> prefill 里 FFN/投影仍是最大单项(能量 66%)——S=512 下 transformer 本就 FFN-heavy,这正常;图要说明的是 attention 占比 + 红色写块。**decode 则相反:常驻后计算塌缩,attention K/V 写占能量 82%**,FFN 只剩 12%(与 §6.2 一致)。
 
 ---
 
