@@ -22,6 +22,9 @@ which, how much, how far." Volumes are exact (from the run); the per-pair split
 follows the multicast/reduction tree + the chosen placement.
 """
 import os
+import re
+import csv
+import json
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -70,15 +73,41 @@ def _manh(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
+def level_max_hops(n_macros, cores_per_macro, xbars_per_core):
+    """Geometry-only: the WORST-case Manhattan hop count at each tree level,
+    purely from the nested floorplan (no stats parsing, no printing).
+
+    Used by the distance-LATENCY overlay: within a level all branches are
+    parallel, so the longest branch (max hops) sets the critical path; across
+    levels the path is in series (summed by position_aware_latency).
+    Returns {level_name: max_hops} keyed to match HOP_LATENCY_NS.
+    """
+    xb_coord, core_coord, macro_coord, die_coord, _ = \
+        nested_floorplan(n_macros, cores_per_macro, xbars_per_core)
+    g_m = max(_manh(die_coord, macro_coord[m]) for m in range(n_macros))
+    m_c = max(_manh(macro_coord[m], core_coord[(m, c)])
+              for m in range(n_macros) for c in range(cores_per_macro))
+    gid, c_x = 0, 0.0
+    for m in range(n_macros):
+        for c in range(cores_per_macro):
+            for _ in range(xbars_per_core):
+                c_x = max(c_x, _manh(core_coord[(m, c)], xb_coord[gid]))
+                gid += 1
+    return {"glb<->macro": g_m, "macro<->core": m_c, "core<->crossbar": c_x}
+
+
 # --------------------------------------------------------------------------
-def build_flows(output_dir, layer_name=""):
+def build_flows(output_dir, layer_name="", verbose=True):
     """Return (flows, per_crossbar_cost, grid_shape, xb_coord).
 
     flows: list of dicts {level, src, dst, volume, distance} -- the pairwise links.
     per_crossbar_cost: array[n_crossbars] of volume*distance summed along its path
                        (input down + output up) -> the position-dependent cost.
+    verbose=True prints the crossbar_stats aggregate report; False stays quiet
+    (used by the auto-saved dump).
     """
-    r = cbs.report(output_dir, layer_name)  # also prints the aggregate report
+    r = cbs.report(output_dir, layer_name) if verbose \
+        else cbs.hierarchy(output_dir)
     nM = r["n_macros"]
     cores_per_macro = r["n_cores"] // nM
     xbars_per_core = r["n_crossbars"] // r["n_cores"]
@@ -122,6 +151,58 @@ def build_flows(output_dir, layer_name=""):
                 per_xb[gid] = vol_x * path
                 gid += 1
     return flows, per_xb, gshape, xb_coord
+
+
+# --------------------------------------------------------------------------
+DEFAULT_COMM_DIR = "/home/workspace/analysis/comm"
+
+
+def save_flows(output_dir, tag="layer", dest_dir=DEFAULT_COMM_DIR, verbose=False):
+    """Persist the DETAILED per-pair communication data for one run to files
+    (the aggregate stats.txt is overwritten by the next run, so we snapshot here).
+
+    Writes two files under dest_dir, named by `tag`:
+      <tag>_comm.csv  -- one row per pairwise link (node<->node): level, src, dst,
+                         volume (words), distance (hops), volume*distance.
+      <tag>_comm.json -- structured: hierarchy shape, all flows, per-crossbar cost,
+                         and the min/max/ratio position spread summary.
+    Returns (csv_path, json_path). Safe to call after any die-hierarchy run.
+    """
+    flows, per_xb, gshape, xb_coord = build_flows(output_dir, tag, verbose=verbose)
+    os.makedirs(dest_dir, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", tag)  # qk^t -> qk_t
+
+    csv_path = os.path.join(dest_dir, f"{safe}_comm.csv")
+    with open(csv_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["level", "src", "dst", "volume_words", "distance_hops",
+                    "volume_x_distance"])
+        for fl in flows:
+            w.writerow([fl["level"], fl["src"], fl["dst"], int(round(fl["volume"])),
+                        round(fl["distance"], 3), round(fl["volume"] * fl["distance"], 3)])
+
+    per_xb = np.asarray(per_xb, dtype=float)
+    payload = {
+        "tag": tag,
+        "grid_shape": [int(gshape[0]), int(gshape[1])],
+        "n_crossbars": int(len(per_xb)),
+        "n_flows": len(flows),
+        "per_crossbar_cost": {
+            "min": float(per_xb.min()), "max": float(per_xb.max()),
+            "max_over_min": float(per_xb.max() / max(per_xb.min(), 1)),
+        },
+        "flows": [{"level": fl["level"], "src": fl["src"], "dst": fl["dst"],
+                   "volume_words": float(fl["volume"]),
+                   "distance_hops": float(fl["distance"])} for fl in flows],
+        "per_crossbar": [{"id": gid, "x": float(xb_coord[gid][0]),
+                          "y": float(xb_coord[gid][1]),
+                          "cost_vol_x_path": float(per_xb[gid])}
+                         for gid in range(len(per_xb))],
+    }
+    json_path = os.path.join(dest_dir, f"{safe}_comm.json")
+    with open(json_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    return csv_path, json_path
 
 
 # --------------------------------------------------------------------------

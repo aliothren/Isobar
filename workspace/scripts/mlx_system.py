@@ -79,21 +79,47 @@ def mlx_callfunc(spec):
 
 
 # ---------------------------------------------------------------------------
-# Phase-2 hardware configuration: explicit die -> macro -> core -> crossbar
-# (one die; package level not modeled). Uses the arch files we wrote:
-#   chip = 3_chip/mlx_die.yaml,  tile = 2_tile/mlx_core.yaml,
-#   macro = wan_nature_2022 (the 256x256 4-bit ReRAM crossbar).
+# Phase-2 hardware: explicit package -> die -> macro -> core -> crossbar.
+#   macro = wan_nature_2022 (256x256 4-bit ReRAM crossbar)
+#   tile  = 2_tile/mlx_core.yaml   (core: I/O buffers + 8 crossbars)
+#   chip  = 3_chip/mlx_die.yaml    (die: 8 MB glb + 8 macros + router + 4 cores)
+#   system= 4_system/ws_chip2chip_link.yaml  (PACKAGE: N dies + die<->die link)
+#
+# WEIGHTS ARE RESIDENT (ReRAM is non-volatile / weight-stationary): they are
+# PROGRAMMED ONCE into the crossbars and stay -- inference does NOT re-stream
+# weights from DRAM. So the top level is ws_chip2chip_link (no weight DRAM; only
+# activations flow die-to-die), NOT fetch_weights_lpddr4 (which streams weights
+# every inference -- correct for a volatile SRAM CiM, WRONG for ReRAM, and
+# inflated our earlier energy ~36%). The ONLY per-inference writes are attention
+# K/V (see llm_workload write cost) -- exactly what a resident design implies.
 # ---------------------------------------------------------------------------
 N_MACROS_PER_DIE = 8     # macro_in_die.meshX
 N_CORES_PER_MACRO = 4    # core_in_macro.meshX
 CROSSBARS_PER_CORE = 8   # crossbar_in_core.meshX (~2 Mbit core, if 2M == 2 Mbit)
+CROSSBARS_PER_DIE = N_MACROS_PER_DIE * N_CORES_PER_MACRO * CROSSBARS_PER_CORE  # 256
+# One die weight capacity (4-bit cells): 256 crossbars x 256x256 x 4b = 8.4 MB
+# = 16.8 M 4-bit weights. GPT-2 medium (302 M weights) is thus RESIDENT across
+# ~18 dies (4-bit) / ~36 (8-bit); the 256-die package holds it easily. A single
+# transformer layer (~12.6 M weights) fits on ONE die -> we model 1 layer / die
+# and move activations die-to-die between layers.
+DIE_WEIGHT_CAPACITY_4B = CROSSBARS_PER_DIE * 256 * 256 * 4 // 4   # 16.8 M weights
 
 MLX_DIE_CONFIG = dict(
     macro="wan_nature_2022",
-    tile="mlx_core",          # core: local I/O buffer + crossbars
-    chip="mlx_die",           # die: 8 MB glb + 8 macros + router + 4 cores
-    system="fetch_weights_lpddr4",
+    tile="mlx_core",              # core: local I/O buffer + crossbars
+    chip="mlx_die",               # die: 8 MB glb + 8 macros + router + 4 cores
+    system="ws_chip2chip_link",   # package: dies + die<->die link, weights RESIDENT
 )
+
+# The old weight-STREAMING top level -- kept only for A/B comparison. Do NOT use
+# for ReRAM inference cost (it re-fetches weights from DRAM every inference).
+MLX_DIE_STREAMING_CONFIG = dict(MLX_DIE_CONFIG, system="fetch_weights_lpddr4")
+
+
+def n_dies_for_weights(n_weights, weight_bits=4):
+    """How many dies a model's weights need to be RESIDENT (weight-stationary)."""
+    per_die = CROSSBARS_PER_DIE * 256 * 256 * 4 // weight_bits
+    return -(-n_weights // per_die)   # ceil
 
 
 def mlx_die_callfunc(spec):
@@ -128,6 +154,16 @@ def mlx_die_callfunc(spec):
 #                     so good placement falls BELOW baseline and bad ABOVE.
 #                     >>> UNCONFIRMED: verify what the isaac_router energy means. <<<
 # Topology + these values are PLUGGABLE -- swap per level to explore settings.
+# Per-tree-level PROPAGATION latency (ns per Manhattan hop), keyed to match
+# crossbar_comm.level_max_hops / placement_aware.position_aware_latency.
+# ALL PLACEHOLDERS -- calibrate against the company interconnect once known.
+# Costlier the higher up the tree (die NoC > intra-macro > intra-core).
+HOP_LATENCY_NS = {
+    "glb<->macro":     5.0,   # die-level NoC hop
+    "macro<->core":    2.0,   # intra-macro link
+    "core<->crossbar": 1.0,   # intra-core
+}
+
 LAYOUT = {
     "router": {"topology": "mesh_2d", "pattern": "to_center",
                "hop_scale": 1.0, "hop_latency_ns": 1.0, "reference_hops": 1.0},

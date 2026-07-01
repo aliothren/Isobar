@@ -78,6 +78,20 @@ def parse_mapping_levels(mapping_text):
     return levels
 
 
+def hierarchy(output_dir):
+    """Quiet: just the instance counts (n_macros / n_cores / n_crossbars) from a
+    run, without printing the full report. Used by the auto-saved comm dump."""
+    stats_path = os.path.join(output_dir, "timeloop-mapper.stats.txt")
+    levels = pa.perceive(stats_path)
+    def fanout(name):
+        return levels.get(name, {}).get("fanout", 0)
+    n_macros = fanout(LEVEL_MARKERS["macro"]) or 1
+    n_cores = fanout(LEVEL_MARKERS["core"]) or 1
+    n_crossbars = fanout(LEVEL_MARKERS["crossbar"]) or 1
+    return {"n_macros": n_macros, "n_cores": n_cores,
+            "n_crossbars": n_crossbars, "levels": levels}
+
+
 def report(output_dir, layer_name=""):
     stats_path = os.path.join(output_dir, "timeloop-mapper.stats.txt")
     map_path = os.path.join(output_dir, "timeloop-mapper.map.txt")

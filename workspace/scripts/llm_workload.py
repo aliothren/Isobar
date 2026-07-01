@@ -32,11 +32,41 @@ import os
 from dataclasses import dataclass
 from scripts import mlx_system as mlx
 from scripts import placement_aware as pa
+from scripts import crossbar_comm as cc
+from scripts import value_stats as vs
+
+# Where the data-value-dependent histograms come from. Tie this to the MODEL
+# being simulated -- NOT hardcoded downstream -- so simulating another model just
+# means pointing at its workload. Static (projection/FFN) and dynamic (attention)
+# ops draw from matching layer types so their value distributions differ.
+DEFAULT_HIST_SOURCE = "gpt2_medium"
+_HIST_TYPES = {"static": ("Conv1D", "Linear"), "dynamic": ("GPT2Attention",)}
 
 # Rough ReRAM SET (program) energy per cell for the wan device
 # (~ V^2/R_on * t_set = 1.75^2 / 25e4 * 8520e-9 ~= 1e-10 J/cell).
 # CALIBRATE against the cell model / a fetch_all run before trusting absolutes.
 E_WRITE_PER_CELL_J = 1.0e-10
+
+# ReRAM SET pulse width (ns) -- the per-row programming latency. The wan device
+# SET pulse is ~8520 ns (vs ~2 ns read), so writing a dynamic operand into the
+# array is the attention LATENCY bottleneck. PLACEHOLDER -- calibrate.
+T_SET_NS = 8520.0
+CIM_ROWS = 256   # crossbar rows -> rows beyond this tile onto parallel crossbars
+
+
+def write_latency_s(op: "Op", phase: str = "prefill", t_set_ns: float = T_SET_NS):
+    """ReRAM programming latency for a DYNAMIC op (0 for static/weight ops).
+
+    SET is row-serial (one wordline at a time); rows beyond CIM_ROWS tile onto
+    PARALLEL crossbars, so the serial pulse count caps at CIM_ROWS.
+      prefill: program the whole contraction dim (op.C rows) of K/V.
+      decode : only the ONE new token's row is appended per step.
+    Returns seconds (a SERIAL phase, added before the op's compute latency).
+    """
+    if op.kind != "dynamic":
+        return 0.0
+    n_pulses = 1 if phase == "decode" else min(op.C, CIM_ROWS)
+    return n_pulses * t_set_ns * 1e-9
 
 
 @dataclass
@@ -82,33 +112,79 @@ def block_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
 
 _BASE_LAYER = None
 def _base_layer():
-    """Any matmul layer file; its shape is overridden per op, histograms reused."""
+    """Any matmul layer file; used only as a shape scaffold -- both the shape
+    (P/C/M/N) AND the value histograms are overridden per op in run_op, so the
+    scaffold layer's own data distribution never leaks into the result."""
     global _BASE_LAYER
     if _BASE_LAYER is None:
         _BASE_LAYER = mlx.list_layers("resnet18")[0]
     return _BASE_LAYER
 
 
-def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J):
-    """Run one op on the MLX die hierarchy with its shape, attach the write cost.
-    Returns a dict whose `output_dir` feeds crossbar_stats / crossbar_comm."""
+def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
+           phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
+           save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
+           hist_source=DEFAULT_HIST_SOURCE):
+    """Run one op on the MLX die hierarchy with its shape, attach write cost +
+    latency. Returns a dict whose `output_dir` feeds crossbar_stats / crossbar_comm.
+
+    Latency (critical path, seconds):
+        total = write (serial, dynamic only)   -- ReRAM SET phase, before compute
+              + compute (Timeloop cycles x cycle_time, incl. bandwidth stalls)
+              + distance propagation (hops x hop_latency, the position-aware term)
+    """
     def callfunc(spec):
         mlx.mlx_die_callfunc(spec)                  # hierarchy meshX
         inst = spec.problem.instance
         inst["P"], inst["C"], inst["M"], inst["N"] = op.P, op.C, op.M, op.N
         inst["Q"] = inst["R"] = inst["S"] = 1       # matmul (no conv window)
+        # value-dependent energy: use the SIMULATED model's operand distribution
+        # (matched to this op's kind), not the shape-scaffold layer's histograms.
+        if hist_source:
+            h = vs.representative_histograms(hist_source, _HIST_TYPES.get(op.kind))
+            if h:
+                spec.problem["histograms"] = dict(h)
     r = mlx.run_mlx_layer(_base_layer(), config=mlx.MLX_DIE_CONFIG,
                           callfunc=callfunc, place_fn=place_fn)
+    res = r["result"]
     write_J = op.write_cells * e_write if op.kind == "dynamic" else 0.0
+
+    # ---- latency (critical path) ----
+    compute_lat = res.cycles * res.cycle_seconds                 # Timeloop native
+    level_hops = cc.level_max_hops(mlx.N_MACROS_PER_DIE,         # geometry only
+                                   mlx.N_CORES_PER_MACRO, mlx.CROSSBARS_PER_CORE)
+    dist = pa.position_aware_latency(level_hops,
+                                     hop_latency_ns or mlx.HOP_LATENCY_NS)
+    dist_lat = dist["total_ns"] * 1e-9
+    wr_lat = write_latency_s(op, phase, t_set_ns)
+    total_lat = wr_lat + compute_lat + dist_lat
+
+    # auto-save the DETAILED per-pair communication data for this run (the run
+    # dir is overwritten by the next op, so snapshot now).
+    comm_files = None
+    if save_comm:
+        try:
+            comm_files = cc.save_flows(res.output_dir, tag=f"{op.name}_{phase}",
+                                       dest_dir=comm_dir)
+        except Exception as e:                       # non-die run / parse miss
+            print(f"    [save_comm skipped for {op.name}: "
+                  f"{type(e).__name__}: {e}]", flush=True)
     return {
         "op": op,
-        "result": r["result"],
-        "output_dir": r["result"].output_dir,       # -> crossbar_stats/comm
+        "result": res,
+        "output_dir": res.output_dir,                 # -> crossbar_stats/comm
         "analysis": r["analysis"],                    # placement_aware overlay
-        "compute_J": r["result"].energy,
+        "compute_J": res.energy,
         "comm_J": r["analysis"]["position_aware"],
         "write_J": write_J,
-        "total_J": r["result"].energy + write_J,
+        "total_J": res.energy + write_J,
+        # latency breakdown (seconds)
+        "compute_latency_s": compute_lat,
+        "dist_latency_s": dist_lat,
+        "write_latency_s": wr_lat,
+        "total_latency_s": total_lat,
+        "comm_files": comm_files,                     # (csv, json) of per-pair flows
+        "levels": r["levels"],                        # perceived components (unit_pJ ...)
     }
 
 
@@ -120,7 +196,7 @@ def run_block(cfg: GptConfig, S: int, phase: str = "prefill", place_fn=pa.place_
         if verbose:
             print(f"  {op.name:<9} ({op.kind:<7}) P={op.P} C={op.C} M={op.M} "
                   f"N={op.N}", flush=True)
-        out.append(run_op(op, place_fn=place_fn, e_write=e_write))
+        out.append(run_op(op, place_fn=place_fn, e_write=e_write, phase=phase))
     return out
 
 
@@ -136,6 +212,46 @@ def run_block(cfg: GptConfig, S: int, phase: str = "prefill", place_fn=pa.place_
 # DRAM access energy per word. Placeholder -- calibrate against CiMLoop's
 # main_memory access energy / the company DRAM. ~ tens of pJ/word.
 E_DRAM_PER_WORD_J = 5.0e-11
+
+
+# ---------------------------------------------------------------------------
+# Die-to-die activation (model-level, the package hierarchy).
+#
+# Weights are RESIDENT (ReRAM): one transformer layer per die, programmed once.
+# What crosses dies each inference is the HIDDEN STATE between consecutive layers
+# (weights never move). This is a cross-op / model-level cost that per-op Timeloop
+# cannot see, so we overlay it -- the analogue of the on-die distance overlay, one
+# level up (die<->die via the chip2chip_link).
+#   prefill: S * d_model words per layer boundary ; decode: d_model words.
+# ---------------------------------------------------------------------------
+DIE_HOP_LATENCY_NS = 20.0     # per die-to-die hop (placeholder; >> on-die hop)
+CHIP2CHIP_PJ_FALLBACK = 5.0   # per-word die-to-die energy if not extractable (pJ)
+
+
+def die_to_die_activation(cfg: GptConfig, S: int, phase: str, chip2chip_pJ,
+                          n_dies=None, hop_latency_ns=DIE_HOP_LATENCY_NS,
+                          place_fn=pa.place_grid):
+    """Hidden-state transfer between consecutive layers on different dies.
+
+    n_dies defaults to n_layers (1 layer / die). Dies are placed on a grid and
+    layer L sits on die L, so consecutive layers L->L+1 cost their Manhattan die
+    distance. Returns energy (J) + latency (s) for one whole forward pass.
+    """
+    if chip2chip_pJ is None:
+        chip2chip_pJ = CHIP2CHIP_PJ_FALLBACK
+    n_dies = n_dies or cfg.n_layers
+    n_boundaries = cfg.n_layers - 1
+    words_per_boundary = (S if phase == "prefill" else 1) * cfg.d_model
+    coords = place_fn(n_dies)
+    hops = [pa._manhattan(coords[i], coords[i + 1]) for i in range(n_boundaries)]
+    avg_hop = sum(hops) / max(len(hops), 1)
+    total_words = words_per_boundary * n_boundaries
+    return {
+        "words": total_words,
+        "energy_J": total_words * (chip2chip_pJ * 1e-12) * avg_hop,
+        "latency_s": sum(h * hop_latency_ns for h in hops) * 1e-9,
+        "n_boundaries": n_boundaries, "avg_die_hops": avg_hop, "n_dies": n_dies,
+    }
 
 
 def kv_cache_size_bytes(cfg: GptConfig, S: int, dtype_bytes: int = 2):
@@ -196,7 +312,24 @@ def report_block(results, title=""):
     print(f"\n  static total  : {stat:.3e} J")
     print(f"  dynamic total : {dyn:.3e} J   (compute {dyn_compute:.3e} + "
           f"write {dyn_write:.3e})")
-    print(f"  attention share of block energy : {100*dyn/tot:.1f}%"
+    print(f"  attention share of block ENERGY : {100*dyn/tot:.1f}%"
           f"   (of which write = {100*dyn_write/max(dyn,1e-30):.0f}% of attention)")
+
+    # ---- latency table (critical path: write + compute + propagation) ----
+    print(f"\n  {'op':<10}{'kind':<9}{'compute(s)':>13}{'dist(s)':>12}"
+          f"{'write(s)':>12}{'total(s)':>13}")
+    for r in results:
+        o = r["op"]
+        print(f"  {o.name:<10}{o.kind:<9}{r['compute_latency_s']:>13.3e}"
+              f"{r['dist_latency_s']:>12.3e}{r['write_latency_s']:>12.3e}"
+              f"{r['total_latency_s']:>13.3e}")
+    lat_tot = sum(r["total_latency_s"] for r in results)
+    lat_dyn = sum(r["total_latency_s"] for r in results if r["op"].kind == "dynamic")
+    lat_write = sum(r["write_latency_s"] for r in results)
+    print(f"\n  block latency : {lat_tot:.3e} s")
+    print(f"  attention share of block LATENCY: {100*lat_dyn/max(lat_tot,1e-30):.1f}%"
+          f"   (ReRAM write alone = {100*lat_write/max(lat_tot,1e-30):.0f}% of block)")
     return {"static": stat, "dynamic": dyn, "dyn_compute": dyn_compute,
-            "dyn_write": dyn_write, "total": tot}
+            "dyn_write": dyn_write, "total": tot,
+            "latency_total": lat_tot, "latency_dynamic": lat_dyn,
+            "latency_write": lat_write}

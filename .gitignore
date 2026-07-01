@@ -27,5 +27,9 @@ workspace/.local
 # Standalone NeuroSim (separate repo, large)
 workspace/tutorials/DNN_NeuroSim_V1.3/
 
-# Generated analysis artifacts (charts/CSV/cache; regenerable)
-workspace/analysis/
+# Generated analysis artifacts (regenerable) -- but KEEP the writeup + result
+# figures so the documentation renders. Bulk CSV/JSON, per-pair comm dumps, and
+# the mapper output dirs stay ignored.
+workspace/analysis/*
+!workspace/analysis/SUMMARY.md
+!workspace/analysis/*.png

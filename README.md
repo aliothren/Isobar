@@ -2,53 +2,61 @@
 
 This is a **fork of [CiMLoop](https://github.com/mit-emze/cimloop)** used as the
 baseline for a system-level Compute-In-Memory (CIM) simulator targeting LLM
-inference. We keep CiMLoop's mapping / architecture / macro modeling untouched as
-the lower layer, and add a thin, decoupled **placement / topology-aware** layer
-on top so that physical layout (where tiles/cores/dies sit, and how far data
-travels) becomes a first-class, configurable cost — something CiMLoop abstracts
-away.
+inference. We keep CiMLoop's per-op mapping / macro modeling untouched as the
+lower layer, and add decoupled **overlays** on top for what CiMLoop abstracts
+away: physical **placement / distance**, **latency** (incl. ReRAM write),
+**crossbar-level** stats + per-pair communication, an **LLM workload** model
+(sequence scaling + attention K/V write + KV-cache), and **value-dependent**
+energy correction — plus a corrected **resident multi-die** hardware hierarchy.
+
+> **Start here:** [`workspace/analysis/SUMMARY.md`](workspace/analysis/SUMMARY.md)
+> is the full feature/results writeup (with charts). This section is a code map.
 
 ### What this fork adds
 
-**Hardware model (the company chip as CiMLoop arch files; package level TBD):**
+**Hardware model — resident multi-die `package → die → macro → core → crossbar`:**
 
 - **`models/arch/3_chip/mlx_die.yaml`** — a DIE: 8 MB on-chip SRAM (`glb`) +
   8 macros + inter-macro `router` + 4 cores/macro.
-- **`models/arch/2_tile/mlx_core.yaml`** — a CORE: local input/output buffers +
-  N crossbars (default 8 ≈ 2 Mbit/core).
-- A crossbar = the 256×256 4-bit ReRAM macro `wan_nature_2022` (reused).
-  So the hierarchy is `die → macro → core → crossbar`.
+- **`models/arch/2_tile/mlx_core.yaml`** — a CORE: local I/O buffers +
+  8 crossbars (≈ 2 Mbit/core). Crossbar = the 256×256 4-bit ReRAM macro
+  `wan_nature_2022` (reused) → 256 crossbars/die.
+- **Weights are RESIDENT** (ReRAM is non-volatile / weight-stationary): the top
+  level is `4_system/ws_chip2chip_link` (dies + die-to-die link, weights
+  programmed once), **not** `fetch_weights_lpddr4` (which re-streams weights every
+  inference — correct for volatile SRAM CiM, WRONG for ReRAM). GPT-2 medium is
+  resident across ~18–36 dies. The only per-inference writes are attention K/V.
 
 **Scripts (`workspace/scripts/`):**
 
-- **`mlx_system.py`** — single source of truth for the hardware config + the
-  assumed physical `LAYOUT`. `MLX_CONFIG`/`mlx_callfunc` (Phase-1, reuses verified
-  generic levels) and `MLX_DIE_CONFIG`/`mlx_die_callfunc` (explicit die hierarchy
-  above). `run_mlx_layer()` / `run_mlx_dnn()` run a layer and return the CiMLoop
-  result + position-aware analysis.
-- **`placement_aware.py`** — the decoupled topology-aware overlay:
-  `perceive(stats) → placement prior → distance model → re-aggregate`. Placement
-  priors (`place_grid`, `place_linear`) and communication patterns
-  (`DISTANCE_MODELS`: `to_center` / `tree` / `all_to_all` / `neighbor`) are
-  **pluggable**. The key explicit assumption is `reference_hops` (how many hops
-  CiMLoop's fixed per-word interconnect energy already represents); absolute
-  multipliers depend on it, but **relative** placement/pattern comparisons do
-  not. Distance is applied ONLY to true interconnect, never compute/storage.
-- **`crossbar_stats.py`** — per-CROSSBAR statistics: compute / weight / input /
-  output per crossbar (average), per-level bus traffic (NoC / SRAM / DRAM), and
-  the communication STRUCTURE per spatial level (multicast vs reduction vs
-  bit-slice, parsed from the mapping).
-- **`crossbar_comm.py`** — per-PAIR (node↔node) communication: lays the crossbars
-  on a nested floorplan, walks the multicast/reduction tree to produce
-  `(src → dst, volume, distance)` flows, and reports per-crossbar communication
-  **cost that varies by physical position** (same volume, different cost) + a
-  floorplan heatmap. This is the bridge from aggregate bus traffic to "which
-  crossbar talks to which, how much, how far."
-- **`analyze_position_aware.py`** — real-DNN case study: runs a DNN layer-by-layer
-  (sequential, 1 core), caches per-layer perceived data, and compares
-  communication cost across placements × patterns (relative, with charts/CSV).
-- **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output
-  directory (the overlay/stats parse `timeloop-mapper.stats.txt`).
+- **`mlx_system.py`** — hardware config + physical `LAYOUT` / `HOP_LATENCY_NS`.
+  `MLX_DIE_CONFIG`/`mlx_die_callfunc` (resident die hierarchy),
+  `MLX_DIE_STREAMING_CONFIG` (old weight-streaming, kept for A/B only),
+  `run_mlx_layer()` / `run_mlx_dnn()`, `n_dies_for_weights()`.
+- **`placement_aware.py`** — topology overlay: `perceive → placement prior →
+  distance model → re-aggregate`, for **energy** (`position_aware_cost`) and
+  **latency** (`position_aware_latency`). Priors (`place_grid`/`place_linear`) and
+  patterns (`to_center`/`tree`/`all_to_all`/`neighbor`) are pluggable. Key
+  explicit assumption `reference_hops`; **relative** comparisons are robust.
+- **`crossbar_stats.py`** — per-crossbar compute/weight/I-O (avg), per-level bus
+  traffic, communication STRUCTURE (multicast/reduction/bit-slice) + `hierarchy()`.
+- **`crossbar_comm.py`** — per-PAIR (node↔node) flows on a nested floorplan:
+  `(src→dst, volume, distance)`, per-crossbar cost that **varies by position**,
+  floorplan heatmap, geometry `level_max_hops`, and **`save_flows()`** which
+  auto-dumps the detailed per-pair CSV+JSON to `analysis/comm/` on every run.
+- **`llm_workload.py`** — GPT workload generator: sequence/phase scaling,
+  attention **write cost + write latency** (ReRAM SET), **KV-cache**,
+  **die-to-die** activation, and model-matched **histogram injection**.
+  `run_op` returns energy + latency breakdown; `report_block` prints both tables.
+- **`value_stats.py`** — general operand value-distribution loader (per model /
+  layer type) for CiMLoop's data-value-dependent energy.
+- **`analyze_system_gpt2.py`** — whole GPT-2 system-level three-way comparison
+  (baseline / +overlays / offload) for a given `[S] [phase]`; dumps searched
+  mappings + comparison chart.
+- **`analyze_energy_vs_latency.py`** / **`analyze_gpt2_offload.py`** /
+  **`analyze_position_aware.py`** — the energy-vs-latency, static-vs-dynamic
+  offload, and placement×pattern case studies (charts to `analysis/`).
+- **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output dir.
 
 - **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
   standalone NeuroSim) that are intentionally not committed.
@@ -69,25 +77,32 @@ from scripts import mlx_system as mlx
 from scripts import placement_aware as pa
 from scripts import crossbar_stats as cbs
 from scripts import crossbar_comm as cc
+from scripts import llm_workload as lw
 
+# 1) one layer on the resident die hierarchy, with position-aware cost
 layer = mlx.list_layers("resnet18")[0]
-
-# 1) one layer on the explicit die hierarchy, with position-aware cost
 r = mlx.run_mlx_layer(layer, config=mlx.MLX_DIE_CONFIG, callfunc=mlx.mlx_die_callfunc)
 pa.print_report(r["analysis"], title="die / grid / to_center")
 
-# 2) per-crossbar stats + communication structure
+# 2) per-crossbar stats + per-pair (node↔node) flows + heatmap
 cbs.report(r["result"].output_dir)
-
-# 3) per-pair (node↔node) flows + per-crossbar position cost + heatmap
 cc.summarize_and_plot(r["result"].output_dir, layer_name="00")
+
+# 3) an LLM transformer block: energy + latency tables (prefill or decode).
+#    every run auto-saves per-pair comm to analysis/comm/<op>_<phase>_comm.{csv,json}
+res = lw.run_block(lw.GptConfig(), S=512, phase="prefill")
+lw.report_block(res, title="prefill S=512")
 ```
 
-Whole-DNN placement/pattern comparison (writes charts/CSV to `analysis/`):
+Whole-model / whole-DNN studies (charts + CSV to `analysis/`):
 
 ```bash
-python3 scripts/analyze_position_aware.py resnet18
+python3 scripts/analyze_system_gpt2.py 512 prefill   # GPT-2 system-level (or: 512 decode)
+python3 scripts/analyze_position_aware.py resnet18    # placement × pattern comparison
 ```
+
+See [`workspace/analysis/SUMMARY.md`](workspace/analysis/SUMMARY.md) for the full
+results, charts, and the modeling-assumptions / limitations writeup.
 
 ---
 

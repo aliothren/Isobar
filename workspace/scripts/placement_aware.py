@@ -270,6 +270,37 @@ def position_aware_cost(
     }
 
 
+# ---------------------------------------------------------------------------
+# 5. Distance LATENCY overlay (propagation time, the analogue of the energy
+#    overlay above). Energy SUMS over all flows; latency is a CRITICAL PATH:
+#    within a tree level the branches are parallel -> the longest one (max hops)
+#    sets the path; across levels the path is in series -> sum. The output
+#    reduction mirrors the input multicast, so total = 2 * the down path.
+#
+#    This is the term Timeloop does NOT model: its cycles already include the
+#    bandwidth/transfer time (V/B stalls), but it is position-blind, so the
+#    per-hop PROPAGATION (hops x hop_latency_ns) is missing. We add only that.
+# ---------------------------------------------------------------------------
+def position_aware_latency(level_hops: Dict[str, float],
+                           hop_latency_ns: Dict[str, float],
+                           default_ns: float = 1.0) -> dict:
+    """Propagation latency (ns) from per-level hop counts + per-level hop latency.
+
+    Args:
+        level_hops:     {level: max Manhattan hops} (crossbar_comm.level_max_hops).
+        hop_latency_ns: {level: ns per hop} (mlx_system.HOP_LATENCY_NS).
+        default_ns:     fallback hop latency for an unlisted level.
+
+    Returns {down_ns, up_ns, total_ns, per_level_ns}. total_ns is what you add
+    (serially) to an op's compute latency.
+    """
+    per_level = {lv: h * hop_latency_ns.get(lv, default_ns)
+                 for lv, h in level_hops.items()}
+    down = sum(per_level.values())          # series along the multicast path
+    return {"down_ns": down, "up_ns": down, "total_ns": 2 * down,
+            "per_level_ns": per_level}
+
+
 def print_report(res: dict, title: str = ""):
     """Pretty-print a position_aware_cost() result."""
     if title:
