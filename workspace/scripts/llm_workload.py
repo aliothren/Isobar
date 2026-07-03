@@ -34,6 +34,7 @@ from scripts import mlx_system as mlx
 from scripts import placement_aware as pa
 from scripts import crossbar_comm as cc
 from scripts import value_stats as vs
+from scripts import crossbar_value as cvmod
 
 # Where the data-value-dependent histograms come from. Tie this to the MODEL
 # being simulated -- NOT hardcoded downstream -- so simulating another model just
@@ -124,7 +125,9 @@ def _base_layer():
 def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
-           hist_source=DEFAULT_HIST_SOURCE):
+           hist_source=DEFAULT_HIST_SOURCE,
+           value_mode="uniform", value_source="synthetic",
+           value_spread=cvmod.DEFAULT_SPREAD):
     """Run one op on the MLX die hierarchy with its shape, attach write cost +
     latency. Returns a dict whose `output_dir` feeds crossbar_stats / crossbar_comm.
 
@@ -159,6 +162,23 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
     wr_lat = write_latency_s(op, phase, t_set_ns)
     total_lat = wr_lat + compute_lat + dist_lat
 
+    # value-dependent energy MODE. "uniform" (default) = one histogram for the whole
+    # op, every crossbar identical (exact, cheap). "per_crossbar" = each crossbar's
+    # value-dependent energy scaled by its own distribution -> a per-crossbar spread.
+    crossbar_value = None
+    if value_mode == "per_crossbar":
+        def floor_cf(spec):                          # zero-activity -> energy floor
+            mlx.mlx_die_callfunc(spec)
+            i = spec.problem.instance
+            i["P"], i["C"], i["M"], i["N"] = op.P, op.C, op.M, op.N
+            i["Q"] = i["R"] = i["S"] = 1
+            spec.problem["histograms"] = cvmod.zero_histograms()
+        floor = mlx.utl.run_layer(layer=_base_layer(), callfunc=floor_cf,
+                                  **mlx.MLX_DIE_CONFIG)
+        scales = cvmod.per_crossbar_activities(mlx.CROSSBARS_PER_DIE,
+                                               source=value_source, spread=value_spread)
+        crossbar_value = cvmod.per_crossbar_energy(res.energy, floor.energy, scales)
+
     # auto-save the DETAILED per-pair communication data for this run (the run
     # dir is overwritten by the next op, so snapshot now).
     comm_files = None
@@ -185,6 +205,8 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         "total_latency_s": total_lat,
         "comm_files": comm_files,                     # (csv, json) of per-pair flows
         "levels": r["levels"],                        # perceived components (unit_pJ ...)
+        "value_mode": value_mode,
+        "crossbar_value": crossbar_value,             # per-crossbar energy spread or None
     }
 
 

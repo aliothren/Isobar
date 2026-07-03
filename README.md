@@ -9,7 +9,7 @@ away: physical **placement / distance**, **latency** (incl. ReRAM write),
 (sequence scaling + attention K/V write + KV-cache), and **value-dependent**
 energy correction — plus a corrected **resident multi-die** hardware hierarchy.
 
-> **Start here:** [`workspace/analysis/SUMMARY.md`](workspace/analysis/SUMMARY.md)
+> **Start here:** [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md)
 > is the full feature/results writeup (with charts). This section is a code map.
 
 ### What this fork adds
@@ -50,12 +50,18 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   `run_op` returns energy + latency breakdown; `report_block` prints both tables.
 - **`value_stats.py`** — general operand value-distribution loader (per model /
   layer type) for CiMLoop's data-value-dependent energy.
+- **`crossbar_value.py`** — per-crossbar value-dependent energy MODE
+  (`run_op(value_mode="uniform"|"per_crossbar")`): splits energy into a fixed
+  floor + a value-dependent part, then scales the value part by each crossbar's
+  own distribution activity (total conserved). Distribution source is pluggable
+  (`synthetic` placeholder now, `weights` interface for real weight tiles).
 - **`analyze_system_gpt2.py`** — whole GPT-2 system-level three-way comparison
   (baseline / +overlays / offload) for a given `[S] [phase]`; dumps searched
   mappings + comparison chart.
 - **`analyze_energy_vs_latency.py`** / **`analyze_gpt2_offload.py`** /
-  **`analyze_position_aware.py`** — the energy-vs-latency, static-vs-dynamic
-  offload, and placement×pattern case studies (charts to `analysis/`).
+  **`analyze_position_aware.py`** / **`analyze_crossbar_value.py`** — the
+  energy-vs-latency, static-vs-dynamic offload, placement×pattern, and
+  per-crossbar-value case studies (charts to `analysis/`).
 - **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output dir.
 
 - **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
@@ -101,7 +107,7 @@ python3 scripts/analyze_system_gpt2.py 512 prefill   # GPT-2 system-level (or: 5
 python3 scripts/analyze_position_aware.py resnet18    # placement × pattern comparison
 ```
 
-See [`workspace/analysis/SUMMARY.md`](workspace/analysis/SUMMARY.md) for the full
+See [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md) for the full
 results, charts, and the modeling-assumptions / limitations writeup.
 
 ---

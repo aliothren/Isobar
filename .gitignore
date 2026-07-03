@@ -27,9 +27,10 @@ workspace/.local
 # Standalone NeuroSim (separate repo, large)
 workspace/tutorials/DNN_NeuroSim_V1.3/
 
-# Generated analysis artifacts (regenerable) -- but KEEP the writeup + result
-# figures so the documentation renders. Bulk CSV/JSON, per-pair comm dumps, and
-# the mapper output dirs stay ignored.
+# Generated analysis artifacts (regenerable) -- but KEEP the ENGLISH writeup +
+# result figures so the documentation renders. The Chinese SUMMARY.md is a local
+# working copy (not pushed); bulk CSV/JSON, per-pair comm dumps, and the mapper
+# output dirs stay ignored too.
 workspace/analysis/*
-!workspace/analysis/SUMMARY.md
+!workspace/analysis/SUMMARY.en.md
 !workspace/analysis/*.png
