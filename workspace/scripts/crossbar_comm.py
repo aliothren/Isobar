@@ -237,11 +237,17 @@ def summarize_and_plot(output_dir, layer_name="", out_png=None):
                                "..", "analysis", f"crossbar_comm_{layer_name or 'layer'}.png")
         out_png = "/home/workspace/analysis/crossbar_comm_heatmap.png"
     os.makedirs(os.path.dirname(out_png), exist_ok=True)
-    plt.figure(figsize=(10, 4))
-    im = plt.imshow(grid, cmap="hot", origin="lower", aspect="auto")
-    plt.colorbar(im, label="comm cost (volume x distance)")
+    # empty floorplan slots (the near-square nesting leaves gaps: 8 crossbars in a
+    # 3x3 core, 8 macros in a 3x3 die) are NaN -> render them a distinct GRAY, not
+    # white, so they don't read as high-cost cells (the hot colormap tops out white).
+    cmap = plt.cm.hot.copy()
+    cmap.set_bad(color="#9aa0a6")
+    plt.figure(figsize=(11, 4))
+    im = plt.imshow(grid, cmap=cmap, origin="lower", aspect="auto")
+    plt.colorbar(im, label="comm cost (volume x distance)", fraction=0.046, pad=0.06)
     plt.title(f"{layer_name} per-crossbar communication cost on the floorplan\n"
-              "(blocks = macros/cores; brighter = costs more by position)")
+              "(blocks = macros/cores; brighter = costs more by position; "
+              "gray = empty slot)")
     plt.xlabel("crossbar x"); plt.ylabel("crossbar y")
     plt.tight_layout(); plt.savefig(out_png, dpi=120); plt.close()
     print(f"\nPNG  -> {out_png}")

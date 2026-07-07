@@ -78,12 +78,57 @@ We overlay distance:
 
 ---
 
-## 3. Crossbar-level statistics
+## 3. Crossbar-level analysis
 
-- [`scripts/crossbar_stats.py`](../scripts/crossbar_stats.py) — per-crossbar
-  compute/weight/input/output (average), per-level bus traffic, and the
-  communication STRUCTURE parsed from the mapping (multicast/reduction/bit-slice).
-  Per-pair flows use it as input.
+**Tool:** [`scripts/crossbar_stats.py`](../scripts/crossbar_stats.py) — per-crossbar
+compute/weight/input/output (average), per-level bus traffic, and the
+mapping-parsed communication structure (multicast/reduction/bit-slice); the
+per-pair flows (§2/§7) use it as input.
+
+But averages hide per-crossbar variation. Crossbars actually differ for two
+reasons: **physical position** (communication cost, §2/§7, 3.58×) and **the
+operand distribution each one sees** (value-dependent energy, below).
+
+### 3.1 Per-crossbar value-dependent energy (real per-tile re-simulation)
+
+**Question:** each crossbar holds a different weight tile and sees a different
+input slice — does its energy differ as a result?
+
+**Method** ([`scripts/crossbar_value_real.py`](../scripts/crossbar_value_real.py),
+two-stage to avoid a torch/timeloop segfault): load **real weights** (GPT-2 medium
+/ resnet18) + **real forward activations**, tile the weight [C×M] into 256×256
+crossbar blocks, and **re-run CiMLoop's single-crossbar energy per block** with that
+block's own weight+input histogram, then sum. Energy is nonlinear in the
+distribution, so this is a genuine per-crossbar simulation, not a redistribution of
+the total.
+
+**Result (2×2, device × workload):**
+
+![per-crossbar value energy: device x workload](crossbar_value_device_compare.png)
+
+| per-crossbar spread | GPT-2 ffn1 (LayerNorm) | resnet18 conv (ReLU-sparse) |
+|---|---|---|
+| **wan** (bit-serial) | 1.000× | 1.002× |
+| **raella** (value-sensitive) | 1.010× | **1.204×** |
+
+**Findings:**
+1. **Device decides it.** wan/wang/basic are **bit-serial** — energy is set by
+   precision / phases / ADC steps, not values → per-crossbar ≈ 0 for any workload.
+   **raella (ISCA'23)**, built to exploit bit/value sparsity, is value-driven → a
+   real spread.
+2. **Input heterogeneity is the workload lever.** On raella, the CNN (no LayerNorm,
+   ReLU-sparse inputs whose channel blocks are 80–91% zeros) spreads **1.204×
+   (20%)**; GPT-2 (LayerNorm homogenizes channels) only 1.010×. The spread is along
+   the contraction ROW block (which 256 input channels a crossbar sees), not the
+   weight column — weight distribution barely matters (~1% even at extremes).
+3. So **per-crossbar value-dependent energy is only worth modeling on a
+   value-sensitive device with heterogeneous inputs.** Whether it matters for the
+   company chip hinges on its device class (plain bit-serial MAC vs value/bit-
+   sparsity-exploiting).
+
+(A lightweight switchable mode [`crossbar_value.py`](../scripts/crossbar_value.py)
+`run_op(value_mode="uniform"|"per_crossbar")` does a fast activity-scaled
+attribution; the real answer above comes from the per-tile re-simulation.)
 
 ---
 
@@ -112,31 +157,12 @@ ReRAM is weight-stationary — good for static weights (FFN/projections); dynami
 attention is the offload candidate.
 ![GPT-2 static vs dynamic offload](gpt2_static_vs_dynamic.png)
 
-### 4.5 Value-dependent energy correction + per-crossbar mode
+### 4.5 Value-dependent energy correction (model-matched histograms)
 CiMLoop energy is **data-value-dependent**: each layer's `histograms` set the ReRAM
 analog current / ADC / cell conduction → energy. The synthetic workload once reused
 ResNet's distribution; now [`scripts/value_stats.py`](../scripts/value_stats.py)
-**injects per simulated model + op type** (change model → change `hist_source`).
-
-**Per-crossbar mode** ([`scripts/crossbar_value.py`](../scripts/crossbar_value.py),
-`run_op(value_mode=...)`):
-- `"uniform"` (default) = one distribution for the whole op, every crossbar
-  identical (current behavior, exact);
-- `"per_crossbar"` = **each crossbar uses its own tile's distribution** → its own
-  value-dependent energy.
-
-Measured split: energy = **floor (fixed, 75%) + value part (distribution-dependent,
-25%)** (the floor is calibrated by running an all-zero distribution). Per crossbar we
-scale only the value part, **total conserved**:
-```
-E_i = E_floor/N + (E_value/N) × (activity_i / mean_activity)
-```
-The per-crossbar distribution source is pluggable: `uniform` / `synthetic`
-(placeholder, tile-to-tile magnitude spread) / `weights` (interface ready, pending
-real weight-tensor tiling). Demo (ffn1, synthetic spread=0.5): total conserved but
-**per-crossbar energy spreads 1.28×**:
-
-![per-crossbar value-dependent energy heatmap](crossbar_value_heatmap.png)
+**injects per simulated model + op type** (change model → change `hist_source`), no
+leakage.
 
 ---
 
@@ -288,22 +314,19 @@ distribution per op type** — three clear placeholder simplifications:
    spread one op spatially across dies (arch supports it, not yet exercised). Every
    GPT-2 medium layer fits, so this is untriggered.
 
-4. **Value-dependent distribution granularity:**
-   - **across layers**: one averaged distribution each for static/dynamic (all 24
-     layers' static ops share one);
-   - **across crossbars within a layer**: `value_mode="uniform"` (default) is
-     uniform → per-crossbar energy is symmetric; `value_mode="per_crossbar"` (§4.5,
-     **implemented**) scales each crossbar's value part by its own distribution → a
-     per-crossbar spread, **but the distribution is currently a synthetic placeholder**;
-   - to add: tile a real weight tensor per the mapping → a histogram per 256×256 tile
-     (`source="weights"`, interface ready), which makes the per-crossbar spread real.
+4. **Value-dependent distribution granularity:** across layers, one averaged
+   distribution each for static/dynamic (all 24 layers' static ops share one).
+   Within a layer, the real **per-crossbar** variation was verified with real
+   weights + activations (§3.1): it is **device-dependent** — bit-serial (wan) ≈ 0,
+   value-sensitive (raella) + heterogeneous inputs (CNN) up to 1.204×. So whether
+   per-crossbar value modeling is needed depends on which class the company device is.
 
 5. **Topology / bit-width / hop costs are all placeholders** (see §9), pending company
    parameters.
 
-**Relaxation roadmap (by value):** ① per-crossbar distribution — **mode already
-implemented (§4.5)**, only needs `source` wired to a real weight tensor → ② capacity
-packing (realistic die count) → ③ oversized layers across dies (`meshX>1`).
+**Relaxation roadmap (by value):** ① capacity packing (realistic die count) →
+② oversized layers across dies (`meshX>1`). (Per-crossbar value distribution already
+verified, see §3.1.)
 
 ---
 
@@ -333,11 +356,12 @@ packing (realistic die count) → ③ oversized layers across dies (`meshX>1`).
 | `crossbar_comm.py` | per-pair flows + heatmap + geometry hops + `save_flows()` (auto-dump) |
 | `llm_workload.py` | sequence scaling + write cost/latency + KV-cache + die-to-die + histogram injection |
 | `value_stats.py` | general value-histogram loader (by model / layer type) |
-| `crossbar_value.py` | per-crossbar value-dependent energy mode (uniform / per_crossbar) |
+| `crossbar_value.py` | fast activity-scaled per-crossbar value energy mode (uniform / per_crossbar) |
+| `crossbar_value_real.py` | REAL per-crossbar value-energy pipeline (real weights+activations, per-tile re-simulation; two-stage) |
 | `analyze_gpt2_offload.py` | GPT-2 static/dynamic offload analysis |
 | `analyze_energy_vs_latency.py` | energy vs latency view chart |
 | `analyze_system_gpt2.py` | whole GPT-2 system-level three-way comparison, args `[S] [phase]` |
-| `analyze_crossbar_value.py` | per-crossbar energy demo (uniform vs per_crossbar) + heatmap |
+| `analyze_crossbar_value_compare.py` | device × workload 2×2 per-crossbar energy comparison (§3.1) |
 
 ```python
 from scripts import llm_workload as lw
