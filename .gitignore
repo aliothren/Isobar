@@ -31,6 +31,6 @@ workspace/tutorials/DNN_NeuroSim_V1.3/
 # result figures so the documentation renders. The Chinese SUMMARY.md is a local
 # working copy (not pushed); bulk CSV/JSON, per-pair comm dumps, and the mapper
 # output dirs stay ignored too.
-workspace/analysis/*
-!workspace/analysis/SUMMARY.en.md
-!workspace/analysis/*.png
+# workspace/analysis/*
+# !workspace/analysis/SUMMARY.en.md
+# !workspace/analysis/*.png
