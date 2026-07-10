@@ -1,0 +1,42 @@
+{{include_text('defines.yaml')}}
+
+# Weight-STATIONARY variant of fetch_weights_hbm2.
+#
+# Identical to fetch_weights_hbm2 EXCEPT main_memory forbids temporal iteration over
+# Weights (`no_iteration_over_dataspaces: [Weights]`). That turns the weight-stationary
+# *preference* (the permutation ordering) into a hard *constraint*: no weight block may be
+# re-fetched/re-programmed during an inference. Every weight must therefore be mapped onto
+# a physical crossbar that holds it for the whole run -- write-once, no reloads.
+#
+# Consequence: the mapping is only feasible if the tile fabric is large enough to hold the
+# entire layer's weights at once (size TILE_ROWS/TILE_COLS to the layer via
+# round_up_even(M/ARRAY_COLS) x round_up_even(C/ARRAY_ROWS)). If the fabric is too small,
+# the mapper returns NO valid mapping instead of silently reloading -- which is the point.
+#
+# Usage:
+#   spec = get_spec(macro="basic_analog", chip="cim_tile_array",
+#                   system="fetch_weights_hbm2_ws", tile_rows=..., tile_cols=...)
+
+architecture:
+  nodes:
+  - !Container # Top-level system
+    name: system
+    <<<: [*container_defaults]
+    attributes: {has_power_gating: True}
+
+  - !Component # Off-chip DRAM: writes weights into the crossbars once, then idle.
+    name: main_memory
+    <<<: [*component_defaults]
+    subclass: DRAM
+    attributes: {depth: INF, width: 128, type: "HBM2"}
+    constraints:
+      dataspace: {keep_only: [Weights]}
+      temporal:
+        no_iteration_over_dataspaces: !nomerge [Weights] # WEIGHT-STATIONARY: no reloads
+        permutation: [X, Y, Z, Q, P, N, G, C, M, R, S]
+
+  - !Container # Chip
+    name: chip_in_system
+    <<<: [*container_defaults]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: 1}

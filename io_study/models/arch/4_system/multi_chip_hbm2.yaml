@@ -1,0 +1,36 @@
+{{include_text('defines.yaml')}}
+
+architecture:
+  # ======================= Top level is !Hierarchical =======================
+  nodes:
+  - !Container # Top-level system
+    name: system
+    <<<: [*container_defaults]
+    attributes: {has_power_gating: True}
+
+  - !Component # Off-chip DRAM holds weights; shared across all chips
+    name: main_memory
+    <<<: [*component_defaults]
+    subclass: DRAM
+    attributes: {depth: INF, width: 128, type: "HBM2"}
+    constraints:
+      dataspace: {keep_only: [Weights]}
+      temporal:
+        no_iteration_over_dataspaces: !nomerge [] # Can iterate over weights
+        permutation: [X, Y, Z, Q, P, N, G, C, M, R, S]
+
+  - !Container # One instance per physical chip; meshX=N_CHIPS for data parallelism
+    name: chip_in_system
+    <<<: [*container_defaults, *spatial_map_all_weights]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: N_CHIPS}
+
+  - !Component # Inter-chip link; one per chip instance (inside chip_in_system scope)
+    name: chip2chip_link
+    <<<: [*component_defaults, *keep_inputs, *keep_outputs, *no_coalesce]
+    subclass: isaac_chip2chip_link
+    attributes: {depth: INF, width: 128}
+    constraints:
+      temporal:
+        factors: [P=-1, Q=-1, N=-1] # Distribute output-spatial and batch across chips
+        permutation: [X, Y, Z, Q, P, N, G, C, M, R, S]

@@ -1,0 +1,68 @@
+{{include_text('defines.yaml')}}
+
+# 2D CiM tile-array chip.
+#
+# TILE_COLS × TILE_ROWS grid of CiM nodes. Two interconnects:
+#   row_noc  — horizontal, distributes inputs across a row (chip-level approximation:
+#              1 shared instance; inputs are broadcast chip-wide anyway)
+#   col_noc  — vertical, accumulates partial outputs up a column (exact: one instance
+#              per column so energy/area scales correctly with TILE_COLS)
+#
+# Column is the outer spatial dimension so col_noc gets the exact instance count.
+# In CiM there is no memory/compute separation — the cim_unit stores weights and
+# performs MAC in-place; the macro appended by top.yaml IS the tile compute node.
+#
+# Usage:
+#   spec = get_spec(macro="basic_analog", chip="cim_tile_array",
+#                   system="fetch_weights_hbm2", tile_rows=4, tile_cols=8)
+
+architecture:
+  nodes:
+  - !Container # Top-level chip
+    name: chip
+    <<<: [*container_defaults]
+    attributes: {has_power_gating: True}
+
+  - !Component # Shared L2 SRAM: activation staging between layers for all tiles
+    name: l2_shared_buf
+    <<<: [*component_defaults]
+    subclass: smartbuffer_sram
+    attributes:
+      width: 256
+      depth: 1024 * 1024 * 8 * 8 // width  # 8 MB
+    constraints:
+      dataspace: {keep_only: [Inputs, Outputs]}
+      temporal:
+        no_iteration_over_dataspaces: !nomerge []
+        permutation: [N, M, C, Q, P]
+        must_iterate_over_dataspaces: [Inputs, Outputs]
+
+  - !Component # Horizontal row bus: broadcasts inputs across every row.
+    # Placed at chip level — one shared instance is a deliberate approximation
+    # because Timeloop's tree hierarchy cannot simultaneously share row_noc
+    # per-row and col_noc per-column. Input broadcast is chip-wide anyway.
+    name: row_noc
+    <<<: [*component_defaults, *keep_inputs, *no_temporal_reuse]
+    subclass: isaac_router_shared_by_four
+    attributes: {depth: INF, width: 128}
+
+  - !Container # Column groups — outer spatial dimension.
+    # TILE_COLS instances: each instance owns one physical column of tiles.
+    name: tile_col_group
+    <<<: [*container_defaults, *spatial_map_all_weights]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: TILE_COLS}
+
+  - !Component # Vertical column bus: accumulates partial output sums up a column.
+    # Exactly TILE_COLS instances (one per column) — energy/area scales correctly.
+    name: col_noc
+    <<<: [*component_defaults, *keep_outputs, *no_temporal_reuse]
+    subclass: isaac_router_shared_by_four
+    attributes: {depth: INF, width: 128}
+
+  - !Container # Individual CiM tile — TILE_ROWS tiles per column.
+    # The macro appended by top.yaml is the compute node: cim_unit = memory + MAC.
+    name: tile
+    <<<: [*container_defaults, *spatial_map_all_weights]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: TILE_ROWS}
