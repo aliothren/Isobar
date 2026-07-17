@@ -19,8 +19,8 @@ SCOPE / HONESTY:
   * Timeloop searches each op's mapping INDEPENDENTLY -- no cross-layer fusion /
     global schedule. "System-level mapping" = each op optimally mapped on the
     full die hierarchy, aggregated.
-  * One die (256 crossbars) is modeled; weights stream from DRAM (model >>
-    on-die capacity); the 256-die package is not modeled.
+  * One die (256 crossbars) is modeled; weights are RESIDENT (ws_chip2chip_link,
+    no weight DRAM); the multi-die package/topology is not modeled.
   * Ops within a block and blocks across the stack run serially (data dependent),
     so latency is summed; energy is summed.
 
@@ -166,6 +166,10 @@ with open(mp, "w") as f:
 print(f"\nmappings -> {mp}")
 
 # ---------------------------------------------------------------- chart
+# One 1x2 row per phase; the report stacks the prefill and decode rows into a
+# 2x2 grid at full text width (~0.5x shrink), so use large fonts.
+plt.rcParams.update({"font.size": 15, "axes.titlesize": 16, "axes.labelsize": 15,
+                     "xtick.labelsize": 14, "ytick.labelsize": 13})
 fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
 labels = ["(C) baseline\nCiMLoop", "(A) full\n+overlays", "(B) offload\nattn"]
 
@@ -202,9 +206,9 @@ for ax, data, unit, title in [(axes[0], E, "energy (J)", "Energy"),
         bottom = [b + v for b, v in zip(bottom, vals)]
     ax.set_xticks(list(x)); ax.set_xticklabels(labels)
     ax.set_ylabel(unit); ax.set_title(f"{title}  (whole GPT-2, S={S}, {PHASE})")
-axes[1].legend(loc="upper right", fontsize=9)
+axes[1].legend(loc="upper right", fontsize=13)
 fig.suptitle(f"GPT-2 system-level on ReRAM CIM die: baseline vs +overlays vs "
-             f"offload  ({NL} layers, S={S}, {PHASE})", fontsize=12)
+             f"offload  ({NL} layers, S={S}, {PHASE})", fontsize=17)
 plt.tight_layout(rect=[0, 0, 1, 0.96])
 p = os.path.join(OUT, f"gpt2_system_comparison_{PHASE}.png")
 plt.savefig(p, dpi=120); plt.close()

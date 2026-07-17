@@ -55,13 +55,19 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   floor + a value-dependent part, then scales the value part by each crossbar's
   own distribution activity (total conserved). Distribution source is pluggable
   (`synthetic` placeholder now, `weights` interface for real weight tiles).
+- **`crossbar_value_real.py`** — the REAL per-crossbar value pipeline: real
+  weights + real forward activations, tiled onto crossbars, each tile re-simulated
+  with its own distributions (two stages — torch-only extract, cimloop-only
+  simulate — to avoid an OpenMP segfault).
 - **`analyze_system_gpt2.py`** — whole GPT-2 system-level three-way comparison
   (baseline / +overlays / offload) for a given `[S] [phase]`; dumps searched
   mappings + comparison chart.
-- **`analyze_energy_vs_latency.py`** / **`analyze_gpt2_offload.py`** /
-  **`analyze_position_aware.py`** / **`analyze_crossbar_value.py`** — the
-  energy-vs-latency, static-vs-dynamic offload, placement×pattern, and
-  per-crossbar-value case studies (charts to `analysis/`).
+- **`analyze_energy_vs_latency.py`** / **`analyze_seqlen_kv.py`** /
+  **`analyze_region_locality.py`** / **`analyze_position_aware.py`** /
+  **`analyze_crossbar_value_compare.py`** — the energy-vs-latency,
+  sequence-scaling + KV-cache, region-placement (17.8%), placement×pattern, and
+  device×workload per-crossbar-value case studies (charts to `analysis/`; every
+  figure in the writeup has one of these as its committed source).
 - **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output dir.
 
 - **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the

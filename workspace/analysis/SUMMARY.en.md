@@ -1,406 +1,493 @@
-# System-Level CIM Simulator — Feature Overview
+# System-Level CIM Simulator — Features & Results
 
-> On top of **CiMLoop** (Timeloop + Accelergy + CiM extensions), we add the
-> system-level factors it abstracts away, for the company's ReRAM CIM chip:
-> **resident multi-die hierarchy, placement/topology-aware cost, crossbar-level
-> analysis, LLM workload (sequence scaling + attention K/V write + KV-cache),
-> latency modeling, and value-dependent energy correction**. Most additions are
-> **decoupled overlays** that do not touch the Timeloop core; uncalibrated numbers
-> are placeholders.
+> On top of **CiMLoop** (Timeloop + Accelergy + CiM extensions), we model the
+> company's ReRAM CIM chip as a **system** (package → die → macro → core →
+> crossbar, weights resident) rather than a single macro. **The central object is
+> placement** (physical position/layout — the level existing on-chip CIM work,
+> CiMLoop included, stops short of); the other models (attention K/V write etc.)
+> serve to **validate that the composed simulation behaves as expected and to put
+> numbers on known intuition**. All changes are **decoupled overlays** — the
+> Timeloop core is untouched; uncalibrated parameters are placeholders.
 >
-> **Reading order:** §0 motivation → §1–5 feature modules → §6–7 whole-GPT-2
-> results + communication stats → §8 modeling assumptions & limitations →
-> §9–10 reference (parameter table / script index).
+> **Reading order**: §0 approach → §1 hardware → §2 denominators (where energy/time
+> go; which levels carry a price) → §3 models & results per level → §4 whole-model
+> GPT-2 three scenarios → §5 per-pair communication dumps → §6 assumptions &
+> limitations → §7 DR data-request map → §8 placeholder params → §9 script index.
 
 ---
 
-## 0. The gaps we close
+## 0. Approach
 
-| Dimension | CiMLoop default | Consequence / our fix |
+**Two distinctions** run through all of it:
+
+1. **Mapping vs placement.** Mapping (how a weight matrix is partitioned,
+   bit-sliced, duplicated) is logical, handled by CiMLoop's mapper — we take it as
+   given. Placement (which physical crossbar/core/die each mapped block occupies)
+   is the level **nobody models**. Resident weights make placement a one-time,
+   irreversible decision that fixes every subsequent inference's communication
+   distance.
+2. **"A level exists" vs "a level is charged."** A hierarchy level can be present
+   in the simulator and still be free: traffic counted, energy zero, latency zero.
+   Much of this work is locating those places and pricing them.
+
+**Everything falls into four categories** (same vocabulary as the report's
+accounted-by columns):
+
+| Category | Content |
+|---|---|
+| **kept** | the silicon-calibrated macro model: glb, readout/conversion chain, array drivers — untouched |
+| **re-priced** | the router distance term (+0.2% of block energy at the current layout, sign pending DR-4); per-crossbar value refinement (≤1.002× on this device, hence not needed) |
+| **added** | the K/V write model (energy + serial SET latency) |
+| **awaiting data** | DR-1…6 (map in §7) |
+
+**Three main conclusions** (details in §2–§4):
+
+1. **Placement machinery is built at every level and its effects are measured**:
+   crossbar position differs 3.58×, region placement differs 17.8% (both are
+   rankings); the macro level is priced (line vs mesh = 1.52× NoC energy =
+   **0.34%** of a block). The unpriced levels (core/crossbar links, D2D) are
+   exactly where the leverage should be larger → each gap is one DR.
+2. **Where the leverage is, and is not**: ~59% of energy is analog compute +
+   conversion, ~39% buffering (glb alone 33%); the macro NoC is 0.99% and the flat
+   off-die port 0.69% → **within-die placement is not an energy lever** (and these
+   transport shares are **lower bounds** — every unpriced term is a network term);
+   the payoff route is **contention (bandwidth) and D2D**.
+3. **Validation by composition**: that ReRAM writes are expensive is common
+   knowledge (it is why these chips are weight-stationary), not a finding.
+   Charging the one write inference cannot avoid (K/V) makes decode come out
+   write-latency-bound and offload come out as a throughput win, as expected — with
+   numbers: **decode latency 10.12×, write = 90% of the step, offload −93% latency
+   / −34% energy**. The qualitative picture needs no calibration; the magnitudes
+   move with DR-5.
+
+**CiMLoop default vs our fix** (history):
+
+| Dimension | CiMLoop default | Fix |
 |---|---|---|
-| **Physical position** | Topological, no coordinates/distance | Near/far layouts cost the same → distance overlay (§2). ⚠️ Measured: at today's parameters it **moves neither energy nor latency** — see §6.3 |
-| **Latency / time** | Only cycles, interconnect assumed infinitely fast | System latency under-counted → latency modeling (§5) |
-| **Attention write** | QK^T/AV as plain matmuls | Ignores writing K/V every inference → write cost/latency (§4.2/§5). **Currently the only source of a material difference (decode latency 10.12×)** |
-| **Weight residency** | Streams weights from DRAM by default | Wrong for ReRAM (non-volatile, resident) → resident multi-die (§1) |
-| **Value-dependent energy** | Uses that layer's `histograms` | Synthetic workload once reused another layer's dist. → inject per model (§4.5) |
+| Weight residency | streams weights from DRAM | wrong for ReRAM → `ws_chip2chip_link` resident (used to inflate energy ~36%/prefill, ~150×/decode) |
+| Physical position | topological, no coordinates | distance overlay (§3.1); measured: moves neither total at today's params, see §2 |
+| Attention write | QK^T/AV as plain matmuls | write cost/latency overlay (§3.2); the only material difference source (decode latency 10.12×) |
+| Latency | cycles, interconnect infinitely fast | propagation + write latency (§2/§3); bandwidths still unset (DR-2) |
+| Value-dependent energy | one distribution per layer | inject per model (§3.3); a synthetic workload once reused resnet's distribution |
 
 ---
 
 ## 1. Hardware model: package → die → macro → core → crossbar (weights resident)
 
 ```
-package (ws_chip2chip_link: die-to-die link, weights resident, no weight-DRAM streaming)
- └ die × N            N≈18 (4-bit) / 36 (8-bit); GPT-2 resident, 256-die package has ample room
+package (ws_chip2chip_link: weights resident, no weight-DRAM streaming)
+ └ die × N            N≈18 (4-bit) / 36 (8-bit); GPT-2 resident, 256-die package ample
     └ macro × 8
        └ core × 4
           └ crossbar × 8          = 256 crossbars / die
 crossbar = the reused 256×256 4-bit ReRAM macro `wan_nature_2022`
 ```
 
-- [`models/arch/3_chip/mlx_die.yaml`](../models/arch/3_chip/mlx_die.yaml) — die: 8 MB SRAM (`glb`) + 8 macros + inter-macro `router` + 4 cores/macro
-- [`models/arch/2_tile/mlx_core.yaml`](../models/arch/2_tile/mlx_core.yaml) — core: local I/O buffer + 8 crossbars
+- [`models/arch/3_chip/mlx_die.yaml`](../models/arch/3_chip/mlx_die.yaml) — DIE: 8 MB SRAM (`glb`) + 8 macros + inter-macro `router` + 4 cores/macro
+- [`models/arch/2_tile/mlx_core.yaml`](../models/arch/2_tile/mlx_core.yaml) — CORE: local I/O buffers + 8 crossbars
 - [`scripts/mlx_system.py`](../scripts/mlx_system.py) — hardware config + `LAYOUT`/`HOP_LATENCY_NS` + runners + `n_dies_for_weights()`
 
-**Key: ReRAM weights are RESIDENT, not streamed.** ReRAM is non-volatile /
-weight-stationary: weights are **programmed once and stay**, and are not rewritten
-during inference (SET = 8520 ns + endurance limits). The top level is
-`ws_chip2chip_link` (**no weight DRAM, only activations flow die-to-die**), not
-`fetch_weights_lpddr4` (which re-streams weights every inference — an SRAM-CiM
-assumption, wrong for ReRAM; it inflated energy ~36%/prefill, ~150×/decode). The
-**only per-inference writes are attention K/V**.
+**Key: ReRAM weights are resident, not streamed.** Programmed once (SET 8520 ns +
+endurance), top level `ws_chip2chip_link` (no weight DRAM; only activations move),
+not `fetch_weights_lpddr4`. **The only per-inference write is attention K/V.**
 
-**Capacity (why multiple dies are required):** GPT-2 medium has **302M** weights;
-one die = 8.4 MB = **16.8M 4-bit weights** → needs **18 (4-bit) / 36 (8-bit) dies
-resident**; a single layer (12.6M) fits on one die.
+**The instantiated system is a single die**: the top-level `chip2chip_link` has
+**instances=1** — a **flat off-die port** charging each op's activation I/O a fixed
+64.3 pJ/word (0.69% of op energy), with **no inter-die topology/routing/distance
+behind it**. Multi-die workloads = each op costed on its own die and summed;
+inter-layer hand-offs unrepresented (→ DR-3).
+
+**Capacity (why multi-die is mandatory)**: GPT-2 medium has **302M** weights; one
+die = 8.4 MB = **16.8M** 4-bit weights → **18 (4-bit) / 36 (8-bit) dies** resident;
+a single layer (12.6M) fits one die.
 
 ---
 
-## 2. Placement / topology-aware cost (energy)
+## 2. Denominators: where energy and time go, and which levels carry a price
 
-CiMLoop communication = `volume × fixed per-word energy`, **position-invariant**.
-We overlay distance:
+Any added cost matters in proportion to the term it lands on, so the denominators
+come first.
+
+### 2.1 Energy decomposition (ffn1, prefill, S=512; baseline's current calibration)
+
+| Component | Group | Energy (µJ) | Share |
+|---|---|---|---|
+| `glb` | buffer (on-die SRAM) | 892 | **33.0%** |
+| `integrator` | analog compute | 646 | 23.9% |
+| `adc` | conversion | 483 | 17.9% |
+| `wordline_cap` | analog compute | 223 | 8.3% |
+| `output_buffer` | buffer | 157 | 5.8% |
+| `sample` | conversion | 141 | 5.2% |
+| `row_drivers` / `cim_unit` | analog compute | 39.1 / 38.7 | 1.4% / 1.4% |
+| others (<1% each)† | — | 78.1 | 2.9% |
+| **total** | | **2,700** | 100% |
+
+† `router` 0.99% (**on-die macro NoC**; block mean 0.65%, range 0.39–0.99%),
+`shift_add` 0.74%, `chip2chip_link` 0.69% (**flat off-die port**), `input_buffer`
+0.47%. The two transport components are **distinct things, stated separately** —
+never merged as "the on-die network".
+
+> **Under the current calibration, transport is <2% — and a lower bound** (every
+> unpriced term is a network term); the expensive part is **staging: glb alone is
+> 33%**. Reading protocol: shares are against the currently priced cost → network
+> rows read as **lower bounds**, all other rows as **upper bounds**. The table
+> excludes the two terms we add: the K/V write (~0.9% of block energy, both
+> phases) and the distance re-pricing (+0.2% at the current layout).
+
+### 2.2 Latency composition (share of a block's critical path, scenario A, stall-free)
+
+| Term | Mechanism | prefill | decode | Accounted by |
+|---|---|---|---|---|
+| Compute | Timeloop cycles × cycle time | 79% | 10% | baseline (kept) |
+| Bandwidth stalls | demand > link bandwidth | — | — | **mechanism present but inert**: no limits set, `Bandwidth throttling = 1.00` (DR-2)ᵇ |
+| K/V write | serial SET before compute | 21%ᵃ | **90%ᵃ** | added (§3.2) |
+| Propagation | hops × ns/hop, round trip | 0.006% | 0.13% | added (§3.1) |
+| Inter-die hand-offs | D2D links between layers | — | — | not modeled (DR-3) |
+
+ᵃ Shares of a stall-free critical path; they rest on §3.2's write granularity (a K
+append = 64 row-serial SET pulses at the ~8.5 µs placeholder width, no
+parallel/incremental programming). A device that programs a column in parallel
+collapses these numbers (DR-5).
+ᵇ With real limits set, compute can only grow → the write share, the 10.12×, and
+the 93% **can only fall**.
+
+> ⚠️ **Retraction on record**: the earlier claim "finite router bandwidth →
+> latency balloons 75×–1200×" **had no traceable source** and was removed. The
+> mechanism is real but inactive; reviving the claim requires an
+> `analyze_bandwidth_sweep.py`.
+
+### 2.3 The pricing boundary, and which way numbers can move
+
+**The distance overlay can only act on a component with an energy model AND
+fanout>1; in the die model only `router` (fanout=8, the macro level) qualifies.**
+The core/crossbar-level `inter_*_spatial` carry zero energy in Accelergy, and the
+off-die port is distance-blind by construction. Of the four levels data traverses,
+**one is priced — and it is the smallest lever**.
+
+**Directionality**: pricing any waiting term enlarges the denominator — the network
+share of energy can only **rise**, glb/readout shares only **fall**; on the latency
+side real bandwidths only grow compute → the write's 90% of decode, the 10.12×, and
+offload's 93% are **ceilings**. The one open sign is the +0.2% distance re-pricing
+(DR-4). **Three numbers move under none of this**: the closed-form validation
+<0.1% (a volume identity), 3.58× (a pure geometric ratio), and each token's K/V
+being programmed exactly once in its lifetime (a structural invariant).
+
+---
+
+## 3. Models & results, level by level
+
+### 3.1 Distance and placement (macro level and below) — the central work
+
+CiMLoop communication = `volume × fixed per-word energy`, position-blind. We overlay
+distance:
 
 - [`scripts/placement_aware.py`](../scripts/placement_aware.py) — `perceive →
-  placement prior → distance model → re-aggregate`. Priors (`place_grid`/
-  `place_linear`) and patterns (`to_center`/`tree`/`all_to_all`/`neighbor`) are
-  pluggable. Key explicit assumption is `reference_hops`; **relative** comparisons
-  are robust, absolute values depend on it. Distance acts only on interconnect,
-  never compute/storage.
-- [`scripts/crossbar_comm.py`](../scripts/crossbar_comm.py) — decomposes aggregate
-  traffic into **per-pair** (node↔node) flows: a nested floorplan gives each
-  crossbar coordinates, and walking the multicast/reduction tree yields
-  `(src→dst, volume, distance)`, giving **per-crossbar cost that varies by
-  position** + a heatmap.
+  placement prior → distance model → re-aggregate`; energy (`position_aware_cost`,
+  base = the component's own reported `Energy (total)`) + latency
+  (`position_aware_latency`). Priors (`place_grid`/`place_linear`) and patterns
+  (`to_center`/`tree`/`all_to_all`/`neighbor`) pluggable; explicit assumption
+  `reference_hops` (→ DR-4) cancels in ratios — **relative comparisons are robust**.
+- [`scripts/crossbar_comm.py`](../scripts/crossbar_comm.py) — aggregate traffic
+  decomposed into **per-pair** (node↔node) flows: a nested floorplan gives each
+  crossbar coordinates; multicast/reduction trees yield `(src→dst, volume,
+  distance)` + heatmap + geometric `level_max_hops`.
 
-**Result** — same volume, cost varies ~**3.58×** by position:
+**Macro level (priced; reaches the system totals)**: with 8 macros the geometry is
+exact, no simulation needed — to-hub mean hops 1.3125 (near-square mesh) vs 2.0
+(line) → **line = 1.52× the macro NoC energy**; full setting sweep 3.00×
+(neighbor 1.0 → linear all-to-all 3.0). Times the level's denominator (router =
+0.65% of block energy) → **moves the whole block by 0.34%**: placement demonstrably
+changes a calibrated cost — and at this level the lever is small.
+
+**Crossbar level (relative map, 3.58×)**: identical traffic costs a corner crossbar
+**3.58×** a central one (pure volume×Manhattan, a geometric ratio, calibration-free).
+That level carries zero energy → it is a **ranking**, awaiting DR-1 to become
+joules; rankings are exactly what a placement search consumes.
 
 ![per-crossbar communication cost heatmap](crossbar_comm_heatmap.png)
 
----
+**Region level (relative map, 17.8%)**: hardware and mapping fixed, only which
+cores each of 6 matmuls occupies changes — dataflow order beats size order by
+**17.8%** (volume-weighted all-pair Manhattan; source
+[`scripts/analyze_region_locality.py`](../scripts/analyze_region_locality.py),
+reusing io_study's deterministic floorplan). **The metric matters**: NN-min reads
+31.2% but flatters adjacency (`ffn1→ffn2` scores 1 under both orders while its
+volume-weighted mean distance is 3.47 — the equal pair of bars in the figure).
 
-## 3. Crossbar-level analysis
+![region locality, volume-weighted](region_locality_vw.png)
 
-**Tool:** [`scripts/crossbar_stats.py`](../scripts/crossbar_stats.py) — per-crossbar
-compute/weight/input/output (average), per-level bus traffic, and the
-mapping-parsed communication structure (multicast/reduction/bit-slice); the
-per-pair flows (§2/§7) use it as input.
+**Propagation latency (wired at all three levels, currently a constant)**:
+worst-case hops × placeholder ns/hop, round trip 12×5 + 3×2 + 2×1 = **136 ns/op**
+(macro/core/crossbar = 88%/9%/3% of the term); `level_max_hops` takes no place_fn →
+**does not vary with placement**; 0.006% (prefill) / 0.13% (decode) of block
+latency. Making it placement-dependent is mechanical; making it **matter** is
+bandwidth (DR-2).
 
-But averages hide per-crossbar variation. Crossbars actually differ for two
-reasons: **physical position** (communication cost, §2/§7, 3.58×) and **the
-operand distribution each one sees** (value-dependent energy, below).
+### 3.2 The attention K/V write (crossbar level) — validation + quantification
 
-### 3.1 Per-crossbar value-dependent energy (real per-tile re-simulation)
+Expensive ReRAM writes are not news (the µs-scale SET is why these chips are
+weight-stationary), but K/V is the write inference **cannot avoid**, and the
+baseline maps QK^T/AV as plain weight-stationary matmuls — charging **nothing**.
+Modeling it is both a necessity for a system simulator and a **validation target
+for the whole composition**: if the system model is right, decode should come out
+write-latency-bound and offload should pay in throughput — §4 bears both out.
 
-**Question:** each crossbar holds a different weight tile and sees a different
-input slice — does its energy differ as a result?
+Model: `write_cells × E_WRITE_PER_CELL_J` (energy) + `write_rows × T_SET_NS`
+(latency), both derived from the one **append-only** geometry in `block_ops`
+(prefill programs all S tokens; decode appends the new one; rewriting the cache
+each step would violate residency and burn endurance in seconds). **Axis
+asymmetry**:
 
-**Method** ([`scripts/crossbar_value_real.py`](../scripts/crossbar_value_real.py),
-two-stage to avoid a torch/timeloop segfault): load **real weights** (GPT-2 medium
-/ resnet18) + **real forward activations**, tile the weight [C×M] into 256×256
-crossbar blocks, and **re-run CiMLoop's single-crossbar energy per block** with that
-block's own weight+input histogram, then sum. Energy is nonlinear in the
-distribution, so this is a genuine per-crossbar simulation, not a redistribution of
-the total.
+| op | weight shape | decode adds a token | write cells | SET pulses |
+|---|---|---|---|---|
+| `qk^t` | K^T: `dh(rows) × S(cols)` | a new **column** | dh | **dh = 64** (64 wordlines) |
+| `av` | V: `S(rows) × dh(cols)` | a new **row** | dh | **1** (one wordline) |
 
-**Result (2×2, device × workload):**
+→ decode vs prefill: **write energy ↓512×, write latency only ↓5×** — the direct
+reason decode is write-latency-dominated.
+
+**Measured**: whole-model write energy prefill 2.52e-3 J / decode 4.9e-6 J (~0.9%);
+write latency prefill **65.4 ms** / decode **13.3 ms** (90% of decode latency).
+Energy vs latency view (one block):
+
+![energy view vs latency view](energy_vs_latency.png)
+
+| phase | attention share (energy) | attention share (latency) | write share of block latency |
+|---|---|---|---|
+| prefill S=512 | 33.7% | 35.6% | 21% |
+| decode S=512 | 33.7% | **93.3%** | **90%** |
+
+> **The decode split is the telling one**: attention is 33.7% of energy but 93.3%
+> of latency. Energy and latency give opposite verdicts — an energy-only model
+> concludes attention is minor in exactly the regime where it owns the critical
+> path.
+
+### 3.3 Value-dependent energy (crossbar level)
+
+**Magnitude**: the value-dependent part is ≈ **a quarter of an op's energy**
+(measured: realistic vs all-zeros distribution = 24.9%) → getting the distribution
+right matters. A synthetic workload once reused resnet's distribution; now
+[`scripts/value_stats.py`](../scripts/value_stats.py) injects per simulated model +
+op type.
+
+**Per-crossbar spread**
+([`scripts/crossbar_value_real.py`](../scripts/crossbar_value_real.py): real
+weights + real activations, per-tile re-simulation; two stages to avoid the
+torch/timeloop segfault):
 
 ![per-crossbar value energy: device x workload](crossbar_value_device_compare.png)
 
-| per-crossbar spread | GPT-2 ffn1 (LayerNorm) | resnet18 conv (ReLU-sparse) |
+| per-crossbar energy spread | GPT-2 ffn1 (LayerNorm) | resnet18 conv (ReLU-sparse) |
 |---|---|---|
 | **wan** (bit-serial) | 1.000× | 1.002× |
 | **raella** (value-sensitive) | 1.010× | **1.204×** |
 
-**Findings:**
-1. **Device decides it.** wan/wang/basic are **bit-serial** — energy is set by
-   precision / phases / ADC steps, not values → per-crossbar ≈ 0 for any workload.
-   **raella (ISCA'23)**, built to exploit bit/value sparsity, is value-driven → a
-   real spread.
-2. **Input heterogeneity is the workload lever.** On raella, the CNN (no LayerNorm,
-   ReLU-sparse inputs whose channel blocks are 80–91% zeros) spreads **1.204×
-   (20%)**; GPT-2 (LayerNorm homogenizes channels) only 1.010×. The spread is along
-   the contraction ROW block (which 256 input channels a crossbar sees), not the
-   weight column — weight distribution barely matters (~1% even at extremes).
-3. So **per-crossbar value-dependent energy is only worth modeling on a
-   value-sensitive device with heterogeneous inputs.** Whether it matters for the
-   company chip hinges on its device class (plain bit-serial MAC vs value/bit-
-   sparsity-exploiting).
+1. **Device class is the first-order factor**: bit-serial energy is set by
+   precision/ADC steps → per-crossbar ≈ 0; raella-class devices exploit
+   value/bit sparsity → real spread.
+2. **Input heterogeneity is the workload factor**: sensitive device × CNN
+   (ReLU-sparse, 80–91% zeros per block) = 1.204×; LayerNorm-flattened GPT-2 only
+   1.010×. Spread varies along contraction row-blocks; **weight distribution barely
+   matters (~1%)**.
+3. **Whether to model it is a device-class question (DR-6)**; this device
+   (bit-serial) does not need it. (Light approximate mode:
+   [`crossbar_value.py`](../scripts/crossbar_value.py)
+   `value_mode="uniform"|"per_crossbar"`.)
 
-(A lightweight switchable mode [`crossbar_value.py`](../scripts/crossbar_value.py)
-`run_op(value_mode="uniform"|"per_crossbar")` does a fast activity-scaled
-attribution; the real answer above comes from the per-tile re-simulation.)
+### 3.4 Sequence scaling & KV-cache ([`scripts/llm_workload.py`](../scripts/llm_workload.py))
 
----
+Six ops scale with **S** and **phase**; each op is a normal die-hierarchy run,
+composable with crossbar_stats/comm/placement_aware. Measured (prefill, incl. K/V
+write; source [`scripts/analyze_seqlen_kv.py`](../scripts/analyze_seqlen_kv.py)):
 
-## 4. LLM workload modeling
+| S | 64 | 128 | 256 | 512 | 1024 |
+|---|---|---|---|---|---|
+| attention energy share | 10.7% | 14.8% | 22.0% | **33.7%** | **49.1%** |
+| attention latency share (stall-free) | 52.6% | 46.0% | 43.2% | 35.6% | 38.4% |
 
-[`scripts/llm_workload.py`](../scripts/llm_workload.py) generates the 6 ops of a
-GPT transformer block, with shapes scaled by **S** and **phase**; each op is still
-a normal die-hierarchy run, so it composes with crossbar_stats/crossbar_comm/
-placement_aware.
-
-### 4.1 Sequence-length scaling
-attention (QK^T/AV) ∝ S², FFN/projections ∝ S → attention is no longer artificially small.
+Energy share rises monotonically with S²; the latency share is highest at *small* S
+(write latency ∝ S until the 256-row cap, while compute keeps growing), the curves
+crossing near S≈512.
 ![attention share vs sequence length](attention_share_vs_seqlen.png)
 
-### 4.2 Attention write cost
-QK^T/AV are activation×activation → K/V must be **programmed into ReRAM** every
-inference, not amortized. Overlay `write_cells × E_WRITE_PER_CELL_J` (energy) and
-`write_rows × T_SET_NS` (latency), both derived from the one append geometry in §5.
-
-> **Measured verdict: this term matters in latency, not energy.** Whole-model write
-> energy is 2.52e-3 J (prefill) / **4.9e-6 J** (decode, ~0.9% of decode energy), but
-> write latency is **65.4 ms** (prefill) / **13.3 ms** (decode, **90% of decode
-> latency**). The SET pulse is 8520 ns — very long — while the per-cell programming
-> energy is tiny.
-
-### 4.3 KV-cache (decode)
-Each step reads the whole KV-cache: read ∝ G² (dominant), write ∝ G.
+**KV-cache (a traffic term only when offloaded)**: with attention resident, K/V
+live in the arrays and there is **no** "re-read the cache each step" stream; it
+appears once attention is offloaded — read ∝ G² (dominant), write ∝ G:
 ![KV-cache cost vs generation length](kv_cache_vs_genlen.png)
 ![energy with vs without KV-cache](energy_with_without_kv.png)
 
-### 4.4 Static vs dynamic (offload)
-ReRAM is weight-stationary — good for static weights (FFN/projections); dynamic
-attention is the offload candidate.
-![GPT-2 static vs dynamic offload](gpt2_static_vs_dynamic.png)
-
-### 4.5 Value-dependent energy correction (model-matched histograms)
-CiMLoop energy is **data-value-dependent**: each layer's `histograms` set the ReRAM
-analog current / ADC / cell conduction → energy. The synthetic workload once reused
-ResNet's distribution; now [`scripts/value_stats.py`](../scripts/value_stats.py)
-**injects per simulated model + op type** (change model → change `hist_source`), no
-leakage.
-
 ---
 
-## 5. Latency modeling
+## 4. GPT-2 system-level three scenarios (whole model, S=512, ×24 layers)
 
-Latency structure ≠ energy: energy **sums**, latency is a **critical path** (max over
-parallel, sum over serial). Three parts:
+- **(C) baseline** — unmodified CiMLoop, no overlays;
+- **(A) full + overlays** — + distance energy/latency + K/V write energy/latency;
+- **(B) offload** — only static ops on-chip. C/A execute identically and differ
+  only in what is charged; A/B differ in what runs on-chip.
 
-| Part | Source | Mechanism |
-|---|---|---|
-| compute + bandwidth stall + IO | Timeloop native cycles | insufficient bandwidth → stall → cycles↑ (`bandwidth_limiter` is this knob) |
-| distance propagation latency | overlay `position_aware_latency` | `hops × hop_latency_ns`, serial across phases, max over parallel |
-| ReRAM write latency | overlay `write_latency_s` | SET 8520 ns serial **per wordline**, before compute; pulse count = the number of **rows** the write touches (`Op.write_rows`, below) |
-
-**The axis asymmetry of the K/V append** (energy and latency derive from one geometry,
-in `block_ops`): the K/V arrays are resident and **append-only** — prefill programs all
-S tokens, decode adds only the new one. But the two ops append along different axes:
-
-| op | weight shape | decode adds a token | write cells | SET pulses |
-|---|---|---|---|---|
-| `qk^t` | K^T: `dh(rows) × S(cols)` | a new **column** | dh | **dh = 64** (spread over 64 wordlines) |
-| `av` | V: `S(rows) × dh(cols)` | a new **row** | dh | **1** (one shared wordline) |
-
-→ decode vs prefill: **write energy ↓512×, but write latency only ↓5×**. This is
-directly why decode ends up write-latency-dominated.
-
-> ⚠️ **Retracted:** an earlier claim here — "give the router a finite bandwidth →
-> latency balloons 75×–1200×" — **has no traceable source** (no script or result file
-> in the repo produces it), and has been removed. **The mechanism is real but is not
-> currently active**: the router's `Read/Write bandwidth` are both **unset** and the
-> stats report `Bandwidth throttling = 1.00`, i.e. **the present configuration produces
-> no stalls at all** — which is also why our latency is distance-insensitive (§6.3).
-> Reviving the claim requires an `analyze_bandwidth_sweep.py`.
-
-**Energy vs latency view** (single block):
-![energy view vs latency view](energy_vs_latency.png)
-
-| phase | attention share (energy) | attention share (latency) | write latency of block |
-|---|---|---|---|
-| prefill S=512 | 33.7% | **35.6%** | 21% |
-| decode S=512 | 33.7% | **93.3%** | **90%** |
-
-> In prefill, FFN/projections are still the single largest component (energy 66%) —
-> at S=512 the transformer is FFN-heavy, which is normal. **The decode split is the
-> revealing one: attention is only 33.7% of energy but 93.3% of latency** (write alone
-> is 90%) — with weights resident the per-token compute collapses and the block is
-> almost entirely that serial SET phase. **Energy and latency give opposite verdicts
-> here.**
-
----
-
-## 6. GPT-2 system-level search (whole-model three-way comparison, resident multi-die)
-
-The whole GPT-2 (gpt2-medium, 24 layers) runs on the resident multi-die hierarchy,
-three scenarios:
-
-- **(C) baseline** — raw CiMLoop, no overlays;
-- **(A) full + overlays** — + position-aware comm + distance latency + ReRAM write energy & latency;
-- **(B) offload** — only static ops on chip, dynamic attention offloaded.
-
-### 6.1 prefill (S=512, ×24 layers)
+### 4.1 prefill
 ![system comparison prefill](gpt2_system_comparison_prefill.png)
 
 | Scenario | Energy | Latency |
 |---|---|---|
-| (C) baseline CiMLoop | 0.284 J | 0.249 s |
-| (A) full + overlays | 0.288 J (**1.01×**) | **0.315 s** (1.26×) |
+| (C) baseline | 0.284 J | 0.249 s |
+| (A) full + overlays | 0.288 J (**1.01×**) | 0.315 s (**1.26×**) |
 | (B) offload attention | 0.191 J | 0.203 s |
 
-Overlays reveal (A vs C): **energy +1%, latency +26%** (A−C = 0.0655 s, **exactly the
-65.4 ms of write latency**); offload benefit (A vs B): saves **34% energy, 36% latency**.
+A−C latency = 0.0655 s, **exactly the 65.4 ms write latency**; offload (A→B) saves
+34% energy, 36% latency.
 
-### 6.2 decode (S=512, ×24 layers, single generation step)
+### 4.2 decode (one generation step)
 ![system comparison decode](gpt2_system_comparison_decode.png)
 
 | Scenario | Energy | Latency |
 |---|---|---|
-| (C) baseline CiMLoop | 5.60e-4 J | 1.46 ms |
+| (C) baseline | 5.60e-4 J | 1.46 ms |
 | (A) full + overlays | 5.66e-4 J (**1.01×**) | **14.8 ms (10.12×)** |
 | (B) offload attention | 3.75e-4 J | 0.987 ms |
 
-With weights resident the per-token compute is tiny, so the **ReRAM K/V write becomes
-the absolute dominant term — but only in latency**: A/C latency is **10.12×** (A−C =
-13.3 ms, exactly the write latency), while A/C energy is only **1.01×**. **Offload saves
-34% energy, 93% latency.**
+A−C = 13.3 ms, exactly the write latency; **offload saves 93% latency / 34%
+energy** — a throughput argument.
 
-### 6.3 Conclusions
-> - **The headline is a latency result, not an energy result.** The baseline's **energy
->   is essentially right** (1.01× in both phases): on this device **~96% of energy is
->   analog compute + ADC**, and the entire on-die network is **0.12%** (measured on
->   ffn1: router + chip2chip = 1.38e-6 + 1.84e-6 J; the GLB is a further 4.1%). Neither
->   distance nor the write can move the total.
-> - **The baseline's latency is wrong**: it **does not model the ReRAM SET write at
->   all**, so **decode is under-counted 10.12×**; the write is **90% of decode latency**.
->   This term depends on no calibration choice — it is a missing cost, not a re-priced
->   one.
-> - **For generation-heavy decode, offloading attention pays off enormously — on
->   throughput grounds, not energy** (latency −93%, energy only −34%).
-> - **Position-awareness moves neither total at today's placeholder parameters**: energy
->   because communication is 0.12%; latency because the distance term is **0.006%
->   (prefill) / 0.13% (decode)** (measured: `dist_latency` totals just 1.96e-5 s for the
->   whole model). **This is an honest negative result**: within-die placement is not an
->   energy lever on this device. Making it bite needs two things we don't have — per-level
->   **link bandwidths** (a link with no bandwidth cap can never stall) and **D2D costs**.
->   What the position model gives today is the ability to **see** differences that are
->   structurally invisible to a position-blind model (3.58×, 17.8%, 21.7× across
->   patterns), which is exactly what a placement search consumes — a search needs
->   **rankings**, not absolutes.
-> - Judge offload by **A vs B** (B vs C is apples-to-oranges).
+### 4.3 Attribution per level (read every result with its level and denominator)
 
-### 6.4 Where to see the mapping-search result
-Every op goes through the Timeloop **mapper search** (config `models/include/mapper.yaml`:
-objective **EDP**, `random_pruned`, up to **10,000** valid mappings per op, stop after
-100 with no improvement, single-thread reproducible). **The chosen best mapping is in
-`gpt2_system_mappings_{prefill,decode}.txt`** — each op's loop nest (how P/C/M are
-tiled and spread over package→die→macro→core→crossbar→columns/rows, `Spatial-X/Y` =
-spatial parallelism) is the search's output.
+| Level | Metric | Measured ratio | That level's share | Status |
+|---|---|---|---|---|
+| **crossbar — K/V write** | SET pulses×T_SET; cells×E_write | **decode latency 10.12×** | write = **90%** of decode latency (0.9% of energy) | measured, **in the totals** |
+| **macro (×8) — comm energy** | router energy × hops/ref | mesh→line **1.52×**; setting sweep 3.00× | router = **0.65%** of block → **0.34%** block effect | measured, **in the totals** (A/B/C use grid+to_center) |
+| macro/core/crossbar — propagation | max_hops × ns/hop (88%/9%/3%) | constant 136 ns/op, **placement-independent** | 0.006% / 0.13% of block latency | wired, currently constant |
+| crossbar (256/die) — relative map | volume × Manhattan | **3.58×** | that level's energy is 0; nothing to scale | measured, **not in the totals** |
+| region (6 matmuls) — relative map | volume-weighted all-pair Manhattan | **17.8%** (BERT) | same | measured, **not in the totals** |
+| core/crossbar link energy | — | — | **0%** (`inter_*_spatial` zero-energy) | **not modeled → DR-1** |
+| bandwidth / contention | — | — | `throttling = 1.00`: no stall representable | **not modeled → DR-2** |
+| inter-die (D2D) | — | — | instances=1 flat port (0.69%); no topology | **not modeled → DR-3** |
+
+> - The qualitative picture (decode write-bound, offload = throughput win) needs no
+>   calibration; **the magnitudes (10.12×/90%/93%) are set by the write-granularity
+>   assumptions and move with DR-5** (and are ceilings — §2.3 directionality).
+> - Judge offload by **A vs B** (B vs C is apples-to-oranges); B counts only what
+>   stays on-chip, not the receiving unit.
+
+### 4.4 Where to see the searched mappings
+Every op goes through the Timeloop mapper (`models/include/mapper.yaml`: EDP,
+`random_pruned`, 10k-mapping cap, stop after 100 without improvement,
+single-threaded/reproducible). Best mappings in
+`gpt2_system_mappings_{prefill,decode}.txt`.
 
 ---
 
-## 7. Per-pair communication stats files (auto-saved every run) + analysis
+## 5. Per-pair communication dumps (auto-saved on every run)
 
-Every `run_op` auto-saves `analysis/comm/<op>_<phase>_comm.{csv,json}`, decomposing
-aggregate bus traffic into **every `crossbar↔core↔macro↔glb` link**'s volume +
-physical distance.
+Every `run_op` saves `analysis/comm/<op>_<phase>_comm.{csv,json}`: aggregate bus
+volumes decomposed into every `crossbar↔core↔macro↔glb` link's volume + physical
+distance. Three-level tree `glb → 8 macros → 32 cores → 256 crossbars` → **296
+edges** per op.
 
-### 7.1 File contents and example
-Down/up is a **three-level tree**: `glb → 8 macros → 32 cores → 256 crossbars`, so
-each op has **296 edges** = 8+32+256.
-
-**CSV** (one line per link, example `qk^t` prefill):
+**CSV** (one link per row; example `qk^t` prefill):
 ```
 level,           src,   dst,     volume_words, distance_hops, volume_x_distance
-glb<->macro,     glb,   macro2,  28835840,     12.0,          346030080   ← far-corner macro
-glb<->macro,     glb,   macro4,  28835840,     1.5,           43253760    ← near-center macro
+glb<->macro,     glb,   macro2,  28835840,     12.0,          346030080   <- far-corner macro
+glb<->macro,     glb,   macro4,  28835840,     1.5,           43253760    <- near-center
 macro<->core,    macro0,core0.0, 7208960,      3.0,           21626880
 core<->crossbar, core0.0,xb4,    901120,       0.25,          225280
 ```
-**JSON**: hierarchy shape + all flows + **per-crossbar cost** (id/coord/cost) +
-position-spread summary (`per_crossbar_cost: {min: 4.28e6, max: 1.53e7,
-max_over_min: 3.58}`; cheapest `id=132@(7,7)` near center, most expensive
-`id=66@(14,0)` far corner).
+**JSON**: hierarchy shape + all flows + per-crossbar cost + spread summary
+(`max_over_min: 3.58`; cheapest `id=132@(7,7)` near-center, priciest `id=66@(14,0)`
+far corner).
 
-### 7.2 Three key findings
-1. **Position spread 3.58×**: same volume, corner crossbars cost 3.58× the center
-   (the crossbar-aware core effect).
-2. **Distance-weighted cost concentrates at the top level**: volume is conserved per
-   level (ffn1: 637M words each), but `volume×distance` is **~65%** at `glb↔macro`,
-   ~25% at `macro↔core`, ~10% at `core↔crossbar` → **distance-reduction gains are
-   mainly at the top `glb↔macro` interconnect**.
-3. **prefill is on-die-NoC-dominated; decode communication is tiny overall** (no
-   weight traffic once resident); die-to-die activation is far below on-die traffic
-   and is **not the bottleneck**:
+**Three takeaways**: ① position spread 3.58×; ② `volume×distance` concentrates at
+the top: `glb↔macro` ~65%, `macro↔core` ~25%, `core↔crossbar` ~10% → distance
+optimization pays mostly at the top level; ③ prefill is on-die-traffic-heavy,
+decode communication is tiny overall; inter-die activations are far below on-die
+volumes — not a bottleneck:
 
-| Interconnect (model total) | prefill (all ops) | decode (all ops) |
+| Interconnect (model total, words) | prefill | decode |
 |---|---|---|
-| router (on-die NoC) | 13.1 G | 25.7 M |
+| router (macro NoC) | 13.1 G | 25.7 M |
 | glb (on-die SRAM) | 8.25 G | 16.1 M |
-| chip2chip (die-to-die, native) | 5.03 G | 9.83 M |
-| die-to-die activation (logical, inter-layer hidden state) | 12.1 M | 23.5 K |
+| chip2chip (off-die port) | 5.03 G | 9.83 M |
+| inter-die activations (logical) | 12.1 M | 23.5 K |
 
 ---
 
-## 8. Modeling assumptions & limitations (know these before calibration)
+## 6. Assumptions & limitations
 
-The current simulation is **per-op search + 1 layer/die without packing + one weight
-distribution per op type** — three clear placeholder simplifications:
+1. **Per-op search, no cross-layer/cross-die co-optimization**: each op is
+   EDP-searched independently then aggregated; layer→die placement is assumed, not
+   searched; no inter-layer fusion/global schedule.
+2. **One layer/die, no packing**: each op uses one die's 256 crossbars
+   (`chip_in_system.meshX=1`); ffn1 uses ~26% of a die, the rest idles → 24 dies is
+   conservative; capacity packing would need ~6–8.
+3. **Oversized layers unhandled**: a layer > 1 die needs `meshX>1` (arch supports
+   it; never run). GPT-2 medium never triggers it.
+4. **Energy position-awareness stops at the macro level**; propagation latency does
+   not vary with placement (§2.3).
+5. **Write model**: one SET pulse per row, no write-verify — both scale decode
+   latency directly (DR-5).
+6. **Placeholder magnitudes**: distance absolute scale, per-hop latencies, write
+   energy, off-die port cost — all uncalibrated. Ratios robust; absolutes not.
+7. **Value-distribution granularity**: one distribution per layer; per-crossbar
+   spread verified to be a device-class question (§3.3, DR-6).
+8. **Offload accounting**: B counts only what stays on-chip (§4).
 
-1. **Per-op search, not cross-layer/cross-die joint.** Each op is EDP-searched to
-   optimum independently, then aggregated; **the layer→die placement is our
-   assumption, not searched.** Timeloop does no layer fusion / global schedule.
-
-2. **1 layer/die, leftover capacity unused.** Each op uses only one die's 256
-   crossbars (`chip_in_system.meshX=1`); ffn1 weights fill ~26% of a die, and the
-   **rest is idle — we do not pack the next layer in.** → die count = `n_layers=24`,
-   **conservative (over-provisioned)**; real capacity packing (~4 layers/die) needs
-   only ~6–8 dies.
-
-3. **Oversized layers not handled.** If a layer > 1 die (larger model / higher
-   bit-width) the current setup is insufficient; set `chip_in_system.meshX > 1` to
-   spread one op spatially across dies (arch supports it, not yet exercised). Every
-   GPT-2 medium layer fits, so this is untriggered.
-
-4. **Value-dependent distribution granularity:** across layers, one averaged
-   distribution each for static/dynamic (all 24 layers' static ops share one).
-   Within a layer, the real **per-crossbar** variation was verified with real
-   weights + activations (§3.1): it is **device-dependent** — bit-serial (wan) ≈ 0,
-   value-sensitive (raella) + heterogeneous inputs (CNN) up to 1.204×. So whether
-   per-crossbar value modeling is needed depends on which class the company device is.
-
-5. **Topology / bit-width / hop costs are all placeholders** (see §9), pending company
-   parameters.
-
-**Relaxation roadmap (by value):** ① capacity packing (realistic die count) →
-② oversized layers across dies (`meshX>1`). (Per-crossbar value distribution already
-verified, see §3.1.)
+**Relaxation route**: ① capacity packing → ② oversized layers across dies
+(`meshX>1`).
 
 ---
 
-## 9. Placeholder parameters (pending company calibration)
+## 7. DR data-request map (each → which numbers move, and which way)
 
-| Parameter | Placeholder | Origin | Affects |
+| DR | Data requested | Numbers it moves | Direction |
 |---|---|---|---|
-| `E_WRITE_PER_CELL_J` | 1.0e-10 J | wan SET ~100pJ | attention write energy |
-| `T_SET_NS` | 8520 ns | wan SET pulse | attention write latency (bottleneck) |
-| `E_DRAM_PER_WORD_J` | 5.0e-11 J | typical DRAM | KV-cache energy |
-| `HOP_LATENCY_NS` | 1–5 ns/hop | placeholder | on-die distance latency |
-| `DIE_HOP_LATENCY_NS` | 20 ns/hop | placeholder | die-to-die latency |
-| per-level `bandwidth` | placeholder | — | compute/IO latency (very sensitive) |
-| `reference_hops` | 1.0 | placeholder | distance-energy absolute value |
-| histogram source | `gpt2_medium` | real workload | value-dependent energy |
-| weight bit-width / layer→die | 4-bit / 1 layer per die | placeholder | die count, die-to-die volume |
+| **DR-1** | per-hop/per-word energy of core- and crossbar-level links | network energy share; the 3.58× map and the 17.8% | network share ↑; rankings become joules |
+| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive |
+| **DR-3** | D2D topology/routing/latency/bandwidth/energy | network energy share; whole-package placement spread | network share ↑; unlocks the go/no-go experiment |
+| **DR-4** | what the router's calibrated per-word energy represents: one hop or an average multi-hop transfer | the router term; the **sign** of the +0.2% re-pricing | resolves the one open sign |
+| **DR-5** | SET pulse width, cells programmable in parallel, incremental programming, write-verify, endurance | the write term: 21%, 90%, 10.12×, 93% | **these stand or fall with it** |
+| **DR-6** | device class (precision- vs value/sparsity-driven) + ADC calibration point | whether per-crossbar value modeling is needed | gates the refinement (§3.3) |
+
+**Why DR-4**: the router's calibrated vector-access energy is 48.3 pJ vs the glb's
+3.3e4 pJ ≈ **1:680** — it likely represents a single short hop rather than an
+average multi-hop transfer. Until settled, the network share is uncertain in one
+direction only: **toward underestimation**.
 
 ---
 
-## 10. Script index
+## 8. Placeholder parameters (awaiting company data)
+
+| Parameter | Placeholder | Source | Affects | DR |
+|---|---|---|---|---|
+| `E_WRITE_PER_CELL_J` | 1.0e-10 J | wan SET ~100 pJ | write energy | DR-5 |
+| `T_SET_NS` | 8520 ns | wan SET pulse | write latency (the bottleneck) | DR-5 |
+| `E_DRAM_PER_WORD_J` | 5.0e-11 J | typical DRAM | KV-cache energy | — |
+| `HOP_LATENCY_NS` | 1–5 ns/hop | placeholder | on-die propagation | rel. DR-2 |
+| `DIE_HOP_LATENCY_NS` | 20 ns/hop | placeholder | inter-die latency | DR-3 |
+| per-level `bandwidth` | unset | — | stalls (very sensitive) | DR-2 |
+| `reference_hops` | 1.0 | placeholder | distance-energy scale/sign | DR-4 |
+| histogram source | `gpt2_medium` | real workload | value energy | DR-6 |
+| weight bits / layer→die | 4-bit / 1 layer per die | placeholder | die count, inter-die volume | — |
+
+---
+
+## 9. Script index
 
 | Script | Purpose |
 |---|---|
-| `mlx_system.py` | hardware config (resident multi-die) + LAYOUT + runners + `n_dies_for_weights` |
+| `mlx_system.py` | hardware config (resident die hierarchy) + LAYOUT + runners + `n_dies_for_weights` |
 | `placement_aware.py` | distance overlay: energy (`position_aware_cost`) + latency (`position_aware_latency`) |
 | `crossbar_stats.py` | per-crossbar stats + communication structure + `hierarchy()` |
-| `crossbar_comm.py` | per-pair flows + heatmap + geometry hops + `save_flows()` (auto-dump) |
+| `crossbar_comm.py` | per-pair flows + heatmap + geometric hops + `save_flows()` (auto-dump) |
 | `llm_workload.py` | sequence scaling + write cost/latency + KV-cache + die-to-die + histogram injection |
-| `value_stats.py` | general value-histogram loader (by model / layer type) |
-| `crossbar_value.py` | fast activity-scaled per-crossbar value energy mode (uniform / per_crossbar) |
-| `crossbar_value_real.py` | REAL per-crossbar value-energy pipeline (real weights+activations, per-tile re-simulation; two-stage) |
-| `analyze_gpt2_offload.py` | GPT-2 static/dynamic offload analysis |
-| `analyze_energy_vs_latency.py` | energy vs latency view chart |
-| `analyze_system_gpt2.py` | whole GPT-2 system-level three-way comparison, args `[S] [phase]` |
-| `analyze_crossbar_value_compare.py` | device × workload 2×2 per-crossbar energy comparison (§3.1) |
+| `value_stats.py` | general value-histogram loader (per model / layer type) |
+| `crossbar_value.py` | fast per-crossbar value approximation (uniform / per_crossbar) |
+| `crossbar_value_real.py` | real per-crossbar value pipeline (real weights+activations, per-tile re-sim; two stages) |
+| `analyze_system_gpt2.py` | whole GPT-2 three-scenario comparison, `[S] [phase]` (§4) |
+| `analyze_energy_vs_latency.py` | energy-vs-latency view (§3.2) |
+| `analyze_seqlen_kv.py` | sequence-scaling + KV-cache figures (§3.4) |
+| `analyze_region_locality.py` | region-placement comparison + 17.8% (compute on host / plot in container, §3.1) |
+| `analyze_position_aware.py` | placement × pattern sweep (resnet18) |
+| `analyze_crossbar_value_compare.py` | device×workload 2×2 per-crossbar energy figure (§3.3) |
+| `analyze_gpt2_offload.py` | (superseded by §4's three scenarios; predates the write model — do not cite) |
 
 ```python
 from scripts import llm_workload as lw
@@ -408,5 +495,5 @@ res = lw.run_block(lw.GptConfig(), S=512, phase="prefill")   # or "decode"
 lw.report_block(res, title="prefill S=512")                  # energy + latency tables
 ```
 ```bash
-python3 scripts/analyze_system_gpt2.py 512 prefill    # whole-model system-level (or 512 decode)
+python3 scripts/analyze_system_gpt2.py 512 prefill    # whole-model system level (or: 512 decode)
 ```
