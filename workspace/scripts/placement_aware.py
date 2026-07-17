@@ -56,26 +56,39 @@ STATS_FILENAME = "timeloop-mapper.stats.txt"
 # 1. Perceive: extract per-component (fanout, volume, unit_energy) from stats
 # ---------------------------------------------------------------------------
 def perceive(stats_path: str) -> Dict[str, dict]:
-    """Parse a Timeloop stats.txt into {component_name: {fanout, unit_pJ, volume}}."""
+    """Parse a Timeloop stats.txt into
+    {component_name: {fanout, unit_pJ, volume, energy_J}}.
+
+    `energy_J` is the component's OWN reported energy, summed over its dataspaces
+    (the `Energy (total)` lines). This is the position-blind communication energy the
+    simulator actually charges, and it is what the distance overlay must scale.
+
+    NOTE: do NOT reconstruct it as `volume * unit_pJ`. `Total scalar accesses` and
+    `Vector access energy` are in different units -- the latter is per VECTOR access
+    (Block size scalars, 128 for the router), and the scalar-access total aggregates
+    dataspaces/encodings that do not all drive that energy. Multiplying the two
+    overstates the real figure by ~3 orders of magnitude.
+    """
     with open(stats_path, "r") as f:
         text = f.read()
 
     levels: Dict[str, dict] = {}
-    # SPECS block: instance count + per-access energy
-    for m in re.finditer(
-        r"=== (\w+) ===\n.*?Instances\s*:\s*(\d+)"
-        r".*?Vector access energy\s*:\s*([\d.eE+-]+)\s*pJ",
-        text,
-        re.DOTALL,
-    ):
-        name, inst, ue = m.group(1), int(m.group(2)), float(m.group(3))
-        levels[name] = {"fanout": inst, "unit_pJ": ue, "volume": 0}
-    # STATS block: total scalar accesses (data-movement volume)
-    for m in re.finditer(
-        r"=== (\w+) ===\s*\n\s*Total scalar accesses\s*:\s*(\d+)", text
-    ):
-        if m.group(1) in levels:
-            levels[m.group(1)]["volume"] = int(m.group(2))
+    parts = re.split(r"=== (\w+) ===", text)   # [pre, name1, body1, name2, body2, ...]
+    for i in range(1, len(parts) - 1, 2):
+        name, body = parts[i], parts[i + 1]
+        inst = re.search(r"Instances\s*:\s*(\d+)", body)
+        ue = re.search(r"Vector access energy\s*:\s*([\d.eE+-]+)\s*pJ", body)
+        if not (inst and ue):
+            continue
+        vol = re.search(r"Total scalar accesses\s*:\s*(\d+)", body)
+        # per-dataspace "Energy (total)" lines (exclude Temporal Reduction / Address
+        # Generation variants, which do not start the line with "Energy (total)")
+        e_pJ = sum(float(x) for x in re.findall(
+            r"^\s*Energy \(total\)\s*:\s*([\d.eE+-]+)\s*pJ", body, re.M))
+        levels[name] = {"fanout": int(inst.group(1)),
+                        "unit_pJ": float(ue.group(1)),
+                        "volume": int(vol.group(1)) if vol else 0,
+                        "energy_J": e_pJ * 1e-12}
     return levels
 
 
@@ -188,13 +201,13 @@ _INTERCONNECT_HINTS = ("router", "link", "noc", "network")
 def _is_comm_component(name: str, info: dict) -> bool:
     """True only for actual interconnect: the inter-level spatial networks
     (`inter_*_spatial`) or explicit interconnect components (router/link/NoC).
-    Must also have spatial fanout (>1) and nonzero per-access energy for the
-    distance SCALE to mean anything (zero-energy `inter_*` markers contribute 0)."""
+    Must also have spatial fanout (>1) and nonzero energy for the distance SCALE to
+    mean anything (zero-energy `inter_*` markers contribute 0)."""
     name_l = name.lower()
     is_interconnect = name_l.startswith("inter_") or any(
         h in name_l for h in _INTERCONNECT_HINTS
     )
-    return is_interconnect and info["fanout"] > 1 and info["unit_pJ"] > 0
+    return is_interconnect and info["fanout"] > 1 and info.get("energy_J", 0) > 0
 
 
 def position_aware_cost(
@@ -256,7 +269,7 @@ def position_aware_cost(
         ref_hops = max(cfg.get("reference_hops", default_reference_hops), 1e-9)
         hop_scale = cfg.get("hop_scale", 1.0)
 
-        base = info["volume"] * info["unit_pJ"] * 1e-12  # Joules, position-blind
+        base = info["energy_J"]          # the simulator's own position-blind energy
         hops = hops_fn(place_fn(info["fanout"]))
         pa = base * (hops / ref_hops) * hop_scale
         rows.append((name, info["fanout"], base, hops / ref_hops, pa))

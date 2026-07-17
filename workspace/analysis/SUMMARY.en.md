@@ -18,9 +18,9 @@
 
 | Dimension | CiMLoop default | Consequence / our fix |
 |---|---|---|
-| **Physical position** | Topological, no coordinates/distance | Near/far layouts cost the same → distance overlay (§2) |
+| **Physical position** | Topological, no coordinates/distance | Near/far layouts cost the same → distance overlay (§2). ⚠️ Measured: at today's parameters it **moves neither energy nor latency** — see §6.3 |
 | **Latency / time** | Only cycles, interconnect assumed infinitely fast | System latency under-counted → latency modeling (§5) |
-| **Attention write** | QK^T/AV as plain matmuls | Ignores writing K/V every inference → write cost/latency (§4.2/§5) |
+| **Attention write** | QK^T/AV as plain matmuls | Ignores writing K/V every inference → write cost/latency (§4.2/§5). **Currently the only source of a material difference (decode latency 10.12×)** |
 | **Weight residency** | Streams weights from DRAM by default | Wrong for ReRAM (non-volatile, resident) → resident multi-die (§1) |
 | **Value-dependent energy** | Uses that layer's `histograms` | Synthetic workload once reused another layer's dist. → inject per model (§4.5) |
 
@@ -143,9 +143,16 @@ placement_aware.
 attention (QK^T/AV) ∝ S², FFN/projections ∝ S → attention is no longer artificially small.
 ![attention share vs sequence length](attention_share_vs_seqlen.png)
 
-### 4.2 Attention write cost (energy)
+### 4.2 Attention write cost
 QK^T/AV are activation×activation → K/V must be **programmed into ReRAM** every
-inference, not amortized. Overlay `write_cells × E_WRITE_PER_CELL_J`.
+inference, not amortized. Overlay `write_cells × E_WRITE_PER_CELL_J` (energy) and
+`write_rows × T_SET_NS` (latency), both derived from the one append geometry in §5.
+
+> **Measured verdict: this term matters in latency, not energy.** Whole-model write
+> energy is 2.52e-3 J (prefill) / **4.9e-6 J** (decode, ~0.9% of decode energy), but
+> write latency is **65.4 ms** (prefill) / **13.3 ms** (decode, **90% of decode
+> latency**). The SET pulse is 8520 ns — very long — while the per-cell programming
+> energy is tiny.
 
 ### 4.3 KV-cache (decode)
 Each step reads the whole KV-cache: read ∝ G² (dominant), write ∝ G.
@@ -175,12 +182,27 @@ parallel, sum over serial). Three parts:
 |---|---|---|
 | compute + bandwidth stall + IO | Timeloop native cycles | insufficient bandwidth → stall → cycles↑ (`bandwidth_limiter` is this knob) |
 | distance propagation latency | overlay `position_aware_latency` | `hops × hop_latency_ns`, serial across phases, max over parallel |
-| ReRAM write latency | overlay `write_latency_s` | SET 8520 ns row-serial, before compute; prefill programs the whole C, decode 1 row/step |
+| ReRAM write latency | overlay `write_latency_s` | SET 8520 ns serial **per wordline**, before compute; pulse count = the number of **rows** the write touches (`Op.write_rows`, below) |
 
-**Bandwidth experiment:** give the router a finite bandwidth → latency balloons
-linearly with `1/bandwidth` (75×–1200× at placeholder values) → **latency is
-dominated by the bottleneck bandwidth; the default "infinitely fast" interconnect =
-systematic under-count**.
+**The axis asymmetry of the K/V append** (energy and latency derive from one geometry,
+in `block_ops`): the K/V arrays are resident and **append-only** — prefill programs all
+S tokens, decode adds only the new one. But the two ops append along different axes:
+
+| op | weight shape | decode adds a token | write cells | SET pulses |
+|---|---|---|---|---|
+| `qk^t` | K^T: `dh(rows) × S(cols)` | a new **column** | dh | **dh = 64** (spread over 64 wordlines) |
+| `av` | V: `S(rows) × dh(cols)` | a new **row** | dh | **1** (one shared wordline) |
+
+→ decode vs prefill: **write energy ↓512×, but write latency only ↓5×**. This is
+directly why decode ends up write-latency-dominated.
+
+> ⚠️ **Retracted:** an earlier claim here — "give the router a finite bandwidth →
+> latency balloons 75×–1200×" — **has no traceable source** (no script or result file
+> in the repo produces it), and has been removed. **The mechanism is real but is not
+> currently active**: the router's `Read/Write bandwidth` are both **unset** and the
+> stats report `Bandwidth throttling = 1.00`, i.e. **the present configuration produces
+> no stalls at all** — which is also why our latency is distance-insensitive (§6.3).
+> Reviving the claim requires an `analyze_bandwidth_sweep.py`.
 
 **Energy vs latency view** (single block):
 ![energy view vs latency view](energy_vs_latency.png)
@@ -188,13 +210,14 @@ systematic under-count**.
 | phase | attention share (energy) | attention share (latency) | write latency of block |
 |---|---|---|---|
 | prefill S=512 | 33.7% | **35.6%** | 21% |
-| decode S=512 | **87.8%** | 47.8% | 22% |
+| decode S=512 | 33.7% | **93.3%** | **90%** |
 
 > In prefill, FFN/projections are still the single largest component (energy 66%) —
-> at S=512 the transformer is FFN-heavy, which is normal; the chart is about the
-> attention share + the red write block. **Decode is the opposite: with weights
-> resident, compute collapses and attention K/V write is 82% of energy**, FFN only
-> 12% (consistent with §6.2).
+> at S=512 the transformer is FFN-heavy, which is normal. **The decode split is the
+> revealing one: attention is only 33.7% of energy but 93.3% of latency** (write alone
+> is 90%) — with weights resident the per-token compute collapses and the block is
+> almost entirely that serial SET phase. **Energy and latency give opposite verdicts
+> here.**
 
 ---
 
@@ -213,11 +236,11 @@ three scenarios:
 | Scenario | Energy | Latency |
 |---|---|---|
 | (C) baseline CiMLoop | 0.284 J | 0.249 s |
-| (A) full + overlays | **0.485 J** (1.71×) | **0.315 s** (1.26×) |
-| (B) offload attention | 0.324 J | 0.203 s |
+| (A) full + overlays | 0.288 J (**1.01×**) | **0.315 s** (1.26×) |
+| (B) offload attention | 0.191 J | 0.203 s |
 
-Overlays reveal (A vs C): energy +71%, latency +26%; offload benefit (A vs B):
-saves **33% energy, 36% latency**.
+Overlays reveal (A vs C): **energy +1%, latency +26%** (A−C = 0.0655 s, **exactly the
+65.4 ms of write latency**); offload benefit (A vs B): saves **34% energy, 36% latency**.
 
 ### 6.2 decode (S=512, ×24 layers, single generation step)
 ![system comparison decode](gpt2_system_comparison_decode.png)
@@ -225,21 +248,37 @@ saves **33% energy, 36% latency**.
 | Scenario | Energy | Latency |
 |---|---|---|
 | (C) baseline CiMLoop | 5.60e-4 J | 1.46 ms |
-| (A) full + overlays | **3.46e-3 J** (6.19×) | **1.89 ms** (1.29×) |
-| (B) offload attention | 6.35e-4 J | 0.987 ms |
+| (A) full + overlays | 5.66e-4 J (**1.01×**) | **14.8 ms (10.12×)** |
+| (B) offload attention | 3.75e-4 J | 0.987 ms |
 
-With weights resident, decode compute energy is tiny, so **ReRAM write (K/V) becomes
-the absolute dominant term** (A/C energy 6.19×, the red block); **offload saves 82%
-energy, 48% latency**.
+With weights resident the per-token compute is tiny, so the **ReRAM K/V write becomes
+the absolute dominant term — but only in latency**: A/C latency is **10.12×** (A−C =
+13.3 ms, exactly the write latency), while A/C energy is only **1.01×**. **Offload saves
+34% energy, 93% latency.**
 
 ### 6.3 Conclusions
-> - **The residency fix rewrites the decode picture**: the old "decode is DRAM-bound"
->   was a **streaming artifact**; with residency, decode compute collapses to ~0.56 mJ
->   and **attention K/V write dominates**.
-> - **Energy under-counts attention; latency (especially decode) is write-dominated.**
->   Judge offload by **A vs B** (B vs C is apples-to-oranges).
-> - **For generation-heavy decode, offloading attention saves a lot (energy −82%,
->   latency −48%).**
+> - **The headline is a latency result, not an energy result.** The baseline's **energy
+>   is essentially right** (1.01× in both phases): on this device **~96% of energy is
+>   analog compute + ADC**, and the entire on-die network is **0.12%** (measured on
+>   ffn1: router + chip2chip = 1.38e-6 + 1.84e-6 J; the GLB is a further 4.1%). Neither
+>   distance nor the write can move the total.
+> - **The baseline's latency is wrong**: it **does not model the ReRAM SET write at
+>   all**, so **decode is under-counted 10.12×**; the write is **90% of decode latency**.
+>   This term depends on no calibration choice — it is a missing cost, not a re-priced
+>   one.
+> - **For generation-heavy decode, offloading attention pays off enormously — on
+>   throughput grounds, not energy** (latency −93%, energy only −34%).
+> - **Position-awareness moves neither total at today's placeholder parameters**: energy
+>   because communication is 0.12%; latency because the distance term is **0.006%
+>   (prefill) / 0.13% (decode)** (measured: `dist_latency` totals just 1.96e-5 s for the
+>   whole model). **This is an honest negative result**: within-die placement is not an
+>   energy lever on this device. Making it bite needs two things we don't have — per-level
+>   **link bandwidths** (a link with no bandwidth cap can never stall) and **D2D costs**.
+>   What the position model gives today is the ability to **see** differences that are
+>   structurally invisible to a position-blind model (3.58×, 17.8%, 21.7× across
+>   patterns), which is exactly what a placement search consumes — a search needs
+>   **rankings**, not absolutes.
+> - Judge offload by **A vs B** (B vs C is apples-to-oranges).
 
 ### 6.4 Where to see the mapping-search result
 Every op goes through the Timeloop **mapper search** (config `models/include/mapper.yaml`:

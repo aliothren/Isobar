@@ -99,7 +99,7 @@ def report(output_dir, layer_name=""):
         stats_text = f.read()
     mapping_text = open(map_path).read() if os.path.exists(map_path) else ""
 
-    levels = pa.perceive(stats_path)                 # {name: {fanout, unit_pJ, volume}}
+    levels = pa.perceive(stats_path)      # {name: {fanout, unit_pJ, volume, energy_J}}
     computes = _total_computes(stats_text)
 
     def fanout(name):

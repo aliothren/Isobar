@@ -58,15 +58,20 @@ CIM_ROWS = 256   # crossbar rows -> rows beyond this tile onto parallel crossbar
 def write_latency_s(op: "Op", phase: str = "prefill", t_set_ns: float = T_SET_NS):
     """ReRAM programming latency for a DYNAMIC op (0 for static/weight ops).
 
-    SET is row-serial (one wordline at a time); rows beyond CIM_ROWS tile onto
-    PARALLEL crossbars, so the serial pulse count caps at CIM_ROWS.
-      prefill: program the whole contraction dim (op.C rows) of K/V.
-      decode : only the ONE new token's row is appended per step.
+    SET is row-serial: cells on ONE wordline program together (per-column bitline
+    voltages set each cell's target conductance), but distinct wordlines must be
+    pulsed in turn. So the serial pulse count is the number of DISTINCT ROWS the
+    write touches (`op.write_rows`), NOT the cell count. Rows beyond CIM_ROWS tile
+    onto PARALLEL crossbars, so the count caps at CIM_ROWS.
+
+    `phase` is already baked into op.write_rows/op.write_cells by block_ops() and
+    is accepted only for call-site compatibility.
+
     Returns seconds (a SERIAL phase, added before the op's compute latency).
     """
     if op.kind != "dynamic":
         return 0.0
-    n_pulses = 1 if phase == "decode" else min(op.C, CIM_ROWS)
+    n_pulses = min(op.write_rows, CIM_ROWS)
     return n_pulses * t_set_ns * 1e-9
 
 
@@ -88,6 +93,7 @@ class Op:
     M: int
     N: int = 1
     write_cells: int = 0  # dynamic operand cells programmed into ReRAM / inference
+    write_rows: int = 0   # DISTINCT wordlines those cells span -> serial SET pulses
 
 
 def block_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
@@ -98,13 +104,22 @@ def block_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
     """
     dh = cfg.d_model // cfg.n_heads
     Pq = S if phase == "prefill" else 1   # query rows this step
-    Klen = S                              # keys/values attended
+    Klen = S                              # keys/values ATTENDED over (compute shape)
+    # Rows/cols NEWLY PROGRAMMED this step. ReRAM K/V arrays are resident and
+    # APPEND-ONLY: prefill programs all S tokens; decode appends just the new
+    # token. (Rewriting the whole cache per step would both contradict weight
+    # residency and exceed ReRAM endurance within seconds of generation.)
+    Kwrite = S if phase == "prefill" else 1
     return [
         Op("qkv_proj", "static",  P=Pq, C=cfg.d_model, M=3 * cfg.d_model),
+        # K^T is mapped dh(rows) x Klen(cols): a new token is a new COLUMN, so its
+        # dh cells land on dh DISTINCT wordlines -> dh serial SET pulses.
         Op("qk^t",     "dynamic", P=Pq, C=dh,   M=Klen, N=cfg.n_heads,
-           write_cells=dh * Klen * cfg.n_heads),                 # K programmed in
+           write_cells=dh * Kwrite * cfg.n_heads, write_rows=dh),
+        # V is mapped Klen(rows) x dh(cols): a new token is a new ROW, so its dh
+        # cells share ONE wordline -> 1 serial SET pulse.
         Op("av",       "dynamic", P=Pq, C=Klen, M=dh,   N=cfg.n_heads,
-           write_cells=Klen * dh * cfg.n_heads),                 # V programmed in
+           write_cells=Kwrite * dh * cfg.n_heads, write_rows=Kwrite),
         Op("out_proj", "static",  P=Pq, C=cfg.d_model, M=cfg.d_model),
         Op("ffn1",     "static",  P=Pq, C=cfg.d_model, M=cfg.d_ff),
         Op("ffn2",     "static",  P=Pq, C=cfg.d_ff,    M=cfg.d_model),

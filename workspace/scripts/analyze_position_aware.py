@@ -39,12 +39,25 @@ PATTERNS = ["neighbor", "tree", "to_center", "all_to_all"]
 REFERENCE_HOPS = 1.0   # explicit assumption: baseline per-word energy == 1 hop
 REF_SETTING = ("grid", "to_center")  # normalize everything to this layout
 
+def _cache_is_current(entries) -> bool:
+    """A cache written by an older perceive() lacks `energy_J`, which would silently
+    zero every base and make the whole sweep 0 (then divide-by-zero on the ref).
+    Re-run rather than trust it."""
+    return all("energy_J" in lv
+               for e in entries for lv in e.get("levels", {}).values())
+
+
 # ----------------------------------------------------- phase 1: run + cache
+cached = None
 if os.path.exists(CACHE):
-    print(f"Loading cached perceived levels: {CACHE}")
     with open(CACHE) as f:
         cached = json.load(f)
-else:
+    if _cache_is_current(cached):
+        print(f"Loading cached perceived levels: {CACHE}")
+    else:
+        print(f"Cache {CACHE} predates the energy_J fix -- discarding and re-running.")
+        cached = None
+if cached is None:
     layers = mlx.list_layers(DNN)
     if N_LAYERS:
         layers = layers[:N_LAYERS]
