@@ -1,0 +1,17 @@
+{
+ "component_energy_J": {
+  "adc": 0.000483,
+  "chip2chip_link": 1.874e-05,
+  "cim_unit": 3.87e-05,
+  "glb": 0.000892,
+  "input_buffer": 1.26e-05,
+  "integrator": 0.000646,
+  "output_buffer": 0.000157,
+  "router": 2.668e-05,
+  "row_drivers": 3.91e-05,
+  "sample": 0.00014099999999999998,
+  "shift_add": 2.01e-05,
+  "wordline_cap": 0.000223
+ },
+ "op_energy_J": 0.0026994797182784747
+}

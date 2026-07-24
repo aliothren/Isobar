@@ -113,6 +113,20 @@ python3 scripts/analyze_system_gpt2.py 512 prefill   # GPT-2 system-level (or: 5
 python3 scripts/analyze_position_aware.py resnet18    # placement × pattern comparison
 ```
 
+### Tests
+
+```bash
+python3 tests/run_tests.py            # fast guardrail suite, a few seconds
+python3 tests/run_tests.py --slow     # plus one real mapper run, ~2 min
+```
+
+The suite checks that the code matches the documented model (stats parsing
+against an independent extraction, write/distance geometry against hand-derived
+formulas, frozen goldens against silent changes) — it does not claim physical
+accuracy, which waits for calibration data. `xfail_*` tests are the known-gap
+list: each turns green when its gap (lower-level link energy, placement-aware
+propagation, D2D) is closed. See `workspace/analysis/SUMMARY.en.md` §10.
+
 See [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md) for the full
 results, charts, and the modeling-assumptions / limitations writeup.
 

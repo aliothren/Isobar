@@ -72,24 +72,31 @@ def perceive(stats_path: str) -> Dict[str, dict]:
     with open(stats_path, "r") as f:
         text = f.read()
 
+    # A component's name heads TWO sections: the main body (Instances, Vector
+    # access energy, per-dataspace Energy lines) and a trailing summary block
+    # (Total scalar accesses). MERGE fields across same-name sections -- taking
+    # only one section silently zeroes the other's fields.
     levels: Dict[str, dict] = {}
     parts = re.split(r"=== (\w+) ===", text)   # [pre, name1, body1, name2, body2, ...]
     for i in range(1, len(parts) - 1, 2):
         name, body = parts[i], parts[i + 1]
+        e = levels.setdefault(name, {"fanout": 0, "unit_pJ": 0.0,
+                                     "volume": 0, "energy_J": 0.0})
         inst = re.search(r"Instances\s*:\s*(\d+)", body)
+        if inst:
+            e["fanout"] = int(inst.group(1))
         ue = re.search(r"Vector access energy\s*:\s*([\d.eE+-]+)\s*pJ", body)
-        if not (inst and ue):
-            continue
+        if ue:
+            e["unit_pJ"] = float(ue.group(1))
         vol = re.search(r"Total scalar accesses\s*:\s*(\d+)", body)
+        if vol:
+            e["volume"] = int(vol.group(1))
         # per-dataspace "Energy (total)" lines (exclude Temporal Reduction / Address
         # Generation variants, which do not start the line with "Energy (total)")
-        e_pJ = sum(float(x) for x in re.findall(
+        e["energy_J"] += 1e-12 * sum(float(x) for x in re.findall(
             r"^\s*Energy \(total\)\s*:\s*([\d.eE+-]+)\s*pJ", body, re.M))
-        levels[name] = {"fanout": int(inst.group(1)),
-                        "unit_pJ": float(ue.group(1)),
-                        "volume": int(vol.group(1)) if vol else 0,
-                        "energy_J": e_pJ * 1e-12}
-    return levels
+    # keep only real components (appeared in a main SPECS section)
+    return {n: v for n, v in levels.items() if v["fanout"] > 0}
 
 
 def perceive_result(result) -> Dict[str, dict]:

@@ -12,7 +12,8 @@
 > **Reading order**: §0 approach → §1 hardware → §2 denominators (where energy/time
 > go; which levels carry a price) → §3 models & results per level → §4 whole-model
 > GPT-2 three scenarios → §5 per-pair communication dumps → §6 assumptions &
-> limitations → §7 DR data-request map → §8 placeholder params → §9 script index.
+> limitations → §7 DR data-request map → §8 placeholder params → §9 script index
+> → §10 tests.
 
 ---
 
@@ -497,3 +498,43 @@ lw.report_block(res, title="prefill S=512")                  # energy + latency 
 ```bash
 python3 scripts/analyze_system_gpt2.py 512 prefill    # whole-model system level (or: 512 decode)
 ```
+
+---
+
+## 10. Tests (`workspace/tests/`)
+
+```bash
+python3 tests/run_tests.py           # fast suite, a few seconds (in the container)
+python3 tests/run_tests.py --slow    # plus one real end-to-end mapper run, ~2 min
+```
+
+These tests do **not** check whether the model matches reality (that waits for
+calibration data). They check three more basic things:
+
+1. **We read the simulator's output correctly**: every component energy that
+   `perceive` extracts from a frozen stats file matches an independent
+   line-by-line extraction of the same file, and the components sum to the op
+   total. This pins the July unit-mismatch bug (a dedicated tripwire: the value
+   the buggy formula would produce must stay far above the true one; if they
+   ever get close, the reconstruction crept back in).
+2. **The code computes what the docs say**: the write geometry (prefill programs
+   all S tokens, decode appends exactly 1; K touches 64 wordlines, V touches 1),
+   the distance geometry (1.3125 / 2.0), and "ratios don't depend on
+   reference_hops" are all checked against **hand-derived formulas** — no
+   simulation involved.
+3. **Nothing changed silently**: today's outputs (e.g. the 2x2 example's 3.579x
+   position spread) are frozen as golden files; any code change that moves them
+   trips the test. Goldens are versioned (`_v0` = uniform-traffic model); when
+   the traffic structure upgrade lands, re-baselining to `_v1` with a changelog
+   entry is the normal procedure, not a failure.
+
+There are also 3 **xfail** (expected-fail) tests — the known-gap list: lower
+levels carry no energy model (DR-1), propagation latency does not vary with
+placement, and D2D does not exist. Each turns green when its gap is closed;
+promote it to a must-pass test at that moment.
+
+Note: all-green does **not** mean physically correct. It only guarantees "the
+code equals the documented model"; whether the model is right waits for the
+calibration chain (public silicon data + company parameters). The one place in
+the repo where two independent derivations confirm each other is the <0.1%
+closed-form validation of the I/O model.
