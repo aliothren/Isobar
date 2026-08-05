@@ -93,10 +93,16 @@ def mlx_callfunc(spec):
 # inflated our earlier energy ~36%). The ONLY per-inference writes are attention
 # K/V (see llm_workload write cost) -- exactly what a resident design implies.
 # ---------------------------------------------------------------------------
-N_MACROS_PER_DIE = 8     # macro_in_die.meshX
-N_CORES_PER_MACRO = 4    # core_in_macro.meshX
-CROSSBARS_PER_CORE = 8   # crossbar_in_core.meshX (~2 Mbit core, if 2M == 2 Mbit)
-CROSSBARS_PER_DIE = N_MACROS_PER_DIE * N_CORES_PER_MACRO * CROSSBARS_PER_CORE  # 256
+# Physical structure comes from the fabric config (models/fabric/mlx300.yaml)
+# -- the single source of truth. These module attributes keep their legacy
+# names so downstream code is unchanged; crossbar_stats.hierarchy() verifies
+# every run's stats against the same config.
+from scripts import fabric as _fabric
+FABRIC = _fabric.default()
+N_MACROS_PER_DIE = FABRIC.level("macro").per_parent
+N_CORES_PER_MACRO = FABRIC.level("core").per_parent
+CROSSBARS_PER_CORE = FABRIC.level("crossbar").per_parent
+CROSSBARS_PER_DIE = FABRIC.count_below("crossbar")                # 256
 # One die weight capacity (4-bit cells): 256 crossbars x 256x256 x 4b = 8.4 MB
 # = 16.8 M 4-bit weights. GPT-2 medium (302 M weights) is thus RESIDENT across
 # ~18 dies (4-bit) / ~36 (8-bit); the 256-die package holds it easily. A single
@@ -157,20 +163,24 @@ def mlx_die_callfunc(spec):
 # Per-tree-level PROPAGATION latency (ns per Manhattan hop), keyed to match
 # crossbar_comm.level_max_hops / placement_aware.position_aware_latency.
 # ALL PLACEHOLDERS -- calibrate against the company interconnect once known.
-# Costlier the higher up the tree (die NoC > intra-macro > intra-core).
+# Costlier the higher up the tree (die NoC > intra-macro > intra-core);
+# monotonicity is enforced by fabric.validate(). The on-die per-hop latencies
+# are the fabric links BELOW the die level; the die's own link is D2D.
 HOP_LATENCY_NS = {
-    "glb<->macro":     5.0,   # die-level NoC hop
-    "macro<->core":    2.0,   # intra-macro link
-    "core<->crossbar": 1.0,   # intra-core
+    lv.link.name: lv.link.ns_per_hop
+    for lv in FABRIC.levels[FABRIC.levels.index(FABRIC.level("die")) + 1:]
+    if lv.link is not None
 }
 
+# One entry per fabric link that is priced by a calibrated CiMLoop component
+# (today: the die NoC's `router`); reference_hops comes from the config (DR-4).
 LAYOUT = {
-    "router": {"topology": "mesh_2d", "pattern": "to_center",
-               "hop_scale": 1.0, "hop_latency_ns": 1.0, "reference_hops": 1.0},
-    # Phase 2 examples (cheaper inside, costlier across):
-    # "inter_core_in_macro":  {"pattern": "tree",      "hop_scale": 0.3, "reference_hops": 1.0},
-    # "inter_macro_in_die":   {"pattern": "to_center", "hop_scale": 1.0, "reference_hops": 1.0},
-    # "inter_die_in_package": {"pattern": "all_to_all","hop_scale": 8.0, "reference_hops": 1.0},
+    lv.link.cimloop_component: {
+        "topology": "mesh_2d", "pattern": "to_center", "hop_scale": 1.0,
+        "hop_latency_ns": 1.0, "reference_hops": lv.link.reference_hops,
+    }
+    for lv in FABRIC.levels
+    if lv.link is not None and lv.link.cimloop_component
 }
 
 
@@ -178,7 +188,7 @@ LAYOUT = {
 # Run one layer + perceive + position-aware overlay
 # ---------------------------------------------------------------------------
 def run_mlx_layer(layer_path, place_fn=pa.place_grid, layout=None,
-                  config=None, callfunc=None):
+                  config=None, callfunc=None, placement=None):
     """Run a single workload layer on the MLX-style system and return both the
     raw CiMLoop result and the position-aware communication analysis.
 
@@ -193,7 +203,9 @@ def run_mlx_layer(layer_path, place_fn=pa.place_grid, layout=None,
     callfunc = callfunc or mlx_callfunc
     result = utl.run_layer(layer=layer_path, callfunc=callfunc, **config)
     levels = pa.perceive_result(result)                 # capture before next run
-    analysis = pa.position_aware_cost(levels, layout or LAYOUT, place_fn)
+    analysis = pa.position_aware_cost(levels, layout or LAYOUT, place_fn,
+                                      placement=placement,
+                                      fabric=FABRIC if placement else None)
     return {
         "result": result,
         "levels": levels,

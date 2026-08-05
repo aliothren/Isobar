@@ -29,6 +29,22 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
 
 **Scripts (`workspace/scripts/`):**
 
+- **`fabric.py`** + **`models/fabric/*.yaml`** — the physical fabric config:
+  N-level generic (per-level counts, grid meshes, link params with DR
+  calibration tags), the single source of truth for physical structure; stats
+  parsing is demoted to a consistency sentinel. `CIMSIM_FABRIC=<yaml>` selects a
+  variant for a whole run (e.g. the 2x4 macro-layout study ran with zero code
+  changes).
+- **`placement.py`** — the explicit, JSON-serializable Placement (per-level slot
+  tables + verify()); `sequential_fill` reproduces the legacy floorplan bit for
+  bit; `run_op(op, placement=p)` swaps a whole layout.
+- **`traffic.py`** — TrafficExtraction: real multicast/reduction structure from
+  the mapping (multicast trunks counted once, idle instances zero), tied to
+  Timeloop's own counters by a divisibility guard. `build_flows` uses it by
+  default; the uniform model survives only as the v0 comparison baseline.
+- **`make_figures.py`** — one driver for every figure (7 stages); `--tag` runs
+  config variants without clobbering canonical outputs.
+
 - **`mlx_system.py`** — hardware config + physical `LAYOUT` / `HOP_LATENCY_NS`.
   `MLX_DIE_CONFIG`/`mlx_die_callfunc` (resident die hierarchy),
   `MLX_DIE_STREAMING_CONFIG` (old weight-streaming, kept for A/B only),
@@ -67,11 +83,15 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   **`analyze_crossbar_value_compare.py`** — the energy-vs-latency,
   sequence-scaling + KV-cache, region-placement (17.8%), placement×pattern, and
   device×workload per-crossbar-value case studies (charts to `analysis/`; every
-  figure in the writeup has one of these as its committed source).
+  figure in the writeup has one of these as its committed source, and
+  `make_figures.py` drives them all).
 - **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output dir.
 
 - **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
   standalone NeuroSim) that are intentionally not committed.
+
+Progress and per-fix details (motivation / what was done / result) are tracked
+in [`workspace/analysis/FIXLIST.en.md`](workspace/analysis/FIXLIST.en.md).
 
 ### Local setup notes (differ from upstream)
 

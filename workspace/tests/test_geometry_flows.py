@@ -4,8 +4,6 @@ xfail_* functions document the KNOWN modeling gaps (workstreams A/B/C). Each is
 EXPECTED to fail today; when one starts passing, promote it to test_* in the PR
 that closed the gap.
 """
-import inspect
-
 from _util import fixture
 
 import scripts.crossbar_comm as cc
@@ -33,6 +31,59 @@ def test_moving_closer_is_never_more_expensive():
 
 # ---------------------------------------------------------------- north stars
 
+def _alt_macro_placement():
+    """A legal placement occupying a DIFFERENT, ASYMMETRIC slot set. Two traps
+    to avoid when picking it: permuting the same slots cannot move a worst-case
+    metric, and a symmetric slot set (empty center or empty corner) cannot
+    either -- the hub is the centroid, which re-centers with the layout. An
+    empty EDGE slot breaks the symmetry (max hops 12.0 -> 12.75)."""
+    import dataclasses
+
+    from scripts import fabric, placement
+    f = fabric.default()
+    seq = placement.sequential_fill(f)
+    tbl = [(x, y) for y in range(3) for x in range(3) if (x, y) != (1, 0)]
+    return f, dataclasses.replace(seq, slots={**seq.slots, "macro": tbl}).verify(f)
+
+
+def test_propagation_latency_depends_on_placement():
+    """promoted from xfail when A-3 landed: the propagation term must follow
+    the actual layout, not a fixed worst-case geometry."""
+    f, alt = _alt_macro_placement()
+    default = cc.level_max_hops()
+    moved = cc.level_max_hops(f, alt)
+    assert moved["glb<->macro"] != default["glb<->macro"], \
+        "a different macro slot set must change the top-level worst-case hops"
+    assert moved["core<->crossbar"] == default["core<->crossbar"], \
+        "untouched levels must keep their geometry"
+
+
+def test_energy_overlay_placement_equals_place_fn_priors():
+    """the placement path must reproduce both legacy priors bit for bit:
+    sequential on mlx300 == place_grid; sequential on the (8,1) mesh variant
+    == place_linear."""
+    import dataclasses
+
+    from scripts import fabric, placement
+    levels = {"router": {"fanout": 8, "unit_pJ": 48.3, "volume": 10,
+                         "energy_J": 2.668e-5}}
+    layout = {"router": {"pattern": "to_center", "reference_hops": 1.0}}
+    f = fabric.default()
+
+    old = pa.position_aware_cost(levels, layout, pa.place_grid)
+    new = pa.position_aware_cost(levels, layout, placement=placement.
+                                 sequential_fill(f), fabric=f)
+    assert new["position_aware"] == old["position_aware"]
+
+    lin_levels = [dataclasses.replace(lv, mesh=(8, 1))
+                  if lv.name == "macro" else lv for lv in f.levels]
+    fv = dataclasses.replace(f, name="mlx300-linear", levels=lin_levels).validate()
+    old_lin = pa.position_aware_cost(levels, layout, pa.place_linear)
+    new_lin = pa.position_aware_cost(levels, layout, placement=placement.
+                                     sequential_fill(fv), fabric=fv)
+    assert new_lin["position_aware"] == old_lin["position_aware"]
+
+
 def xfail_lower_level_links_are_priced():
     """WORKSTREAM A1/DR-1: core- and crossbar-level links carry zero energy, so
     the 3.58x map and the 17.8% placement gap cannot reach the system totals."""
@@ -42,16 +93,10 @@ def xfail_lower_level_links_are_priced():
     assert lower and all(v["energy_J"] > 0 for v in lower)
 
 
-def xfail_propagation_latency_depends_on_placement():
-    """WORKSTREAM A: level_max_hops takes no placement, so the propagation term
-    is a constant 136 ns/op for every layout."""
-    sig = inspect.signature(cc.level_max_hops)
-    assert any("place" in p for p in sig.parameters), \
-        "level_max_hops has no placement input"
-
-
 def xfail_single_die_d2d_degenerate_invariant():
-    """WORKSTREAM C6: once D2D REPLACES the flat chip2chip charge, a single-die
-    fabric must yield zero inter-die cost and reproduce the pre-D2D baseline.
-    No D2D module exists yet, so this documents the requirement."""
-    from scripts import fabric  # noqa: F401  -- does not exist yet
+    """WORKSTREAM C6: D2D is unpriced (the die link carries no pj_per_word; the
+    flat chip2chip port is all there is). When C6 lands, this flips -- and the
+    full acceptance then also asserts: single-die fabric => zero inter-die cost
+    AND the pre-D2D total (replace the flat charge, don't add to it)."""
+    from scripts import fabric
+    assert fabric.default().level("die").link.pj_per_word is not None

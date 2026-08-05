@@ -88,8 +88,13 @@ def hierarchy(output_dir):
     n_macros = fanout(LEVEL_MARKERS["macro"]) or 1
     n_cores = fanout(LEVEL_MARKERS["core"]) or 1
     n_crossbars = fanout(LEVEL_MARKERS["crossbar"]) or 1
-    return {"n_macros": n_macros, "n_cores": n_cores,
+    hier = {"n_macros": n_macros, "n_cores": n_cores,
             "n_crossbars": n_crossbars, "levels": levels}
+    # The fabric config is the authority on physical structure; the counts
+    # parsed here are only a consistency check against it (raises on mismatch).
+    from scripts import fabric
+    fabric.default().verify_against_stats(hier)
+    return hier
 
 
 def report(output_dir, layer_name=""):

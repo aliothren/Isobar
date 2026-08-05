@@ -73,82 +73,152 @@ def _manh(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
-def level_max_hops(n_macros, cores_per_macro, xbars_per_core):
-    """Geometry-only: the WORST-case Manhattan hop count at each tree level,
-    purely from the nested floorplan (no stats parsing, no printing).
+def level_max_hops(fabric=None, placement=None):
+    """The WORST-case Manhattan hop count at each on-die tree level, computed
+    from the ACTUAL placement (defaults reproduce the legacy nested floorplan).
 
     Used by the distance-LATENCY overlay: within a level all branches are
     parallel, so the longest branch (max hops) sets the critical path; across
     levels the path is in series (summed by position_aware_latency).
-    Returns {level_name: max_hops} keyed to match HOP_LATENCY_NS.
+    Returns {link_name: max_hops}; the keys are the fabric links' names, which
+    match HOP_LATENCY_NS. Hops are in GLOBAL leaf-grid units (as the legacy
+    values 12/3/2 were) -- do not mix with the per-level slot units the energy
+    overlay uses.
     """
-    xb_coord, core_coord, macro_coord, die_coord, _ = \
-        nested_floorplan(n_macros, cores_per_macro, xbars_per_core)
-    g_m = max(_manh(die_coord, macro_coord[m]) for m in range(n_macros))
-    m_c = max(_manh(macro_coord[m], core_coord[(m, c)])
-              for m in range(n_macros) for c in range(cores_per_macro))
-    gid, c_x = 0, 0.0
-    for m in range(n_macros):
-        for c in range(cores_per_macro):
-            for _ in range(xbars_per_core):
-                c_x = max(c_x, _manh(core_coord[(m, c)], xb_coord[gid]))
-                gid += 1
-    return {"glb<->macro": g_m, "macro<->core": m_c, "core<->crossbar": c_x}
+    from scripts import fabric as fabric_mod
+    from scripts import placement as placement_mod
+    fab = fabric or fabric_mod.default()
+    pl = (placement or placement_mod.sequential_fill(fab)).verify(fab)
+
+    meshed = _on_die_levels(fab)
+    lvl_m, lvl_c, lvl_x = meshed[-3], meshed[-2], meshed[-1]
+    nM, nC, nXc = lvl_m.per_parent, lvl_c.per_parent, lvl_x.per_parent
+
+    xb = pl.leaf_coords(fab)
+    mac = pl.level_coords(fab, lvl_m.name)
+    cor = pl.level_coords(fab, lvl_c.name)
+    if len(meshed) >= 4:
+        die = pl.level_coords(fab, meshed[-4].name)[0]
+    else:
+        die = (sum(p[0] for p in mac) / len(mac),
+               sum(p[1] for p in mac) / len(mac))
+
+    g_m = max(_manh(die, mc) for mc in mac)
+    m_c = max(_manh(mac[i // nC], cor[i]) for i in range(len(cor)))
+    c_x = max(_manh(cor[g // nXc], xb[g]) for g in range(len(xb)))
+    return {lvl_m.link.name: g_m, lvl_c.link.name: m_c, lvl_x.link.name: c_x}
 
 
 # --------------------------------------------------------------------------
-def build_flows(output_dir, layer_name="", verbose=True):
+def _on_die_levels(fab):
+    """The three on-die tree levels (macro, core, crossbar) as fabric Levels.
+    crossbar_comm models exactly this three-level tree; a deeper generalization
+    is the CostModel's job (workstream B)."""
+    meshed = [lv for lv in fab.levels if lv.mesh is not None]
+    assert len(meshed) >= 3, "fabric needs >= 3 meshed levels for the on-die tree"
+    return meshed
+
+
+def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
+                placement=None, model="structured"):
     """Return (flows, per_crossbar_cost, grid_shape, xb_coord).
 
     flows: list of dicts {level, src, dst, volume, distance} -- the pairwise links.
-    per_crossbar_cost: array[n_crossbars] of volume*distance summed along its path
-                       (input down + output up) -> the position-dependent cost.
+    per_crossbar_cost: array[n_crossbars] of an active crossbar's attributable
+                       volume x distance along its path (shared multicast volume
+                       split among the leaves it serves; idle crossbars get 0).
     verbose=True prints the crossbar_stats aggregate report; False stays quiet
     (used by the auto-saved dump).
+
+    Structure comes from `fabric`, coordinates from `placement` (defaults:
+    models/fabric config + sequential_fill).
+
+    model="structured" (default, v1): edge volumes from the mapping's real
+    multicast/reduction structure via traffic.extract -- a multicast slice
+    crosses an upper edge ONCE, idle instances carry zero.
+    model="uniform" (v0): the legacy total/N division, kept ONLY as the
+    comparison baseline for the v0->v1 re-baselining; not a fallback.
     """
+    from scripts import fabric as fabric_mod
+    from scripts import placement as placement_mod
+    from scripts import traffic
+    fab = fabric or fabric_mod.default()
+    pl = (placement or placement_mod.sequential_fill(fab)).verify(fab)
+
+    # stats parse: traffic volumes + the fabric-consistency sentinel
     r = cbs.report(output_dir, layer_name) if verbose \
         else cbs.hierarchy(output_dir)
-    nM = r["n_macros"]
-    cores_per_macro = r["n_cores"] // nM
-    xbars_per_core = r["n_crossbars"] // r["n_cores"]
-    nX = r["n_crossbars"]
 
-    # per-crossbar in/out volumes (words). Inputs are multicast DOWN, outputs UP.
+    meshed = _on_die_levels(fab)
+    lvl_m, lvl_c, lvl_x = meshed[-3], meshed[-2], meshed[-1]
+    nM, cores_per_macro, xbars_per_core = \
+        lvl_m.per_parent, lvl_c.per_parent, lvl_x.per_parent
+    nX = fab.count_below(lvl_x.name)
+
     stats_path = os.path.join(output_dir, "timeloop-mapper.stats.txt")
     txt = open(stats_path).read()
-    in_per_xb = cbs._per_tensor_volume(txt, "row_drivers") / nX
-    out_per_xb = cbs._per_tensor_volume(txt, "adc") / nX
 
-    xb_coord, core_coord, macro_coord, die_coord, gshape = \
-        nested_floorplan(nM, cores_per_macro, xbars_per_core)
+    if model == "structured":
+        ts = traffic.extract(output_dir, fab, stats_text=txt)
+        ev = ts.edge_volumes()
+        shares = ts.leaf_shares()
+        f_m, f_c, f_x = ts.active_fanouts()
+        vol_edge = {lv: ev[lv]["in"] + ev[lv]["out"]
+                    for lv in (lvl_m.name, lvl_c.name, lvl_x.name)}
+    elif model == "uniform":
+        in_per_xb = cbs._per_tensor_volume(txt, "row_drivers") / nX
+        out_per_xb = cbs._per_tensor_volume(txt, "adc") / nX
+        f_m, f_c, f_x = nM, cores_per_macro, xbars_per_core
+        vol_edge = {lvl_m.name: (in_per_xb + out_per_xb) * cores_per_macro * xbars_per_core,
+                    lvl_c.name: (in_per_xb + out_per_xb) * xbars_per_core,
+                    lvl_x.name: in_per_xb + out_per_xb}
+        shares = {lvl_m.name: in_per_xb + out_per_xb,
+                  lvl_c.name: in_per_xb + out_per_xb,
+                  lvl_x.name: in_per_xb + out_per_xb}
+    else:
+        raise ValueError(f"unknown traffic model '{model}'")
+
+    xb_coord = pl.leaf_coords(fab)
+    macro_cent = pl.level_coords(fab, lvl_m.name)
+    core_cent = pl.level_coords(fab, lvl_c.name)
+    if len(meshed) >= 4:
+        die_coord = pl.level_coords(fab, meshed[-4].name)[0]
+    else:
+        die_coord = (sum(p[0] for p in macro_cent) / nM,
+                     sum(p[1] for p in macro_cent) / nM)
+    gshape = fab.grid_shape()
 
     flows = []
     per_xb = np.zeros(nX)
 
     gid = 0
     for m in range(nM):
-        mc = macro_coord[m]
-        # glb(die) <-> macro : carries the whole subtree's traffic
-        subtree_xbars = cores_per_macro * xbars_per_core
-        vol_m = (in_per_xb + out_per_xb) * subtree_xbars
+        mc = macro_cent[m]
+        m_on = m < f_m
         d = _manh(die_coord, mc)
-        flows.append({"level": "glb<->macro", "src": "glb", "dst": f"macro{m}",
-                      "volume": vol_m, "distance": d})
+        flows.append({"level": lvl_m.link.name, "src": "glb", "dst": f"macro{m}",
+                      "volume": vol_edge[lvl_m.name] if m_on else 0.0,
+                      "distance": d})
         for c in range(cores_per_macro):
-            cc = core_coord[(m, c)]
-            vol_c = (in_per_xb + out_per_xb) * xbars_per_core
+            cc = core_cent[m * cores_per_macro + c]
+            c_on = m_on and c < f_c
             dc = _manh(mc, cc)
-            flows.append({"level": "macro<->core", "src": f"macro{m}",
-                          "dst": f"core{m}.{c}", "volume": vol_c, "distance": dc})
+            flows.append({"level": lvl_c.link.name, "src": f"macro{m}",
+                          "dst": f"core{m}.{c}",
+                          "volume": vol_edge[lvl_c.name] if c_on else 0.0,
+                          "distance": dc})
             for x in range(xbars_per_core):
                 xc = xb_coord[gid]
-                vol_x = in_per_xb + out_per_xb
+                x_on = c_on and x < f_x
                 dx = _manh(cc, xc)
-                flows.append({"level": "core<->crossbar", "src": f"core{m}.{c}",
-                              "dst": f"xb{gid}", "volume": vol_x, "distance": dx})
-                # this crossbar's position-dependent cost = volume * full path length
-                path = _manh(xc, cc) + _manh(cc, mc) + _manh(mc, die_coord)
-                per_xb[gid] = vol_x * path
+                flows.append({"level": lvl_x.link.name, "src": f"core{m}.{c}",
+                              "dst": f"xb{gid}",
+                              "volume": vol_edge[lvl_x.name] if x_on else 0.0,
+                              "distance": dx})
+                if x_on:
+                    per_xb[gid] = (shares[lvl_x.name] * dx
+                                   + shares[lvl_c.name] * dc
+                                   + shares[lvl_m.name] * d)
                 gid += 1
     return flows, per_xb, gshape, xb_coord
 
@@ -157,7 +227,8 @@ def build_flows(output_dir, layer_name="", verbose=True):
 DEFAULT_COMM_DIR = "/home/workspace/analysis/comm"
 
 
-def save_flows(output_dir, tag="layer", dest_dir=DEFAULT_COMM_DIR, verbose=False):
+def save_flows(output_dir, tag="layer", dest_dir=DEFAULT_COMM_DIR, verbose=False,
+               fabric=None, placement=None):
     """Persist the DETAILED per-pair communication data for one run to files
     (the aggregate stats.txt is overwritten by the next run, so we snapshot here).
 
@@ -168,7 +239,8 @@ def save_flows(output_dir, tag="layer", dest_dir=DEFAULT_COMM_DIR, verbose=False
                          and the min/max/ratio position spread summary.
     Returns (csv_path, json_path). Safe to call after any die-hierarchy run.
     """
-    flows, per_xb, gshape, xb_coord = build_flows(output_dir, tag, verbose=verbose)
+    flows, per_xb, gshape, xb_coord = build_flows(output_dir, tag, verbose=verbose,
+                                                  fabric=fabric, placement=placement)
     os.makedirs(dest_dir, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", tag)  # qk^t -> qk_t
 
@@ -206,8 +278,10 @@ def save_flows(output_dir, tag="layer", dest_dir=DEFAULT_COMM_DIR, verbose=False
 
 
 # --------------------------------------------------------------------------
-def summarize_and_plot(output_dir, layer_name="", out_png=None):
-    flows, per_xb, gshape, xb_coord = build_flows(output_dir, layer_name)
+def summarize_and_plot(output_dir, layer_name="", out_png=None, fabric=None,
+                       placement=None):
+    flows, per_xb, gshape, xb_coord = build_flows(output_dir, layer_name,
+                                                  fabric=fabric, placement=placement)
 
     # per-level aggregate traffic*distance (the pairwise-link cost by level)
     print("\n-- per-level pairwise-link cost (volume x distance) --")
@@ -220,35 +294,71 @@ def summarize_and_plot(output_dir, layer_name="", out_png=None):
     for lv, (vol, vd) in by_level.items():
         print(f"  {lv:<18}{vol:>16,.0f}{vd:>20,.0f}")
 
-    # per-crossbar position-dependent cost
+    # per-crossbar position-dependent cost (over ACTIVE crossbars; idle = 0)
+    act = per_xb[per_xb > 0]
+    lo, hi = (act.min(), act.max()) if len(act) else (0.0, 0.0)
     print("\n-- per-crossbar communication cost (volume x path-to-glb) --")
-    print(f"  min  = {per_xb.min():,.0f}   max = {per_xb.max():,.0f}"
-          f"   max/min = {per_xb.max()/max(per_xb.min(),1):.2f}x")
-    print(f"  (same per-crossbar VOLUME everywhere, but cost varies {per_xb.max()/max(per_xb.min(),1):.1f}x "
-          "by POSITION -- the crossbar-aware effect)")
+    print(f"  active {len(act)}/{len(per_xb)}   min = {lo:,.0f}   max = {hi:,.0f}"
+          f"   max/min = {hi/max(lo,1):.2f}x")
+    print("  (structured volumes: multicast attributed by share, idle "
+          "crossbars zero -- position AND volume both vary)")
 
-    # heatmap of the crossbar floorplan colored by communication cost
+    if out_png is None:
+        out_png = "/home/workspace/analysis/crossbar_comm_heatmap.png"
+    _plot_heatmap({g: (xb_coord[g], per_xb[g]) for g in xb_coord},
+                  gshape, fabric, layer_name, out_png)
+    return flows, per_xb
+
+
+def _plot_heatmap(cost_by_gid, gshape, fabric, layer_name, out_png):
+    """Draw the floorplan heatmap. cost_by_gid: {gid: ((x, y), cost)}."""
     gx, gy = gshape
     grid = np.full((gy, gx), np.nan)
-    for gid, (x, y) in xb_coord.items():
-        grid[int(y), int(x)] = per_xb[gid]
-    if out_png is None:
-        out_png = os.path.join(os.path.dirname(output_dir.rstrip("/")),
-                               "..", "analysis", f"crossbar_comm_{layer_name or 'layer'}.png")
-        out_png = "/home/workspace/analysis/crossbar_comm_heatmap.png"
+    for gid, ((x, y), cost) in cost_by_gid.items():
+        grid[int(y), int(x)] = cost
     os.makedirs(os.path.dirname(out_png), exist_ok=True)
-    # empty floorplan slots (the near-square nesting leaves gaps: 8 crossbars in a
-    # 3x3 core, 8 macros in a 3x3 die) are NaN -> render them a distinct GRAY, not
-    # white, so they don't read as high-cost cells (the hot colormap tops out white).
-    cmap = plt.cm.hot.copy()
+    # YlOrRd (light yellow -> dark red) deliberately avoids pure white and pure
+    # black at the extremes, so the black hierarchy separators stay visible on
+    # every cell. Semantics: DARKER = more expensive. Empty slots render gray.
+    cmap = plt.cm.YlOrRd.copy()
     cmap.set_bad(color="#9aa0a6")
-    plt.figure(figsize=(11, 4))
-    im = plt.imshow(grid, cmap=cmap, origin="lower", aspect="auto")
+    # canvas follows the grid's aspect ratio (a 12x24 die must not be squashed
+    # into a landscape frame)
+    cell = 0.42
+    plt.figure(figsize=(max(gx * cell + 2.8, 6.0), max(gy * cell + 1.6, 4.0)))
+    im = plt.imshow(grid, cmap=cmap, origin="lower", aspect="equal")
     plt.colorbar(im, label="comm cost (volume x distance)", fraction=0.046, pad=0.06)
-    plt.title(f"{layer_name} per-crossbar communication cost on the floorplan\n"
-              "(blocks = macros/cores; brighter = costs more by position; "
-              "gray = empty slot)")
+
+    # all three hierarchy levels get separators, by weight:
+    # macro borders thick, core borders medium, crossbar borders hairline.
+    from scripts import fabric as fabric_mod
+    fb = fabric or fabric_mod.default()
+    lm, lc, lx = _on_die_levels(fb)[-3:]
+    core_w, core_h = lx.mesh                                  # one core block
+    macro_w, macro_h = lc.mesh[0] * core_w, lc.mesh[1] * core_h
+    ax = plt.gca()
+    for step, lw in ((1, 0.25), (core_w, 1.0), (macro_w, 2.5)):
+        for x in range(step, gx, step):
+            ax.axvline(x - 0.5, color="k", lw=lw)
+    for step, lw in ((1, 0.25), (core_h, 1.0), (macro_h, 2.5)):
+        for y in range(step, gy, step):
+            ax.axhline(y - 0.5, color="k", lw=lw)
+
+    ax.set_title(f"{layer_name} per-crossbar communication cost\n"
+                 "borders: thick=macro / medium=core / hairline=crossbar\n"
+                 "darker = costlier position; gray = empty slot", fontsize=10)
     plt.xlabel("crossbar x"); plt.ylabel("crossbar y")
     plt.tight_layout(); plt.savefig(out_png, dpi=120); plt.close()
     print(f"\nPNG  -> {out_png}")
-    return flows, per_xb
+
+
+def replot_heatmap(json_path, out_png, fabric=None):
+    """Re-render the heatmap from a saved comm dump (analysis/comm/*_comm.json)
+    WITHOUT re-simulating -- style iterations cost seconds, not mapper minutes.
+    The dump must come from the same fabric the borders are drawn for."""
+    with open(json_path) as f:
+        d = json.load(f)
+    cost_by_gid = {p["id"]: ((p["x"], p["y"]), p["cost_vol_x_path"])
+                   for p in d["per_crossbar"]}
+    _plot_heatmap(cost_by_gid, tuple(d["grid_shape"]), fabric,
+                  d.get("tag", "layer"), out_png)

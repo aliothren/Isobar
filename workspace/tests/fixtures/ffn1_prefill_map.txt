@@ -1,0 +1,52 @@
+chip2chip_link [ Inputs:3670016 (3670016) Outputs:16777216 (16777216) ] 
+chip2chip_data_staging [ Inputs:3670016 (3670016) Outputs:16777216 (16777216) ] 
+glb [ Inputs:3670016 (3670016) Outputs:16777216 (16777216) ] 
+------------------------------------------------------------
+| for P in [0:256)
+
+inter_macro_in_die_spatial [ ] 
+------------------------------
+|   for C in [0:4) (Spatial-X)
+|     for P in [0:2) (Spatial-X)
+
+router [ Inputs:1792 (1792) Outputs:32768 (32768) ] 
+inter_core_in_macro_spatial [ ] 
+-------------------------------
+|       for M in [0:4) (Spatial-X)
+
+input_buffer [ Inputs:1792 (1792) ] 
+output_buffer [ Outputs:8192 (8192) ] 
+inter_crossbar_in_core_spatial [ ] 
+----------------------------------
+|         for M in [0:8) (Spatial-X)
+
+wordline_cap [ Outputs:1024 (1024) ] 
+wordline_drivers [ ] 
+row_drivers [ Inputs:1792 (1792) ] 
+weight_drivers [ Weights:0 (0) ] 
+inter_column_spatial [ ] 
+------------------------
+|           for Y in [0:2) (Spatial-X)
+|             for M in [0:128) (Spatial-X)
+
+shift_add [ Outputs:8 (8) ] 
+adc [ Outputs:8 (8) ] 
+integrator [ Outputs:8 (8) ] 
+----------------------------
+|               for X in [0:7)
+
+column_drivers [ Outputs:8 (8) ] 
+sample [ Outputs:8 (8) ] 
+inter_row_spatial [ ] 
+---------------------
+|                 for C in [0:256) (Spatial-Y)
+
+cim_unit [ Weights:4 (4) ] 
+inter_1bit_x_1bit_mac_spatial [ ] 
+---------------------------------
+|                   for Z in [0:8) (Spatial-X)
+|                     for Y in [0:4) (Spatial-X)
+
+here_to_fix_a_bug [ ] 
+---------------------
+|                       << Compute >>

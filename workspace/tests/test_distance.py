@@ -43,10 +43,12 @@ def test_hop_latency_monotone_up_the_tree():
 
 
 def test_propagation_latency_golden():
+    """default placement must reproduce the legacy worst-case geometry."""
     import scripts.crossbar_comm as cc
-    hops = cc.level_max_hops(mlx.N_MACROS_PER_DIE, mlx.N_CORES_PER_MACRO,
-                             mlx.CROSSBARS_PER_CORE)
-    assert hops == {"glb<->macro": 12.0, "macro<->core": 3.0,
-                    "core<->crossbar": 2.0}
+    hops = cc.level_max_hops()
+    assert set(hops) == {"glb<->macro", "macro<->core", "core<->crossbar"}
+    approx(hops["glb<->macro"], 12.0, 1e-9)
+    approx(hops["macro<->core"], 3.0, 1e-9)
+    approx(hops["core<->crossbar"], 2.0, 1e-9)
     lat = pa.position_aware_latency(hops, mlx.HOP_LATENCY_NS)
     approx(lat["total_ns"], 136.0, 1e-9)

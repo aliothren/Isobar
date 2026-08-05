@@ -4,7 +4,7 @@ Produces:
     fixtures/ffn1_prefill_stats.txt   frozen Timeloop stats file (golden input)
     fixtures/ffn1_golden_v0.json      component energies extracted INDEPENDENTLY
                                       of perceive() (plain line scan) + op total
-    fixtures/slow_golden_v0.json      v0 golden for the slow suite
+    fixtures/slow_golden_v1.json      v1 golden for the slow suite
 
 The independent extraction is deliberately a different code path from
 placement_aware.perceive (line scan vs regex), so the perceive tests are not
@@ -48,6 +48,8 @@ def main():
     src = os.path.join(r["output_dir"], "timeloop-mapper.stats.txt")
     dst = os.path.join(FIX, "ffn1_prefill_stats.txt")
     shutil.copyfile(src, dst)
+    shutil.copyfile(os.path.join(r["output_dir"], "timeloop-mapper.map.txt"),
+                    os.path.join(FIX, "ffn1_prefill_map.txt"))
 
     energies = extract_energies_line_scan(dst)
     golden = {"op_energy_J": r["compute_J"], "component_energy_J": energies}
@@ -57,13 +59,16 @@ def main():
     for k in ("router", "glb", "chip2chip_link"):
         print(f"    {k:<16} {energies.get(k, 0):.4e} J")
 
-    print("=== fixture 2: tiny 2x2 op for the slow suite ===")
+    print("=== fixture 2: tiny 2x2 op for the slow suite (v1 structured) ===")
     r2 = lw.run_op(lw.Op("tiny2x2", "static", P=8, C=512, M=256), phase="prefill")
     _, per_xb, _, _ = cc.build_flows(r2["output_dir"], verbose=False)
-    with open(os.path.join(FIX, "slow_golden_v0.json"), "w") as f:
-        json.dump({"tiny2x2_max_over_min":
-                   float(per_xb.max() / max(per_xb.min(), 1))}, f, indent=1)
-    print(f"  tiny2x2 max/min = {per_xb.max()/max(per_xb.min(),1):.3f}")
+    act = per_xb[per_xb > 0]
+    with open(os.path.join(FIX, "slow_golden_v1.json"), "w") as f:
+        json.dump({"tiny2x2_max_over_min_active":
+                   float(act.max() / act.min()) if len(act) else 0.0,
+                   "tiny2x2_n_active": int(len(act))}, f, indent=1)
+    print(f"  tiny2x2 active={len(act)}  max/min(active) = "
+          f"{(act.max()/act.min()) if len(act) else 0:.3f}")
     print("fixtures written to", FIX)
 
 

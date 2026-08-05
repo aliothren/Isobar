@@ -44,7 +44,7 @@ accounted-by columns):
 **Three main conclusions** (details in §2–§4):
 
 1. **Placement machinery is built at every level and its effects are measured**:
-   crossbar position differs 3.58×, region placement differs 17.8% (both are
+   crossbar position differs 3.62× (v1 real traffic), region placement differs 17.8% (both are
    rankings); the macro level is priced (line vs mesh = 1.52× NoC energy =
    **0.34%** of a block). The unpriced levels (core/crossbar links, D2D) are
    exactly where the leverage should be larger → each gap is one DR.
@@ -170,7 +170,7 @@ share of energy can only **rise**, glb/readout shares only **fall**; on the late
 side real bandwidths only grow compute → the write's 90% of decode, the 10.12×, and
 offload's 93% are **ceilings**. The one open sign is the +0.2% distance re-pricing
 (DR-4). **Three numbers move under none of this**: the closed-form validation
-<0.1% (a volume identity), 3.58× (a pure geometric ratio), and each token's K/V
+<0.1% (a volume identity), 3.62× (traffic structure × geometry, no calibrated price involved), and each token's K/V
 being programmed exactly once in its lifetime (a structural invariant).
 
 ---
@@ -200,10 +200,14 @@ exact, no simulation needed — to-hub mean hops 1.3125 (near-square mesh) vs 2.
 0.65% of block energy) → **moves the whole block by 0.34%**: placement demonstrably
 changes a calibrated cost — and at this level the lever is small.
 
-**Crossbar level (relative map, 3.58×)**: identical traffic costs a corner crossbar
-**3.58×** a central one (pure volume×Manhattan, a geometric ratio, calibration-free).
-That level carries zero energy → it is a **ranking**, awaiting DR-1 to become
-joules; rankings are exactly what a placement search consumes.
+**Crossbar level (relative map, v1 = 3.62×)**: under the v1 real traffic structure
+(`traffic.py`: a multicast slice crosses an upper edge once, idle instances carry
+zero, shared volume attributed by share), ffn1 uses the full array and a corner
+crossbar costs **3.62×** a central one (the uniform-era 3.58× is retired per the
+CHANGELOG). **The structural difference shows on partially-utilized ops**: a small
+2×2 matmul really uses only **32/256** crossbars with the idle region at zero —
+the uniform model smeared that into a full-array spread. The level still carries
+zero energy → a **ranking**, awaiting DR-1; rankings are what a search consumes.
 
 ![per-crossbar communication cost heatmap](crossbar_comm_heatmap.png)
 
@@ -217,12 +221,12 @@ volume-weighted mean distance is 3.47 — the equal pair of bars in the figure).
 
 ![region locality, volume-weighted](region_locality_vw.png)
 
-**Propagation latency (wired at all three levels, currently a constant)**:
-worst-case hops × placeholder ns/hop, round trip 12×5 + 3×2 + 2×1 = **136 ns/op**
-(macro/core/crossbar = 88%/9%/3% of the term); `level_max_hops` takes no place_fn →
-**does not vary with placement**; 0.006% (prefill) / 0.13% (decode) of block
-latency. Making it placement-dependent is mechanical; making it **matter** is
-bandwidth (DR-2).
+**Propagation latency (all three levels, placement-dependent since A-3)**:
+worst-case hops computed from the ACTUAL layout × placeholder ns/hop. Default
+layout: 12×5 + 3×2 + 2×1 = **136 ns/op** (the 2×4 variant reads 10/3/2 → 116 ns);
+0.006% (prefill) / 0.13% (decode) of block latency. What makes it **matter** is
+bandwidth (DR-2): without link limits there is no contention for distance to act
+through.
 
 ### 3.2 The attention K/V write (crossbar level) — validation + quantification
 
@@ -356,8 +360,8 @@ energy** — a throughput argument.
 |---|---|---|---|---|
 | **crossbar — K/V write** | SET pulses×T_SET; cells×E_write | **decode latency 10.12×** | write = **90%** of decode latency (0.9% of energy) | measured, **in the totals** |
 | **macro (×8) — comm energy** | router energy × hops/ref | mesh→line **1.52×**; setting sweep 3.00× | router = **0.65%** of block → **0.34%** block effect | measured, **in the totals** (A/B/C use grid+to_center) |
-| macro/core/crossbar — propagation | max_hops × ns/hop (88%/9%/3%) | constant 136 ns/op, **placement-independent** | 0.006% / 0.13% of block latency | wired, currently constant |
-| crossbar (256/die) — relative map | volume × Manhattan | **3.58×** | that level's energy is 0; nothing to scale | measured, **not in the totals** |
+| macro/core/crossbar — propagation | actual-layout max_hops × ns/hop | default 136 ns/op, **placement-dependent** (A-3) | 0.006% / 0.13% of block latency | wired |
+| crossbar (256/die) — relative map | v1 real traffic × Manhattan | **3.62×** (idle-zeroing on partially-used ops) | that level's energy is 0; nothing to scale | measured, **not in the totals** |
 | region (6 matmuls) — relative map | volume-weighted all-pair Manhattan | **17.8%** (BERT) | same | measured, **not in the totals** |
 | core/crossbar link energy | — | — | **0%** (`inter_*_spatial` zero-energy) | **not modeled → DR-1** |
 | bandwidth / contention | — | — | `throttling = 1.00`: no stall representable | **not modeled → DR-2** |
@@ -396,9 +400,12 @@ core<->crossbar, core0.0,xb4,    901120,       0.25,          225280
 (`max_over_min: 3.58`; cheapest `id=132@(7,7)` near-center, priciest `id=66@(14,0)`
 far corner).
 
-**Three takeaways**: ① position spread 3.58×; ② `volume×distance` concentrates at
-the top: `glb↔macro` ~65%, `macro↔core` ~25%, `core↔crossbar` ~10% → distance
-optimization pays mostly at the top level; ③ prefill is on-die-traffic-heavy,
+**Three takeaways (v1 structured)**: ① ffn1 position spread 3.62× (plus the
+idle-zeroing effect on partially-utilized ops); ② `volume×distance` still
+concentrates at the top, now on real volumes: `glb↔macro` **60%**, `macro↔core`
+24%, `core↔crossbar` 16% (the v0 65/25/10 rested on a 32× multicast overcount of
+the input trunk; ffn1 is output-dominated and outputs don't multicast, so the
+top-level conclusion survives the correction); ③ prefill is on-die-traffic-heavy,
 decode communication is tiny overall; inter-die activations are far below on-die
 volumes — not a bottleneck:
 
@@ -421,8 +428,8 @@ volumes — not a bottleneck:
    conservative; capacity packing would need ~6–8.
 3. **Oversized layers unhandled**: a layer > 1 die needs `meshX>1` (arch supports
    it; never run). GPT-2 medium never triggers it.
-4. **Energy position-awareness stops at the macro level**; propagation latency does
-   not vary with placement (§2.3).
+4. **Energy position-awareness stops at the macro level** (DR-1); propagation
+   latency is placement-dependent since A-3.
 5. **Write model**: one SET pulse per row, no write-verify — both scale decode
    latency directly (DR-5).
 6. **Placeholder magnitudes**: distance absolute scale, per-hop latencies, write
@@ -474,6 +481,10 @@ direction only: **toward underestimation**.
 
 | Script | Purpose |
 |---|---|
+| `fabric.py` + `models/fabric/*.yaml` | physical fabric config (single source of truth; `CIMSIM_FABRIC` picks variants) |
+| `placement.py` | explicit Placement (per-level slot tables + verify + JSON; `sequential_fill` reproduces the legacy floorplan bit for bit) |
+| `traffic.py` | real traffic structure (multicast trunks once, idle zeroed, divisibility guard against Timeloop counters) |
+| `make_figures.py` | one driver for every figure (7 stages; `--tag` for config variants without clobbering canonical) |
 | `mlx_system.py` | hardware config (resident die hierarchy) + LAYOUT + runners + `n_dies_for_weights` |
 | `placement_aware.py` | distance overlay: energy (`position_aware_cost`) + latency (`position_aware_latency`) |
 | `crossbar_stats.py` | per-crossbar stats + communication structure + `hierarchy()` |
@@ -488,7 +499,6 @@ direction only: **toward underestimation**.
 | `analyze_region_locality.py` | region-placement comparison + 17.8% (compute on host / plot in container, §3.1) |
 | `analyze_position_aware.py` | placement × pattern sweep (resnet18) |
 | `analyze_crossbar_value_compare.py` | device×workload 2×2 per-crossbar energy figure (§3.3) |
-| `analyze_gpt2_offload.py` | (superseded by §4's three scenarios; predates the write model — do not cite) |
 
 ```python
 from scripts import llm_workload as lw
@@ -527,6 +537,12 @@ calibration data). They check three more basic things:
    trips the test. Goldens are versioned (`_v0` = uniform-traffic model); when
    the traffic structure upgrade lands, re-baselining to `_v1` with a changelog
    entry is the normal procedure, not a failure.
+
+The six system-level totals (a ~45-min run) are not in the automatic suite;
+they go through `tests/compare_baseline.py`, which diffs a fresh
+`gpt2_system_totals_*.json` against the frozen `system_golden_v0.json` (the
+acceptance gate for re-plumbing work; model upgrades re-freeze with
+`--freeze v1` plus a changelog entry).
 
 There are also 3 **xfail** (expected-fail) tests — the known-gap list: lower
 levels carry no energy model (DR-1), propagation latency does not vary with

@@ -139,6 +139,7 @@ def _base_layer():
 
 def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
+           placement=None,
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
            hist_source=DEFAULT_HIST_SOURCE,
            value_mode="uniform", value_source="synthetic",
@@ -162,15 +163,16 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
             h = vs.representative_histograms(hist_source, _HIST_TYPES.get(op.kind))
             if h:
                 spec.problem["histograms"] = dict(h)
+    from scripts import placement as placement_mod
+    pl = placement or placement_mod.sequential_fill(mlx.FABRIC)
     r = mlx.run_mlx_layer(_base_layer(), config=mlx.MLX_DIE_CONFIG,
-                          callfunc=callfunc, place_fn=place_fn)
+                          callfunc=callfunc, place_fn=place_fn, placement=pl)
     res = r["result"]
     write_J = op.write_cells * e_write if op.kind == "dynamic" else 0.0
 
     # ---- latency (critical path) ----
     compute_lat = res.cycles * res.cycle_seconds                 # Timeloop native
-    level_hops = cc.level_max_hops(mlx.N_MACROS_PER_DIE,         # geometry only
-                                   mlx.N_CORES_PER_MACRO, mlx.CROSSBARS_PER_CORE)
+    level_hops = cc.level_max_hops(mlx.FABRIC, pl)   # placement-aware geometry
     dist = pa.position_aware_latency(level_hops,
                                      hop_latency_ns or mlx.HOP_LATENCY_NS)
     dist_lat = dist["total_ns"] * 1e-9
@@ -200,7 +202,8 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
     if save_comm:
         try:
             comm_files = cc.save_flows(res.output_dir, tag=f"{op.name}_{phase}",
-                                       dest_dir=comm_dir)
+                                       dest_dir=comm_dir, fabric=mlx.FABRIC,
+                                       placement=pl)
         except Exception as e:                       # non-die run / parse miss
             print(f"    [save_comm skipped for {op.name}: "
                   f"{type(e).__name__}: {e}]", flush=True)
@@ -261,7 +264,7 @@ E_DRAM_PER_WORD_J = 5.0e-11
 # level up (die<->die via the chip2chip_link).
 #   prefill: S * d_model words per layer boundary ; decode: d_model words.
 # ---------------------------------------------------------------------------
-DIE_HOP_LATENCY_NS = 20.0     # per die-to-die hop (placeholder; >> on-die hop)
+DIE_HOP_LATENCY_NS = mlx.FABRIC.level("die").link.ns_per_hop   # D2D hop (DR-3)
 CHIP2CHIP_PJ_FALLBACK = 5.0   # per-word die-to-die energy if not extractable (pJ)
 
 

@@ -34,6 +34,7 @@ workspace/tutorials/DNN_NeuroSim_V1.3/
 workspace/analysis/*
 !workspace/analysis/SUMMARY.en.md
 !workspace/analysis/SUMMARY.Extn.md
+!workspace/analysis/FIXLIST.en.md
 !workspace/analysis/*.png
 
 .DS_Store

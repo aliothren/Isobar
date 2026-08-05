@@ -223,6 +223,9 @@ def position_aware_cost(
     place_fn: Callable[[int], List[Tuple[float, float]]] = place_grid,
     default_pattern: str = "to_center",
     default_reference_hops: float = 1.0,
+    *,
+    placement=None,
+    fabric=None,
 ) -> dict:
     """
     Apply the placement/distance overlay to perceived communication components.
@@ -265,6 +268,32 @@ def position_aware_cost(
     Returns dict with rows, baseline, position_aware, ratio (see print_report).
     """
     layout = layout or {}
+
+    # Coordinates per component. With an explicit (placement, fabric), a
+    # component that a fabric link claims (link.cimloop_component) uses that
+    # level's SLOT table -- per-level grid units, matching reference_hops
+    # semantics ("one hop of this link"). Do NOT feed global leaf-grid
+    # centroids here: their pitch is larger and would silently inflate the
+    # distance term. Components no fabric link claims (e.g. phase-1 archs)
+    # keep the place_fn PRIOR -- that is place_fn's remaining role.
+    comp_level = {}
+    if placement is not None and fabric is not None:
+        placement.verify(fabric)
+        comp_level = {lv.link.cimloop_component: lv.name
+                      for lv in fabric.levels
+                      if lv.link is not None and lv.link.cimloop_component}
+
+    def coords_for(name, fanout):
+        lvl = comp_level.get(name)
+        if lvl is None:
+            return place_fn(fanout)
+        slots = placement.slots[lvl]
+        if len(slots) != fanout:
+            raise ValueError(
+                f"{name}: stats fanout {fanout} != {lvl} slots {len(slots)} -- "
+                "fabric config and run diverged")
+        return [(float(x), float(y)) for (x, y) in slots]
+
     rows = []
     tot_base = tot_pa = 0.0
     for name, info in levels.items():
@@ -277,7 +306,7 @@ def position_aware_cost(
         hop_scale = cfg.get("hop_scale", 1.0)
 
         base = info["energy_J"]          # the simulator's own position-blind energy
-        hops = hops_fn(place_fn(info["fanout"]))
+        hops = hops_fn(coords_for(name, info["fanout"]))
         pa = base * (hops / ref_hops) * hop_scale
         rows.append((name, info["fanout"], base, hops / ref_hops, pa))
         tot_base += base

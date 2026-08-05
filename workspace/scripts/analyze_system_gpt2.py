@@ -156,6 +156,26 @@ for comp, tag in [("router", "inter-macro NoC"), ("glb", "on-die SRAM"),
 print(f"  {'die-to-die activation (model)':<28}{d2d['words']:>18,}"
       f"{d2d['words']:>18,}")
 
+# ---------------------------------------------------------------- dump totals JSON
+# Machine-readable results: the six scenario totals + the per-op breakdown.
+# tests/compare_baseline.py diffs this against the frozen golden
+# (tests/fixtures/system_golden_v0.json) -- the tier-1 gate for re-plumbing work.
+import json  # noqa: E402
+tj = os.path.join(OUT, f"gpt2_system_totals_{PHASE}.json")
+with open(tj, "w") as f:
+    json.dump({
+        "S": S, "phase": PHASE, "n_layers": NL,
+        "scenarios": {k: float(v) for k, v in scen.items()},
+        "per_op": [{
+            "name": r["op"].name, "kind": r["op"].kind,
+            "raw_E": float(r["raw_E"]), "dist_extra_E": float(r["dist_extra_E"]),
+            "write_E": float(r["write_E"]), "raw_L": float(r["raw_L"]),
+            "dist_L": float(r["dist_L"]), "write_L": float(r["write_L"]),
+            "comm": {k: int(v) for k, v in r["comm"].items()},
+        } for r in records],
+    }, f, indent=1)
+print(f"totals   -> {tj}")
+
 # ---------------------------------------------------------------- dump mappings
 mp = os.path.join(OUT, f"gpt2_system_mappings_{PHASE}.txt")
 with open(mp, "w") as f:

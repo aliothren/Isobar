@@ -1,0 +1,212 @@
+{
+ "prefill": {
+  "S": 512,
+  "phase": "prefill",
+  "n_layers": 24,
+  "scenarios": {
+   "C_E": 0.28439522474739237,
+   "A_E": 0.2874896071473924,
+   "B_E": 0.19061367518689065,
+   "C_L": 0.24920063999999997,
+   "A_L": 0.31465382399999997,
+   "B_L": 0.202488576
+  },
+  "per_op": [
+   {
+    "name": "qkv_proj",
+    "kind": "static",
+    "raw_E": 0.002042865117703775,
+    "dist_extra_E": 2.7781249999999998e-06,
+    "write_E": 0.0,
+    "raw_L": 0.00259584,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 59768832,
+     "glb": 45088768,
+     "chip2chip_link": 28835840
+    }
+   },
+   {
+    "name": "qk^t",
+    "kind": "dynamic",
+    "raw_E": 0.002567435243006532,
+    "dist_extra_E": 4.3687499999999995e-06,
+    "write_E": 5.24288e-05,
+    "raw_L": 0.00129792,
+    "dist_L": 1.36e-07,
+    "write_L": 0.00054528,
+    "comm": {
+     "router": 108003328,
+     "glb": 108003328,
+     "chip2chip_link": 70778880
+    }
+   },
+   {
+    "name": "av",
+    "kind": "dynamic",
+    "raw_E": 0.001355873072014373,
+    "dist_extra_E": 3.9625000000000014e-06,
+    "write_E": 5.24288e-05,
+    "raw_L": 0.00064896,
+    "dist_L": 1.36e-07,
+    "write_L": 0.00218112,
+    "comm": {
+     "router": 71303168,
+     "glb": 71303168,
+     "chip2chip_link": 37748736
+    }
+   },
+   {
+    "name": "out_proj",
+    "kind": "static",
+    "raw_E": 0.0007567423141528891,
+    "dist_extra_E": 9.25e-07,
+    "write_E": 0.0,
+    "raw_L": 0.00064896,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 19922944,
+     "glb": 19922944,
+     "chip2chip_link": 12058624
+    }
+   },
+   {
+    "name": "ffn1",
+    "kind": "static",
+    "raw_E": 0.0026994797182784747,
+    "dist_extra_E": 8.337500000000003e-06,
+    "write_E": 0.0,
+    "raw_L": 0.00259584,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 208666624,
+     "glb": 57671680,
+     "chip2chip_link": 37224448
+    }
+   },
+   {
+    "name": "ffn2",
+    "kind": "static",
+    "raw_E": 0.002427405565985304,
+    "dist_extra_E": 3.7031250000000002e-06,
+    "write_E": 0.0,
+    "raw_L": 0.00259584,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 79691776,
+     "glb": 41943040,
+     "chip2chip_link": 23068672
+    }
+   }
+  ]
+ },
+ "decode": {
+  "S": 512,
+  "phase": "decode",
+  "n_layers": 24,
+  "scenarios": {
+   "C_E": 0.0005600322750148019,
+   "A_E": 0.0005660766000148019,
+   "B_E": 0.0003754383227415537,
+   "C_L": 0.00146016,
+   "A_L": 0.014770944,
+   "B_L": 0.000986496
+  },
+  "per_op": [
+   {
+    "name": "qkv_proj",
+    "kind": "static",
+    "raw_E": 4.0294309450471855e-06,
+    "dist_extra_E": 5.428125000000001e-09,
+    "write_E": 0.0,
+    "raw_L": 1.014e-05,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 116736,
+     "glb": 88064,
+     "chip2chip_link": 56320
+    }
+   },
+   {
+    "name": "qk^t",
+    "kind": "dynamic",
+    "raw_E": 5.061967925845133e-06,
+    "dist_extra_E": 8.562500000000001e-09,
+    "write_E": 1.024e-07,
+    "raw_L": 1.014e-05,
+    "dist_L": 1.36e-07,
+    "write_L": 0.00054528,
+    "comm": {
+     "router": 210944,
+     "glb": 210944,
+     "chip2chip_link": 138240
+    }
+   },
+   {
+    "name": "av",
+    "kind": "dynamic",
+    "raw_E": 2.660215502206872e-06,
+    "dist_extra_E": 7.715624999999997e-09,
+    "write_E": 1.024e-07,
+    "raw_L": 1.014e-05,
+    "dist_L": 1.36e-07,
+    "write_L": 8.52e-06,
+    "comm": {
+     "router": 139264,
+     "glb": 139264,
+     "chip2chip_link": 73728
+    }
+   },
+   {
+    "name": "out_proj",
+    "kind": "static",
+    "raw_E": 1.5207606786978615e-06,
+    "dist_extra_E": 1.8093749999999995e-09,
+    "write_E": 0.0,
+    "raw_L": 1.014e-05,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 38912,
+     "glb": 38912,
+     "chip2chip_link": 23552
+    }
+   },
+   {
+    "name": "ffn1",
+    "kind": "static",
+    "raw_E": 5.313760384986646e-06,
+    "dist_extra_E": 1.6281249999999992e-08,
+    "write_E": 0.0,
+    "raw_L": 1.014e-05,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 407552,
+     "glb": 112640,
+     "chip2chip_link": 72704
+    }
+   },
+   {
+    "name": "ffn2",
+    "kind": "static",
+    "raw_E": 4.748542688833046e-06,
+    "dist_extra_E": 7.249999999999999e-09,
+    "write_E": 0.0,
+    "raw_L": 1.014e-05,
+    "dist_L": 1.36e-07,
+    "write_L": 0.0,
+    "comm": {
+     "router": 155648,
+     "glb": 81920,
+     "chip2chip_link": 45056
+    }
+   }
+  ]
+ }
+}

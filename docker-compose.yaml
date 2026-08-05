@@ -37,6 +37,7 @@ services:
       - "8888:8888"
     volumes:
       - ./workspace:/home/workspace
+      - ./io_study:/home/io_study
     environment:
       - USER_UID=${USER_UID:-1000}
       - USER_GID=${USER_GID:-1000}
