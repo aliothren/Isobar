@@ -30,6 +30,13 @@ class Link:
     # Owned by OUR analytic tier, never pushed into Timeloop (ownership rule:
     # network links -> T2, storage/hub bandwidth -> T1 via Level.hub_bandwidth).
     bandwidth_words_per_cycle: Optional[float] = None
+    # Which communication SCHEME connects this level's instances to their hub.
+    # "star" (private link per node) is the degenerate default and reproduces the
+    # pre-W2 behaviour exactly. Every scheme takes its OWN parameter set, so they
+    # live in `params` rather than as flat fields; scripts/interconnect.py owns
+    # the registry and validates them.
+    topology: str = "star"
+    params: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,28 @@ class Fabric:
             if lv.name == name:
                 return n
         raise KeyError(f"fabric {self.name} has no level '{name}'")
+
+    def pitch(self, name: str) -> int:
+        """Leaf-grid units spanned by ONE slot step at `name`'s level.
+
+        The product of every mesh BELOW it. This is the bridge between the two
+        coordinate systems the cost paths use: an interconnect works in a level's
+        own slot units, the propagation-latency term wants global leaf-grid units,
+        and leaf_distance == slot_distance * pitch exactly (the nesting is an
+        affine map, so Manhattan distance scales). Verified against the legacy
+        constants: macro pitch 6 (2.0 slots -> 12), core 3 (1.0 -> 3),
+        crossbar 1 (2.0 -> 2).
+        """
+        seen = False
+        p = 1
+        for lv in self.levels:
+            if seen and lv.mesh is not None:
+                p *= lv.mesh[0]
+            if lv.name == name:
+                seen = True
+        if not seen:
+            raise KeyError(f"fabric {self.name} has no level '{name}'")
+        return p
 
     def grid_shape(self) -> Tuple[int, int]:
         """Full leaf-grid dimensions: per-axis product of every mesh."""
@@ -104,6 +133,12 @@ class Fabric:
                 raise ValueError(
                     f"pj_per_word not monotone up the tree: {upper.name} "
                     f"({upper.pj_per_word}) < {lower.name} ({lower.pj_per_word})")
+        # each level's scheme validates its own parameter set
+        from scripts import interconnect
+        for lv in self.levels:
+            if lv.link is not None:
+                interconnect.validate_params(lv.link.topology, lv.link.params,
+                                             where=lv.name)
         return self
 
     def verify_against_stats(self, hier: dict) -> None:
@@ -142,7 +177,9 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
                       calibration=link.get("calibration"),
                       bandwidth_words_per_cycle=(
                           None if link.get("bandwidth_words_per_cycle") is None
-                          else float(link["bandwidth_words_per_cycle"]))) if link else None,
+                          else float(link["bandwidth_words_per_cycle"])),
+                      topology=link.get("topology", "star"),
+                      params=dict(link.get("params") or {})) if link else None,
             hub_bandwidth_words_per_cycle=(
                 None if lv.get("hub_bandwidth_words_per_cycle") is None
                 else float(lv.get("hub_bandwidth_words_per_cycle"))),

@@ -198,20 +198,39 @@ cannot move.
 > "75×–1200×" claim had no traceable source and was retracted; this figure is
 > its sourced replacement.)
 
-### 2.3 Contention does not follow position yet (the routed-contention gap)
+### 2.3 Whether contention follows position is a property of the SCHEME (W2)
 
-`link_occupancy` reads per-link volume and bandwidth; it **never reads
-distance**. Structurally, the tree model gives every `hub→node` a **private link
-with no shared segments**. Measured: swapping macro slots 0↔7 leaves the
-serialization at **7.249810e-02 s → 7.249810e-02 s, bit-identical**.
+Contention is not inherently placement-blind or placement-sensitive; that is a
+property of the interconnect scheme, and the scheme is now an input
+([`scripts/interconnect.py`](../scripts/interconnect.py) plus `topology:` in the
+fabric config):
 
-On a real mesh, traffic to a distant node **traverses intermediate segments and
-contends with other flows for them** — that is the mechanism by which position
-creates congestion. Closing it needs **routed contention**: route each flow over
-the physical mesh and accumulate bytes onto shared segments (the same XY-routing
-+ per-link accumulation specified for D2D — on-die and off-die are isomorphic
-here). **Until then the chain "placement → congestion → latency" is broken**
-(→ O5).
+| Scheme | Shared resource | Contention follows placement? |
+|---|---|---|
+| **`star`** (private links; the pre-W2 model) | none | ❌ **No — and that is a correct property, not a defect**: a private wire has no segment to contend for. Measured: permuting macro slots 0↔7 leaves the serialization bit-identical |
+| **`mesh`** (XY routing) | each grid segment | ✅ yes |
+| **`h_tree`** (k-ary tree) | each tree edge; the **root edge is shared by all** | ✅ yes, but through GROUPING rather than distance |
+
+**The mechanism, stated precisely (and pinned by tests)**: under a routed scheme
+with *equal* flow volumes, congestion depends only on WHICH SLOTS are occupied —
+permuting the logical nodes is provably a no-op. **Placement bites once the
+flows differ in volume**: putting the heavy talker on the hub costs nothing,
+putting it in a far corner loads the hottest segment. Measured (3×3, mesh, one
+node at 4× volume): **3V on the hub vs 6V in the corner**. Real workloads are
+heterogeneous, so this is a live mechanism, not a construction.
+
+**A ranking reversal** (hand-derived and reproduced in code — the clearest
+evidence the model really distinguishes layouts):
+
+| Layout | heatmap spread (distance) | mesh peak segment (congestion) | total segment load |
+|---|---|---|---|
+| 3×3 | 3.62× (**worse**) | **3V (better)** | 10V |
+| 2×4 | **1.50× (better)** | 4V (**worse**) | 12V |
+
+**The same two layouts rank in opposite orders under the two metrics**: 2×4
+spreads distance more evenly but, being elongated, funnels more flows onto one
+segment. Uniform is not the same as uncongested — a single metric would give the
+opposite recommendation.
 
 ### 2.4 The pricing boundary, and which way numbers can move
 
@@ -573,6 +592,7 @@ direction only: **toward underestimation**.
 |---|---|
 | `fabric.py` + `models/fabric/*.yaml` | physical fabric config (single source of truth; `CIMSIM_FABRIC` picks variants) |
 | `placement.py` | explicit Placement (per-level slot tables + verify + JSON; `sequential_fill` reproduces the legacy floorplan bit for bit) |
+| `interconnect.py` | interconnect scheme registry: `star`/`mesh`/`h_tree`, selected per level by `topology:` in the fabric config (§2.3) |
 | `traffic.py` | real traffic structure (multicast trunks once, idle zeroed, divisibility guard against Timeloop counters) |
 | `make_figures.py` | one driver for every figure (7 stages; `--tag` for config variants without clobbering canonical) |
 | `mlx_system.py` | hardware config (resident die hierarchy) + LAYOUT + runners + `n_dies_for_weights` |

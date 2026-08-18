@@ -283,16 +283,26 @@ def position_aware_cost(
                       for lv in fabric.levels
                       if lv.link is not None and lv.link.cimloop_component}
 
-    def coords_for(name, fanout):
+    def mean_hops_for(name, fanout, hops_fn):
+        """Mean hub->node distance in the level's slot units.
+
+        For a fabric-backed component the level's SCHEME supplies it
+        (`topology:` in the fabric config) -- topology supersedes the legacy
+        `pattern` here, and `star` + to_center are the same quantity, so the
+        default reproduces the pre-W2 value exactly. Components no fabric link
+        claims (e.g. the phase-1 arch) keep the place_fn + pattern prior, which
+        is the only coordinate source they have.
+        """
         lvl = comp_level.get(name)
         if lvl is None:
-            return place_fn(fanout)
+            return hops_fn(place_fn(fanout))
         slots = placement.slots[lvl]
         if len(slots) != fanout:
             raise ValueError(
                 f"{name}: stats fanout {fanout} != {lvl} slots {len(slots)} -- "
                 "fabric config and run diverged")
-        return [(float(x), float(y)) for (x, y) in slots]
+        from scripts import interconnect as ic_mod
+        return ic_mod.build(fabric, lvl, placement).mean_hops()
 
     rows = []
     tot_base = tot_pa = 0.0
@@ -306,7 +316,7 @@ def position_aware_cost(
         hop_scale = cfg.get("hop_scale", 1.0)
 
         base = info["energy_J"]          # the simulator's own position-blind energy
-        hops = hops_fn(coords_for(name, info["fanout"]))
+        hops = mean_hops_for(name, info["fanout"], hops_fn)
         pa = base * (hops / ref_hops) * hop_scale
         rows.append((name, info["fanout"], base, hops / ref_hops, pa))
         tot_base += base

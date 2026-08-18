@@ -90,23 +90,12 @@ def level_max_hops(fabric=None, placement=None):
     fab = fabric or fabric_mod.default()
     pl = (placement or placement_mod.sequential_fill(fab)).verify(fab)
 
-    meshed = _on_die_levels(fab)
-    lvl_m, lvl_c, lvl_x = meshed[-3], meshed[-2], meshed[-1]
-    nM, nC, nXc = lvl_m.per_parent, lvl_c.per_parent, lvl_x.per_parent
-
-    xb = pl.leaf_coords(fab)
-    mac = pl.level_coords(fab, lvl_m.name)
-    cor = pl.level_coords(fab, lvl_c.name)
-    if len(meshed) >= 4:
-        die = pl.level_coords(fab, meshed[-4].name)[0]
-    else:
-        die = (sum(p[0] for p in mac) / len(mac),
-               sum(p[1] for p in mac) / len(mac))
-
-    g_m = max(_manh(die, mc) for mc in mac)
-    m_c = max(_manh(mac[i // nC], cor[i]) for i in range(len(cor)))
-    c_x = max(_manh(cor[g // nXc], xb[g]) for g in range(len(xb)))
-    return {lvl_m.link.name: g_m, lvl_c.link.name: m_c, lvl_x.link.name: c_x}
+    from scripts import interconnect as ic_mod
+    out = {}
+    for lv in _on_die_levels(fab)[-3:]:
+        ic = ic_mod.build(fab, lv.name, pl)
+        out[lv.link.name] = ic.max_hops() * fab.pitch(lv.name)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -179,39 +168,41 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
         raise ValueError(f"unknown traffic model '{model}'")
 
     xb_coord = pl.leaf_coords(fab)
-    macro_cent = pl.level_coords(fab, lvl_m.name)
-    core_cent = pl.level_coords(fab, lvl_c.name)
-    if len(meshed) >= 4:
-        die_coord = pl.level_coords(fab, meshed[-4].name)[0]
-    else:
-        die_coord = (sum(p[0] for p in macro_cent) / nM,
-                     sum(p[1] for p in macro_cent) / nM)
     gshape = fab.grid_shape()
+
+    # Distances come from each level's SCHEME, in slot units, scaled to the
+    # global leaf grid by that level's pitch. `star` reproduces the legacy
+    # centroid-Manhattan values exactly (see tests/test_interconnect.py).
+    from scripts import interconnect as ic_mod
+    ics = {lv.name: ic_mod.build(fab, lv.name, pl) for lv in (lvl_m, lvl_c, lvl_x)}
+    d_of = {lv.name: [ics[lv.name].hops(ic_mod.HUB, i) * fab.pitch(lv.name)
+                      for i in range(lv.per_parent)]
+            for lv in (lvl_m, lvl_c, lvl_x)}
 
     flows = []
     per_xb = np.zeros(nX)
 
     gid = 0
     for m in range(nM):
-        mc = macro_cent[m]
         m_on = m < f_m
-        d = _manh(die_coord, mc)
-        flows.append({"level": lvl_m.link.name, "src": "glb", "dst": f"macro{m}",
+        d = d_of[lvl_m.name][m]
+        flows.append({"level": lvl_m.link.name, "level_name": lvl_m.name,
+                      "node": m, "src": "glb", "dst": f"macro{m}",
                       "volume": vol_edge[lvl_m.name] if m_on else 0.0,
                       "distance": d})
         for c in range(cores_per_macro):
-            cc = core_cent[m * cores_per_macro + c]
             c_on = m_on and c < f_c
-            dc = _manh(mc, cc)
-            flows.append({"level": lvl_c.link.name, "src": f"macro{m}",
+            dc = d_of[lvl_c.name][c]
+            flows.append({"level": lvl_c.link.name, "level_name": lvl_c.name,
+                          "node": c, "src": f"macro{m}",
                           "dst": f"core{m}.{c}",
                           "volume": vol_edge[lvl_c.name] if c_on else 0.0,
                           "distance": dc})
             for x in range(xbars_per_core):
-                xc = xb_coord[gid]
                 x_on = c_on and x < f_x
-                dx = _manh(cc, xc)
-                flows.append({"level": lvl_x.link.name, "src": f"core{m}.{c}",
+                dx = d_of[lvl_x.name][x]
+                flows.append({"level": lvl_x.link.name, "level_name": lvl_x.name,
+                              "node": x, "src": f"core{m}.{c}",
                               "dst": f"xb{gid}",
                               "volume": vol_edge[lvl_x.name] if x_on else 0.0,
                               "distance": dx})
@@ -223,28 +214,65 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
     return flows, per_xb, gshape, xb_coord
 
 
-def link_occupancy(flows, fabric, cycle_seconds):
-    """T2 static contention: per-link occupancy time from the structured flows.
+def link_occupancy(flows, fabric, cycle_seconds, placement=None):
+    """T2 static contention: per-RESOURCE occupancy time from the structured flows.
 
-    Level-agnostic and reusable by construction: any flow whose fabric link
-    carries a bandwidth participates -- when D2D lands, die-to-die links feed
-    the SAME function. Ownership rule: network links belong to this analytic
-    tier (we know per-link loads; Timeloop only has aggregate views); storage
-    hub bandwidth belongs to Timeloop's native throttling (T1). The two tiers
-    compose by MAX, never by sum -- both lower-bound the same serialization.
+    Each flow is routed by its level's SCHEME onto the resources it occupies
+    (`Interconnect.path`), and every resource accumulates the traffic of every
+    flow that crosses it. With `star` each hub->node edge has a private link, so
+    no two flows ever meet and this reduces exactly to the pre-W2 per-flow form.
+    With `mesh` the routes overlap on shared segments, which is what finally
+    couples PLACEMENT to contention.
 
-    Returns {"per_link": [{level, src, dst, seconds}], "serialization_s": float,
-    "bottleneck": link or None}. All zeros when no bandwidth is set (default).
+    Level-agnostic by construction: when D2D lands, die-to-die links feed this
+    same function. Ownership rule: network links belong to this analytic tier
+    (only we know per-resource loads; Timeloop has aggregate views only), while
+    storage hub bandwidth belongs to Timeloop's native throttling (T1). The two
+    tiers compose by MAX, never by sum -- both lower-bound the same
+    serialization.
+
+    Returns {"per_link": [{level, resource, volume, seconds, flows}],
+    "serialization_s": float, "bottleneck": entry or None}. All zeros when no
+    bandwidth is set (the shipped default).
     """
-    bw = {lv.link.name: lv.link.bandwidth_words_per_cycle
-          for lv in fabric.levels if lv.link is not None}
-    per_link = []
+    from scripts import interconnect as ic_mod
+    from scripts import placement as placement_mod
+    pl = placement or placement_mod.sequential_fill(fabric)
+
+    bw, level_of = {}, {}
+    for lv in fabric.levels:
+        if lv.link is not None:
+            bw[lv.link.name] = lv.link.bandwidth_words_per_cycle
+            level_of[lv.link.name] = lv.name
+
+    ics, load, witness = {}, {}, {}
     for f in flows:
         b = bw.get(f["level"])
-        if b and f["volume"] > 0:
-            per_link.append({"level": f["level"], "src": f["src"],
-                             "dst": f["dst"],
-                             "seconds": f["volume"] / b * cycle_seconds})
+        if not b or f["volume"] <= 0:
+            continue
+        lname = f.get("level_name") or level_of.get(f["level"])
+        if lname is None:
+            continue
+        if lname not in ics:
+            ics[lname] = ic_mod.build(fabric, lname, pl)
+        node = f.get("node")
+        if node is None:                      # flow not tagged: treat as private
+            res = [f"{lname}/flow:{f['src']}->{f['dst']}"]
+        else:
+            res = [f"{lname}/{r}" for r in ics[lname].path(ic_mod.HUB, node)]
+        for r in res:
+            load[r] = load.get(r, 0.0) + f["volume"]
+            witness.setdefault(r, (f["level"], f["src"], f["dst"]))
+
+    per_link = []
+    for r, vol in load.items():
+        lname = r.split("/", 1)[0]
+        link_name = fabric.level(lname).link.name
+        lv_bw = bw[link_name]
+        lvl, src, dst = witness[r]
+        per_link.append({"level": lvl, "resource": r, "volume": vol,
+                         "seconds": vol / lv_bw * cycle_seconds,
+                         "src": src, "dst": dst})
     worst = max(per_link, key=lambda x: x["seconds"], default=None)
     return {"per_link": per_link,
             "serialization_s": worst["seconds"] if worst else 0.0,

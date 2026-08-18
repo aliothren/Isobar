@@ -21,7 +21,7 @@ accounting raises instead of passing silently.
 """
 import os
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from scripts import crossbar_stats as cbs
 
@@ -88,6 +88,45 @@ class TrafficStructure:
                 "out": self.out_leaf * _prod(b.out_distinct for b in below),
             }
         return out
+
+    def reduction_hyperedges(self, level: str) -> List[List[int]]:
+        """Instance indices at `level` grouped into REDUCTION hyperedges.
+
+        A reduction hyperedge is the set of instances whose partial sums must
+        merge into one output: they differ only in the reduction dims (C/R/S)
+        and agree on every other spatial coordinate. This is the structure a
+        placement search moves around, and the input the lambda-1 / h_tree cost
+        model needs -- until now traffic.py only produced per-level AGGREGATE
+        volumes, which cannot express "these particular tiles must merge".
+
+        Counts are convention-free: with factors {C:4, P:2} there are always
+        2 hyperedges of size 4. MEMBERSHIP additionally needs an index
+        convention, and we use the mapping's own loop order with the FIRST
+        listed dim varying slowest. That convention should be confirmed against
+        Timeloop's spatial index order before per-instance results are trusted;
+        the counts and sizes do not depend on it.
+        """
+        split = next((s for s in self.splits if s.level == level), None)
+        if split is None:
+            raise KeyError(f"no split for level '{level}'")
+        dims = list(split.factors.items())
+        groups: Dict[tuple, List[int]] = {}
+        for i in range(split.fanout):
+            rem, coord = i, []
+            for name, f in reversed(dims):          # last listed varies fastest
+                coord.append((name, rem % f))
+                rem //= f
+            key = tuple(v for name, v in coord if name not in OUT_REDUCED)
+            groups.setdefault(key, []).append(i)
+        return [sorted(g) for g in groups.values()]
+
+    def hyperedge_shape(self, level: str) -> Tuple[int, int]:
+        """(number of reduction hyperedges, size of each) -- convention-free."""
+        split = next((s for s in self.splits if s.level == level), None)
+        if split is None:
+            raise KeyError(f"no split for level '{level}'")
+        red = _prod(f for d, f in split.factors.items() if d in OUT_REDUCED)
+        return split.fanout // red, red
 
     def leaf_shares(self) -> Dict[str, float]:
         """One active leaf's attributable volume on each level's edge (shared

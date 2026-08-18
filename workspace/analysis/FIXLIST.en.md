@@ -211,6 +211,84 @@ placement to latency — see O5.
 > bandwidth real chips actually have) — but the placement→congestion link still
 > needs routed contention.
 
+### C8. Interconnect schemes as a first-class input (workstream W2)
+
+**Motivation.** Two open items had the same root. **O5**: contention did not
+follow placement -- permuting macro slots left the serialization bit-identical,
+because every hub->node edge was modelled as a private wire with no shared
+segment, so the chain *placement -> congestion -> latency* was broken. **O4**:
+three distance metrics were in the tree (NN-min, volume-weighted Manhattan, the
+collaborator's lambda-1) with no principled way to choose. Underneath both: the
+communication scheme was a hardcoded assumption, on a platform whose whole point
+is retargeting across designs.
+
+**What was done.** `scripts/interconnect.py` -- a registry where every scheme
+answers three questions (`hops` for distance, `path` for the shared resources a
+flow occupies, `resources`), selected **per level** in the fabric config:
+
+```yaml
+link: {topology: mesh, params: {routing: xy, hub: center, multicast: native}, ...}
+```
+
+Parameters are per-scheme (a mesh takes routing/hub/multicast, a tree takes
+branching/level_length), validated at config load. Three schemes ship:
+
+| scheme | models | contention | closes |
+|---|---|---|---|
+| `star` | private link per node (the pre-W2 model) | none -- the lower bound | the zero-drift default |
+| `mesh` | 2-D grid, XY routing | shared segments | **O5** |
+| `h_tree` | k-ary tree, root shared by all | root bottleneck; `merges_by_depth()` is the lambda-1 metric | **O4** |
+
+`link_occupancy` now accumulates traffic onto whatever resources a scheme's
+`path()` returns, so `star` reduces exactly to the old per-flow form and `mesh`
+makes routes overlap. `traffic.reduction_hyperedges()` supplies the missing
+structure the tree metric needs (which instances must merge) -- previously
+traffic.py produced per-level aggregates only.
+
+**Results.**
+
+*Zero drift, machine-verified.* The entire distance and contention plumbing was
+replaced and all 12 system totals stayed byte-identical (`compare_baseline`
+ALL MATCH). The identity rests on `leaf_distance == slot_distance x pitch`, so
+`star` reproduces 1.3125 (energy) and 12/3/2 (propagation) exactly.
+
+*The mechanism, stated precisely.* Under a routed scheme with equal flow
+volumes, congestion depends only on which slots are occupied -- permuting is
+provably a no-op. Placement bites when flows differ in volume: on the 3x3 mesh a
+4x-volume node costs **3V on the hub and 6V in a far corner**.
+
+*A ranking reversal.* Hand-derived, then reproduced in code:
+
+| layout | heatmap spread (distance) | mesh peak segment (congestion) | total |
+|---|---|---|---|
+| 3x3 | 3.62x (worse) | **3V (better)** | 10V |
+| 2x4 | **1.50x (better)** | 4V (worse) | 12V |
+
+The same two layouts rank in **opposite orders** under the two metrics -- 2x4
+spreads distance evenly but, being elongated, funnels more flows onto one
+segment. Uniform is not uncongested, and a single metric would have given the
+opposite recommendation.
+
+> **One line:** how data travels is now an input rather than an assumption, and
+> with it the chain placement -> congestion -> latency is finally connected --
+> for the schemes where that chain physically exists.
+
+### C9. O4 resolved: the three metrics were never rivals
+
+NN-min is retired (it overstates: 31% vs 17.8%). The other two are the cost
+models of two different topologies and both now live in the registry:
+volume-weighted Manhattan is `mesh`, the collaborator's lambda-1 is `h_tree`
+(`merges_by_depth`, telescoping so each merge is charged once at its outermost
+boundary -- the same nested decomposition his solver uses). The critique that
+pairwise distance overcounts co-resident tiles is **correct for a tree and wrong
+for a mesh**; ours was the reverse.
+
+The consequence for the search side is structural, not cosmetic: **the placement
+objective itself changes with the scheme** -- a mesh wants proximity, a tree
+wants shared parentage. Remaining piece: reconciling `h_tree.merges_by_depth`
+against `die_solver`'s own merge counts needs his tiling model rather than ours,
+so the two implementations are not yet cross-checked numerically.
+
 ---
 
 ## Open
@@ -228,40 +306,6 @@ energy path (real values are DR-1).
 Fix: parameterized D2D on the fabric schema (die grid, per-link
 bandwidth/latency/energy, deterministic routing). Must REPLACE the flat port's
 charge, not add to it — the single-die degeneracy test pins this.
-
-### O5. Contention does not follow placement (routed contention)
-
-Measured in C7: permuting placement leaves link occupancy bit-identical, because
-each `hub→node` edge is modeled as a private link and occupancy never reads
-distance. On a real mesh, traffic to a distant node traverses intermediate
-segments shared with other flows — the actual mechanism by which position
-creates congestion.
-Fix: route each flow over the physical mesh (XY, deterministic) and accumulate
-bytes onto shared segments, then feed the same `link_occupancy`. This is the
-same machinery D2D needs (O2), so build it once for both. **Until this lands,
-"placement → congestion → latency" is not connected**, and bandwidth data
-(DR-2) can only make communication dominant, not position.
-
-### O4. Evaluator metric: three candidates, and they are not rivals
-
-There are now three distance/cost metrics in the tree, and the right move is to
-make them selectable per level rather than to pick one:
-
-| metric | where | models | right for |
-|---|---|---|---|
-| NN-min | `io_study/die_locality.py` | min hop between two regions | nothing — it overstates (31% vs 17.8%) and is retired |
-| volume-weighted all-pair Manhattan | `analyze_region_locality.py`, `crossbar_comm` | distance travelled | **mesh** interconnect |
-| lambda-1 hierarchical connectivity | `die_solver.py` (collaborator) | boundaries crossed | **tree / hierarchical** interconnect |
-
-The collaborator's critique — that pairwise distance overcounts by charging
-co-resident tiles — is correct **for a tree** and wrong for a mesh; ours is the
-reverse. So O4 resolves into the interconnect-scheme registry (`topology:` per
-level in the fabric config): lambda-1 is the `h_tree` scheme, Manhattan is the
-`mesh` scheme. A die-crossing term arrives with O2 either way.
-
-Note the consequence for the search: **the placement objective itself changes
-with the scheme** — a mesh wants Euclidean-ish proximity, a tree wants "which
-blocks share a parent". That is structural for the search work, not a detail.
 
 ### O6. `distance_router` is referenced but does not exist
 

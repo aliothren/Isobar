@@ -26,26 +26,26 @@ fabric:
     - name: die
       per_parent: 1                 # single die instantiated today (DR-3)
       mesh: [1, 1]
-      link: {name: "die<->die", ns_per_hop: 20.0, pj_per_word: null,
+      link: {name: "die<->die", topology: star, params: {}, ns_per_hop: 20.0, pj_per_word: null,
              calibration: DR-3}
 
     - name: macro
       per_parent: 8
       mesh: [2, 4]          # company feedback: 3x3-with-a-hole is odd; 2x4 fills exactly
-      link: {name: "glb<->macro", cimloop_component: router,
+      link: {name: "glb<->macro", topology: star, params: {}, cimloop_component: router,
              reference_hops: 1.0, ns_per_hop: 5.0, calibration: DR-4}
 
     - name: core
       per_parent: 4
       mesh: [2, 2]
-      link: {name: "macro<->core", ns_per_hop: 2.0, pj_per_word: 0.0,
+      link: {name: "macro<->core", topology: star, params: {}, ns_per_hop: 2.0, pj_per_word: 0.0,
              calibration: DR-1}
 
     - name: crossbar
       per_parent: 8
       mesh: [4, 2]          # 2x4 rotated: fills exactly (no gray slot); with the
                             # [2,4] macro mesh the die comes out square (16x16)
-      link: {name: "core<->crossbar", ns_per_hop: 1.0, pj_per_word: 0.0,
+      link: {name: "core<->crossbar", topology: star, params: {}, ns_per_hop: 1.0, pj_per_word: 0.0,
              calibration: DR-1}
 
   # the CiMLoop configs this fabric must stay consistent with
