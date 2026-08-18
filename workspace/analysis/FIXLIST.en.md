@@ -154,6 +154,63 @@ the XPASS protocol. The suite gated every workstream above.
   (superseded by the device×workload compare), and three orphan figures with no
   generating script.
 
+### C7. Contention modeling, two tiers (workstream W1)
+
+**Motivation.** No link carried a bandwidth anywhere, so `Bandwidth throttling =
+1.00` in every stats file: Timeloop's stall mechanism existed but had never been
+activated, compute latency was a zero-contention figure, and latency was
+therefore insensitive to layout. A retracted claim ("finite router bandwidth →
+75–1200×") had left an IOU in the writeup for a sourced replacement.
+
+**What was done.** Two tiers with an explicit ownership split, composed by
+**max, never sum** (they lower-bound the same serialization):
+
+- **T1 — Timeloop native**, owns *storage hubs*: `Level.hub_bandwidth_words_per_cycle`
+  from the fabric config is pushed into the glb spec; Timeloop stretches its own
+  cycle count. Verified live: 64 w/c stretches ffn1 compute 2.6 ms → 0.84 s, and
+  16→4 w/c scales exactly 4×.
+- **T2 — analytic per-link**, owns *network links*: `crossbar_comm.link_occupancy()`
+  computes `volume/bandwidth` per link from the v1 structured flows and takes the
+  worst. It is **level-agnostic by construction** — when D2D lands (O2), die-to-die
+  links feed the same function unchanged.
+
+Both default to `null` (unlimited) in the shipped config, so the term is
+identically zero and no system number can move. `analyze_bandwidth_sweep.py`
+sweeps both tiers (T2 in-process; T1 one cached mapper run per point).
+
+**Result.** The sweep produced a number that is *not* a placeholder:
+
+| | value | provenance |
+|---|---|---|
+| ffn1 heaviest router-link volume | 51.2 M words | v1 structured traffic, reconciled to Timeloop counters |
+| device cycle time | 1.449 µs | CiMLoop's calibrated macro model |
+| **T2 knee (compute-bound ⇄ link-bound)** | **≈2.9×10⁴ words/cycle ≈ 20 GB/s** | derived from the two above |
+
+20 GB/s per macro link sits **squarely inside the range real on-die NoCs
+occupy**, so the real chip could land on either side. Per-phase robustness was
+measured with the same script:
+
+| phase | dominant term | bandwidth at which communication overtakes it | verdict |
+|---|---|---|---|
+| prefill | compute, 249 ms | first op (`av`) flips at ~3.6e4 w/c ≈ **25 GB/s** | inside the plausible band — **at risk** |
+| decode | **write, 13.3 ms** | ~166 w/c ≈ **0.11 GB/s** | implausibly slow — **10.12% / 90% / 93% hold** |
+
+Regime discipline is enforced in the docs: stalls-on and stalls-off are
+different accounting regimes, and sweep multipliers are sensitivities, not
+findings, until DR-2 calibrates the axis. Figure: `bandwidth_sweep.png`.
+
+**Honest scope (measured, not assumed).** This tier is volume-aware and
+level-aware but **NOT placement-aware**: swapping macro slots 0↔7 leaves the
+serialization bit-identical (7.249810e-02 s both). `link_occupancy` reads
+volumes and bandwidths, never distance, and the tree model gives each hub→node
+a private link with no shared segments. So bandwidth alone does not connect
+placement to latency — see O5.
+
+> **One line:** contention is now modeled where each tier has the information
+> for it, the D2D hook is in place, and DR-2 became decisive (the knee sits at a
+> bandwidth real chips actually have) — but the placement→congestion link still
+> needs routed contention.
+
 ---
 
 ## Open
@@ -172,11 +229,18 @@ Fix: parameterized D2D on the fabric schema (die grid, per-link
 bandwidth/latency/energy, deterministic routing). Must REPLACE the flat port's
 charge, not add to it — the single-die degeneracy test pins this.
 
-### O3. No link has a bandwidth, so nothing can ever stall
+### O5. Contention does not follow placement (routed contention)
 
-`Bandwidth throttling = 1.00` everywhere; compute latency is a zero-contention
-figure. Fix: placeholder bandwidths + a sweep script (calibration is DR-2).
-This is the most likely route by which placement starts to matter on this chip.
+Measured in C7: permuting placement leaves link occupancy bit-identical, because
+each `hub→node` edge is modeled as a private link and occupancy never reads
+distance. On a real mesh, traffic to a distant node traverses intermediate
+segments shared with other flows — the actual mechanism by which position
+creates congestion.
+Fix: route each flow over the physical mesh (XY, deterministic) and accumulate
+bytes onto shared segments, then feed the same `link_occupancy`. This is the
+same machinery D2D needs (O2), so build it once for both. **Until this lands,
+"placement → congestion → latency" is not connected**, and bandwidth data
+(DR-2) can only make communication dominant, not position.
 
 ### O4. Evaluator metric (search side)
 

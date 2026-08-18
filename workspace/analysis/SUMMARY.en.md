@@ -152,12 +152,68 @@ collapses these numbers (DR-5).
 ᵇ With real limits set, compute can only grow → the write share, the 10.12×, and
 the 93% **can only fall**.
 
-> ⚠️ **Retraction on record**: the earlier claim "finite router bandwidth →
-> latency balloons 75×–1200×" **had no traceable source** and was removed. The
-> mechanism is real but inactive; reviving the claim requires an
-> `analyze_bandwidth_sweep.py`.
+**Bandwidth sensitivity (W1; source
+[`scripts/analyze_bandwidth_sweep.py`](../scripts/analyze_bandwidth_sweep.py)).**
+Contention is modeled in two tiers. They lower-bound the same serialization at
+different places, so they enter the critical path by **max, never by sum** (no
+double-charging):
 
-### 2.3 The pricing boundary, and which way numbers can move
+| Tier | Mechanism | Owns | Why |
+|---|---|---|---|
+| **T1** | Timeloop's native throttling (demand > supply → cycles stretch) | **storage hubs** (the glb read/write port) | it models aggregate rates well |
+| **T2** | analytic per-link occupancy `volume/bandwidth`, worst link wins | **network links** (router; D2D later) | only we have per-link loads (the structured flows of §5) |
+
+T2's implementation `crossbar_comm.link_occupancy()` is **level-agnostic**: when
+D2D lands, die-to-die links feed the same function. With the shipped config no
+bandwidth is set anywhere, so the term is identically zero and the system totals
+cannot move.
+
+![bandwidth sensitivity](bandwidth_sweep.png)
+
+> **Where the knee is: ffn1's router trunk flips from compute-bound to
+> link-bound at ~2.9e4 words/cycle.** That position is **not a placeholder** — it
+> follows from the op's real link volume (51.2 M words, v1 structured traffic,
+> reconciled against Timeloop's counters), the device cycle time (1.449 µs, from
+> CiMLoop's calibrated macro model), and the compute latency. In absolute units
+> that is **≈ 20 GB/s** for 8-bit words — **squarely inside the range real on-die
+> NoCs occupy**. So DR-2 (per-level link bandwidths) is not a formality: **the
+> answer can land on either side of this knee**, and on the left side on-die
+> communication becomes prefill's dominant latency term.
+>
+> **That still would not make DISTANCE matter** (measured, see §2.3): today's T2
+> reads per-link volumes only, never distance; permuting macro slots leaves the
+> serialization time bit-identical. Bandwidth makes *communication* dominant;
+> making *position* dominant additionally needs routed contention (O5).
+>
+> **Per-phase robustness** (same script): in prefill the first op to flip is
+> `av` at ~3.6e4 w/c ≈ **25 GB/s** — inside the range real NoCs occupy, so
+> prefill is **at risk**; decode is dominated by the **write** (13.3 ms) and
+> communication only catches up at ~166 w/c ≈ **0.11 GB/s**, implausibly slow →
+> **decode's 10.12× / 90% / offload 93% hold across the whole plausible band**.
+>
+> ⚠️ **Regime note**: stalls-on and stalls-off are **different accounting
+> regimes**; the multipliers on this curve are placeholder-bandwidth
+> sensitivities and **must not be cited as findings** before calibration. Every
+> other latency number in this writeup is the stall-free regime. (The earlier
+> "75×–1200×" claim had no traceable source and was retracted; this figure is
+> its sourced replacement.)
+
+### 2.3 Contention does not follow position yet (the routed-contention gap)
+
+`link_occupancy` reads per-link volume and bandwidth; it **never reads
+distance**. Structurally, the tree model gives every `hub→node` a **private link
+with no shared segments**. Measured: swapping macro slots 0↔7 leaves the
+serialization at **7.249810e-02 s → 7.249810e-02 s, bit-identical**.
+
+On a real mesh, traffic to a distant node **traverses intermediate segments and
+contends with other flows for them** — that is the mechanism by which position
+creates congestion. Closing it needs **routed contention**: route each flow over
+the physical mesh and accumulate bytes onto shared segments (the same XY-routing
++ per-link accumulation specified for D2D — on-die and off-die are isomorphic
+here). **Until then the chain "placement → congestion → latency" is broken**
+(→ O5).
+
+### 2.4 The pricing boundary, and which way numbers can move
 
 **The distance overlay can only act on a component with an energy model AND
 fanout>1; in the die model only `router` (fanout=8, the macro level) qualifies.**
@@ -448,7 +504,7 @@ volumes — not a bottleneck:
 | DR | Data requested | Numbers it moves | Direction |
 |---|---|---|---|
 | **DR-1** | per-hop/per-word energy of core- and crossbar-level links | network energy share; the 3.58× map and the 17.8% | network share ↑; rankings become joules |
-| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive |
+| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive. **The knee is now located at ~20 GB/s per macro link (§2.2) and real NoCs can sit on either side — this request is decisive, not a formality** |
 | **DR-3** | D2D topology/routing/latency/bandwidth/energy | network energy share; whole-package placement spread | network share ↑; unlocks the go/no-go experiment |
 | **DR-4** | what the router's calibrated per-word energy represents: one hop or an average multi-hop transfer | the router term; the **sign** of the +0.2% re-pricing | resolves the one open sign |
 | **DR-5** | SET pulse width, cells programmable in parallel, incremental programming, write-verify, endurance | the write term: 21%, 90%, 10.12×, 93% | **these stand or fall with it** |
@@ -470,7 +526,7 @@ direction only: **toward underestimation**.
 | `E_DRAM_PER_WORD_J` | 5.0e-11 J | typical DRAM | KV-cache energy | — |
 | `HOP_LATENCY_NS` | 1–5 ns/hop | placeholder | on-die propagation | rel. DR-2 |
 | `DIE_HOP_LATENCY_NS` | 20 ns/hop | placeholder | inter-die latency | DR-3 |
-| per-level `bandwidth` | unset | — | stalls (very sensitive) | DR-2 |
+| per-level `bandwidth` (T2 links / T1 hubs) | unset (= unlimited) | — | stalls; knee at ~2.9e4 w/c ≈ 20 GB/s (§2.2) | DR-2 |
 | `reference_hops` | 1.0 | placeholder | distance-energy scale/sign | DR-4 |
 | histogram source | `gpt2_medium` | real workload | value energy | DR-6 |
 | weight bits / layer→die | 4-bit / 1 layer per die | placeholder | die count, inter-die volume | — |

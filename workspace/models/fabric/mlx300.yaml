@@ -16,6 +16,10 @@
 #                 currently uncharged.
 #   calibration   the data request (DR-x, see SUMMARY section 7) that turns the
 #                 placeholder into a calibrated value.
+#   bandwidth_words_per_cycle (link)  T2 static-contention input; null = no
+#                 limit (today's default -- setting it activates link_occupancy).
+#   hub_bandwidth_words_per_cycle (level)  T1 storage bandwidth pushed into
+#                 Timeloop (the die's glb); null = no limit. Both are DR-2.
 
 fabric:
   name: mlx300

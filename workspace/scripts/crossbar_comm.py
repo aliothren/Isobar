@@ -223,6 +223,34 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
     return flows, per_xb, gshape, xb_coord
 
 
+def link_occupancy(flows, fabric, cycle_seconds):
+    """T2 static contention: per-link occupancy time from the structured flows.
+
+    Level-agnostic and reusable by construction: any flow whose fabric link
+    carries a bandwidth participates -- when D2D lands, die-to-die links feed
+    the SAME function. Ownership rule: network links belong to this analytic
+    tier (we know per-link loads; Timeloop only has aggregate views); storage
+    hub bandwidth belongs to Timeloop's native throttling (T1). The two tiers
+    compose by MAX, never by sum -- both lower-bound the same serialization.
+
+    Returns {"per_link": [{level, src, dst, seconds}], "serialization_s": float,
+    "bottleneck": link or None}. All zeros when no bandwidth is set (default).
+    """
+    bw = {lv.link.name: lv.link.bandwidth_words_per_cycle
+          for lv in fabric.levels if lv.link is not None}
+    per_link = []
+    for f in flows:
+        b = bw.get(f["level"])
+        if b and f["volume"] > 0:
+            per_link.append({"level": f["level"], "src": f["src"],
+                             "dst": f["dst"],
+                             "seconds": f["volume"] / b * cycle_seconds})
+    worst = max(per_link, key=lambda x: x["seconds"], default=None)
+    return {"per_link": per_link,
+            "serialization_s": worst["seconds"] if worst else 0.0,
+            "bottleneck": worst}
+
+
 # --------------------------------------------------------------------------
 DEFAULT_COMM_DIR = "/home/workspace/analysis/comm"
 

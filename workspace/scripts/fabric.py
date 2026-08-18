@@ -26,6 +26,10 @@ class Link:
     cimloop_component: Optional[str] = None  # calibrated component (re-priced by distance)
     reference_hops: Optional[float] = None
     calibration: Optional[str] = None        # DR tag for the placeholder
+    # T2 static-contention input (link_occupancy); None = unlimited (no stall).
+    # Owned by OUR analytic tier, never pushed into Timeloop (ownership rule:
+    # network links -> T2, storage/hub bandwidth -> T1 via Level.hub_bandwidth).
+    bandwidth_words_per_cycle: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,9 @@ class Level:
     per_parent: int = 1
     mesh: Optional[Tuple[int, int]] = None   # (X, Y) grid inside the parent
     link: Optional[Link] = None
+    # T1: this level's HUB storage read/write bandwidth (words/cycle), pushed
+    # into the Timeloop spec (e.g. the die's glb). None = unlimited.
+    hub_bandwidth_words_per_cycle: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -132,7 +139,13 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
                       cimloop_component=link.get("cimloop_component"),
                       reference_hops=(None if link.get("reference_hops") is None
                                       else float(link["reference_hops"])),
-                      calibration=link.get("calibration")) if link else None,
+                      calibration=link.get("calibration"),
+                      bandwidth_words_per_cycle=(
+                          None if link.get("bandwidth_words_per_cycle") is None
+                          else float(link["bandwidth_words_per_cycle"]))) if link else None,
+            hub_bandwidth_words_per_cycle=(
+                None if lv.get("hub_bandwidth_words_per_cycle") is None
+                else float(lv.get("hub_bandwidth_words_per_cycle"))),
         ))
     return Fabric(name=raw["name"], levels=levels,
                   cimloop=raw.get("cimloop", {})).validate()

@@ -139,6 +139,15 @@ def mlx_die_callfunc(spec):
         c.attributes.has_power_gating = True
         c.constraints.spatial.no_reuse = []
     spec.architecture.find("output_buffer").constraints.temporal.iter_only = []
+    # T1 storage bandwidth (words/cycle) from the fabric config: pushed into
+    # Timeloop so its NATIVE throttling stalls the cycle count. Network links
+    # are deliberately NOT pushed here -- they belong to the analytic per-link
+    # tier (crossbar_comm.link_occupancy); the two compose by max.
+    hub_bw = FABRIC.level("die").hub_bandwidth_words_per_cycle
+    if hub_bw is not None:
+        glb = spec.architecture.find("glb")
+        glb.attributes.read_bandwidth = hub_bw
+        glb.attributes.write_bandwidth = hub_bw
 
 
 # ---------------------------------------------------------------------------

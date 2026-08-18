@@ -31,6 +31,15 @@ def test_derived_dicts_unchanged():
     approx(lw.DIE_HOP_LATENCY_NS, 20.0, 1e-12)
 
 
+def test_bandwidth_fields_default_to_unlimited():
+    """the shipped config must not activate any stall tier."""
+    f = fabric.default()
+    for lv in f.levels:
+        assert lv.hub_bandwidth_words_per_cycle is None
+        if lv.link is not None:
+            assert lv.link.bandwidth_words_per_cycle is None
+
+
 def test_slots_row_major():
     f = fabric.default()
     assert f.slots("macro")[:4] == [(0, 0), (1, 0), (2, 0), (0, 1)]

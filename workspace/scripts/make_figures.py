@@ -75,6 +75,10 @@ STAGES = {
         "outputs": ["resnet18_settings_compare.png",
                     "resnet18_settings_compare.csv"],
     },
+    "bandwidth": {
+        "cmds": [["python3", "analyze_bandwidth_sweep.py"]],
+        "outputs": ["bandwidth_sweep.png"],
+    },
     "value": {
         "cmds": [["python3", "analyze_crossbar_value_compare.py"]],
         "outputs": ["crossbar_value_device_compare.png"],

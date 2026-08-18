@@ -60,6 +60,12 @@ def test_position_spread_golden_v1():
     approx(act.max() / act.min(), g["tiny2x2_max_over_min_active"], 5e-3)
 
 
+def test_default_config_has_zero_contention():
+    r = _run()
+    assert r["contention_latency_s"] == 0.0
+    assert r["bottleneck_link"] is None
+
+
 def test_energy_breakdown_identity():
     r = _run()
     s = sum(i["energy_J"] for i in r["levels"].values())

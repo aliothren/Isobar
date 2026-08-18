@@ -177,7 +177,15 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
                                      hop_latency_ns or mlx.HOP_LATENCY_NS)
     dist_lat = dist["total_ns"] * 1e-9
     wr_lat = write_latency_s(op, phase, t_set_ns)
-    total_lat = wr_lat + compute_lat + dist_lat
+    # T2 static contention: the worst network link's serialization time.
+    # Composes with compute by MAX, never sum -- Timeloop's own throttling (T1,
+    # storage hubs) and our per-link tier both lower-bound the same phenomenon.
+    # All-zero unless a fabric link carries a bandwidth (default: none do).
+    flows_q, _, _, _ = cc.build_flows(res.output_dir, verbose=False,
+                                      fabric=mlx.FABRIC, placement=pl)
+    occ = cc.link_occupancy(flows_q, mlx.FABRIC, res.cycle_seconds)
+    contention_lat = occ["serialization_s"]
+    total_lat = wr_lat + max(compute_lat, contention_lat) + dist_lat
 
     # value-dependent energy MODE. "uniform" (default) = one histogram for the whole
     # op, every crossbar identical (exact, cheap). "per_crossbar" = each crossbar's
@@ -218,6 +226,8 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         "total_J": res.energy + write_J,
         # latency breakdown (seconds)
         "compute_latency_s": compute_lat,
+        "contention_latency_s": contention_lat,
+        "bottleneck_link": occ["bottleneck"],
         "dist_latency_s": dist_lat,
         "write_latency_s": wr_lat,
         "total_latency_s": total_lat,
