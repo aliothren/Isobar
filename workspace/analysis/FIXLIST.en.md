@@ -242,11 +242,47 @@ same machinery D2D needs (O2), so build it once for both. **Until this lands,
 "placement → congestion → latency" is not connected**, and bandwidth data
 (DR-2) can only make communication dominant, not position.
 
-### O4. Evaluator metric (search side)
+### O4. Evaluator metric: three candidates, and they are not rivals
 
-NN-min overstates placement gains (31% vs 17.8% volume-weighted) and has no die
-dimension. Fix when the evaluator work starts: volume-weighted metric (already
-in `analyze_region_locality.py`) + a die-crossing term once O2 lands.
+There are now three distance/cost metrics in the tree, and the right move is to
+make them selectable per level rather than to pick one:
+
+| metric | where | models | right for |
+|---|---|---|---|
+| NN-min | `io_study/die_locality.py` | min hop between two regions | nothing — it overstates (31% vs 17.8%) and is retired |
+| volume-weighted all-pair Manhattan | `analyze_region_locality.py`, `crossbar_comm` | distance travelled | **mesh** interconnect |
+| lambda-1 hierarchical connectivity | `die_solver.py` (collaborator) | boundaries crossed | **tree / hierarchical** interconnect |
+
+The collaborator's critique — that pairwise distance overcounts by charging
+co-resident tiles — is correct **for a tree** and wrong for a mesh; ours is the
+reverse. So O4 resolves into the interconnect-scheme registry (`topology:` per
+level in the fabric config): lambda-1 is the `h_tree` scheme, Manhattan is the
+`mesh` scheme. A die-crossing term arrives with O2 either way.
+
+Note the consequence for the search: **the placement objective itself changes
+with the scheme** — a mesh wants Euclidean-ish proximity, a tree wants "which
+blocks share a parent". That is structural for the search work, not a detail.
+
+### O6. `distance_router` is referenced but does not exist
+
+`die_solver.py` sets `W_MACRO_DIST = 4.0` ("measured: distance_router ERT @
+HOP_DISTANCE=4", lines 96-108) and `placement_sim_compare.py` feeds
+`spec.variables["HOP_DISTANCE"]` (line 74). That component is **not in the
+branch, not in io_study, not in the installed Accelergy plugin, and not in
+upstream** — `mlx_die.yaml` is byte-identical to main. Consequences:
+
+- `placement_sim_compare.py` cannot run (it also needs `fetch_weights_hbm2_ws`,
+  which is still in io_study — see the merge list);
+- the **47%** distance-weighted improvement is not reproducible from committed
+  code. **Citation rule until it is: the 11% flat figure may be used, the 47%
+  may not appear in any external material.** (`ROUTER_PJ_PER_WORD = 48.254` is
+  fine — it is our known flat-router 48.3 pJ.)
+
+**Proposed fix, no ERT needed.** 4.0 is exactly the maximum macro-to-macro slot
+Manhattan distance on the 3x3 macro mesh, so the constant is derivable from the
+fabric geometry we already have. Using the **mean** instead (3x3: 1.929,
+2x4: 2.000) additionally makes the solver sensitive to the macro layout — the
+"next step up in fidelity" the solver's own docstring flags as missing.
 
 ---
 

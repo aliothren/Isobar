@@ -277,6 +277,40 @@ volume-weighted mean distance is 3.47 — the equal pair of bars in the figure).
 
 ![region locality, volume-weighted](region_locality_vw.png)
 
+**Independent corroboration from the search side**
+([`scripts/die_solver.py`](../scripts/die_solver.py), collaborator): the same
+claim reached from the **reduction structure** rather than from distance —
+keeping each M-block's C-tiles inside one macro drives cross-macro reduction
+merges from 4 to **zero**, at a cost of one extra core (27 -> 28 of 32). On-die
+reduction energy 0.89 -> 0.79 uJ (flat router) / 1.48 -> 0.79 uJ
+(distance-weighted; the latter rests on a component that does not yet exist —
+FIXLIST O6).
+
+**With the denominator supplied**
+([`scripts/analyze_placement_impact.py`](../scripts/analyze_placement_impact.py)
+runs his four matmuls through our full pipeline):
+
+| quantity | value | share of system |
+|---|---|---|
+| system energy of the 4 matmuls | 1,229.0 uJ | 100% |
+| his reduction term (baseline) | 1.482 uJ | 0.121% |
+| his saving (distance-weighted = **47% of the term**) | 0.692 uJ | **0.056%** |
+| his saving (flat = 11% of the term) | 0.099 uJ | 0.008% |
+| CiMLoop's own router energy, same 4 ops | 9.23 uJ | 0.75% |
+
+> **Two conclusions.** (1) **The magnitudes reconcile**: his lambda-1 reduction
+> term is **0.161x** CiMLoop's own router charge — he models the *inter-core
+> partial-sum subset* of what CiMLoop charges in aggregate, not a competing
+> total. (2) **Two independent routes land in the same place**: the on-die
+> energy lever is **under 1% in both accountings** (ours 0.34% at the macro
+> level, his 0.056% from reduction clustering). This *strengthens* conclusion 2
+> of §0 rather than weakening it — **the energy payoff is not within a die; it
+> is in contention (DR-2) and D2D (DR-3)**.
+>
+> (Caveat: the measurement uses our default gpt2_medium histograms on BERT
+> shapes, so the value-dependent part carries a few percent of error — not
+> enough to move the order-of-magnitude judgement.)
+
 **Propagation latency (all three levels, placement-dependent since A-3)**:
 worst-case hops computed from the ACTUAL layout × placeholder ns/hop. Default
 layout: 12×5 + 3×2 + 2×1 = **136 ns/op** (the 2×4 variant reads 10/3/2 → 116 ns);
@@ -555,6 +589,11 @@ direction only: **toward underestimation**.
 | `analyze_region_locality.py` | region-placement comparison + 17.8% (compute on host / plot in container, §3.1) |
 | `analyze_position_aware.py` | placement × pattern sweep (resnet18) |
 | `analyze_crossbar_value_compare.py` | device×workload 2×2 per-crossbar energy figure (§3.3) |
+| `analyze_bandwidth_sweep.py` | two-tier contention bandwidth sensitivity sweep (§2.2) |
+| **search side** (collaborator) | |
+| `die_solver.py` | reduction-clustered placement solver: lambda-1 hierarchical metric + two placers (see §3.1 note) |
+| `placement_sim_compare.py` | encodes a placement as average hops for the simulator ⚠️ **cannot run today**, see FIXLIST O6 |
+| `analyze_placement_impact.py` | supplies the system-level denominator for the solver's saving |
 
 ```python
 from scripts import llm_workload as lw
