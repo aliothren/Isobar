@@ -22,3 +22,14 @@ crosses an upper edge once instead of once per leaf; idle instances carry zero.
 (`system_golden_v0.json`, checked via tests/compare_baseline.py) -- B touches the
 communication ANALYSIS layer only; energy/latency totals do not flow through
 build_flows.
+
+## W3 (D2D)
+
+`xfail_single_die_d2d_degenerate_invariant` removed from group 4/5: the gap it
+documented is closed. Its acceptance clause ("single-die fabric => zero
+inter-die cost AND the pre-D2D total; replace the flat charge, never add")
+lives on as group 15 (`test_d2d.py`), tests 1-2. Note the assertion changed
+form deliberately: pricing lives on the multi-die variant + surplus model
+(`reference_hops` semantics), NOT on the default config's `pj_per_word`, so
+the old literal check (`pj_per_word is not None` on the default) would have
+been the wrong thing to promote.

@@ -20,28 +20,38 @@
 fabric:
   name: mlx300-2x4
   levels:
+  # slot_pitch_um: physical centre-to-centre distance between adjacent slots of
+  # the level's grid, in micrometres. PLATFORM INPUT with example defaults --
+  # nothing consumes it yet; it gives hop counts a declared physical meaning so
+  # ns_per_hop / hop_scale can later be derived instead of hand-filled. The
+  # example values follow the nesting (crossbar 100 um base x each level's mesh
+  # X-extent); the die value is a package-level die-to-die spacing example.
     - name: package
       per_parent: 1
 
     - name: die
+      slot_pitch_um: 25000.0
       per_parent: 1                 # single die instantiated today (DR-3)
       mesh: [1, 1]
       link: {name: "die<->die", topology: star, params: {}, ns_per_hop: 20.0, pj_per_word: null,
              calibration: DR-3}
 
     - name: macro
+      slot_pitch_um: 800.0
       per_parent: 8
       mesh: [2, 4]          # company feedback: 3x3-with-a-hole is odd; 2x4 fills exactly
       link: {name: "glb<->macro", topology: star, params: {}, cimloop_component: router,
              reference_hops: 1.0, ns_per_hop: 5.0, calibration: DR-4}
 
     - name: core
+      slot_pitch_um: 400.0
       per_parent: 4
       mesh: [2, 2]
       link: {name: "macro<->core", topology: star, params: {}, ns_per_hop: 2.0, pj_per_word: 0.0,
              calibration: DR-1}
 
     - name: crossbar
+      slot_pitch_um: 100.0
       per_parent: 8
       mesh: [4, 2]          # 2x4 rotated: fills exactly (no gray slot); with the
                             # [2,4] macro mesh the die comes out square (16x16)

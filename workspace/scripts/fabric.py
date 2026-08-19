@@ -48,6 +48,13 @@ class Level:
     # T1: this level's HUB storage read/write bandwidth (words/cycle), pushed
     # into the Timeloop spec (e.g. the die's glb). None = unlimited.
     hub_bandwidth_words_per_cycle: Optional[float] = None
+    # Physical centre-to-centre distance between adjacent slots of THIS level's
+    # grid, in micrometres. Platform input (example default in the shipped
+    # configs); nothing consumes it yet -- it exists so hop counts have a
+    # declared physical meaning, and so ns_per_hop / hop_scale can later be
+    # DERIVED (delay ~ length or length^2, energy ~ wire capacitance ~ length)
+    # instead of hand-filled per level. None = not stated.
+    slot_pitch_um: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +128,18 @@ class Fabric:
                 raise ValueError(
                     f"{lv.name}: mesh {lv.mesh} has fewer slots than "
                     f"per_parent {lv.per_parent}")
+        # physical slot pitch: positive, and non-decreasing toward the top
+        # (a parent level's grid step spans at least its child's)
+        pitched = [lv for lv in self.levels if lv.slot_pitch_um is not None]
+        for lv in pitched:
+            if lv.slot_pitch_um <= 0:
+                raise ValueError(f"{lv.name}: slot_pitch_um must be > 0")
+        for upper, lower in zip(pitched, pitched[1:]):   # top -> bottom
+            if upper.slot_pitch_um < lower.slot_pitch_um:
+                raise ValueError(
+                    f"slot_pitch_um not monotone up the tree: {upper.name} "
+                    f"({upper.slot_pitch_um}) < {lower.name} "
+                    f"({lower.slot_pitch_um})")
         # unit costs must be non-decreasing toward the top of the tree
         links = [lv.link for lv in self.levels if lv.link is not None]
         for upper, lower in zip(links, links[1:]):      # levels are top -> bottom
@@ -144,10 +163,15 @@ class Fabric:
     def verify_against_stats(self, hier: dict) -> None:
         """Cross-check against crossbar_stats.hierarchy() output (cumulative
         instance counts parsed from a run). Raises on mismatch: the config is
-        the authority, a run that disagrees with it is misconfigured."""
-        expected = {"n_macros": self.count_below("macro"),
-                    "n_cores": self.count_below("core"),
-                    "n_crossbars": self.count_below("crossbar")}
+        the authority, a run that disagrees with it is misconfigured.
+
+        Counts are PER DIE: a CiMLoop run always models one die, so a
+        multi-die fabric (die.per_parent > 1) must not inflate the expectation.
+        """
+        dies = self.count_below("die")
+        expected = {"n_macros": self.count_below("macro") // dies,
+                    "n_cores": self.count_below("core") // dies,
+                    "n_crossbars": self.count_below("crossbar") // dies}
         for key, exp in expected.items():
             got = hier.get(key)
             if got != exp:
@@ -183,6 +207,8 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
             hub_bandwidth_words_per_cycle=(
                 None if lv.get("hub_bandwidth_words_per_cycle") is None
                 else float(lv.get("hub_bandwidth_words_per_cycle"))),
+            slot_pitch_um=(None if lv.get("slot_pitch_um") is None
+                           else float(lv.get("slot_pitch_um"))),
         ))
     return Fabric(name=raw["name"], levels=levels,
                   cimloop=raw.get("cimloop", {})).validate()

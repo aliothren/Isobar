@@ -93,10 +93,11 @@ def total(records, key, kinds):
 ALL = ("static", "dynamic")
 ST = ("static",)
 
-# die-to-die activation is NATIVE now: switching the top level to ws_chip2chip_link
-# makes activations flow die-to-die through `chip2chip_link` (weights resident),
-# and that energy/cycles are ALREADY in raw_E / raw_L. So we do NOT add a separate
-# overlay (that would double-count); we only REPORT the logical inter-layer volume.
+# die-to-die (W3): the flat chip2chip charge is ALREADY in raw_E / raw_L, and
+# the overlay bills only the distance SURPLUS beyond it (replace, never add) --
+# on the default single-die fabric that surplus is exactly zero, so this line
+# REPORTS the logical inter-layer volume and stays out of the totals. Run with
+# CIMSIM_FABRIC=models/fabric/mlx300_multidie.yaml to price the real die grid.
 d2d = lw.die_to_die_activation(cfg, S, PHASE, chip2chip_pJ=CHIP2CHIP_PJ[0])
 
 scen = {

@@ -91,12 +91,3 @@ def xfail_lower_level_links_are_priced():
     lower = [v for k, v in lv.items()
              if "inter_core_in_macro" in k or "inter_crossbar_in_core" in k]
     assert lower and all(v["energy_J"] > 0 for v in lower)
-
-
-def xfail_single_die_d2d_degenerate_invariant():
-    """WORKSTREAM C6: D2D is unpriced (the die link carries no pj_per_word; the
-    flat chip2chip port is all there is). When C6 lands, this flips -- and the
-    full acceptance then also asserts: single-die fabric => zero inter-die cost
-    AND the pre-D2D total (replace the flat charge, don't add to it)."""
-    from scripts import fabric
-    assert fabric.default().level("die").link.pj_per_word is not None

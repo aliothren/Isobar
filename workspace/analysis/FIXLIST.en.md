@@ -1,9 +1,10 @@
 # Fix List
 
 Status of the code-level defects and gaps. Completed items first (motivation /
-what was done / result), then what remains open. Guardrail tests live under
-`workspace/tests/` (`python3 tests/run_tests.py`); the two remaining gaps are
-tracked there as expected-fail tests that turn green when closed.
+what was done / result), then what remains open — in priority order, with a
+worklist at the end. Guardrail tests live under `workspace/tests/`
+(`python3 tests/run_tests.py`; currently 117 pass + 1 expected-fail, which is
+open item O1).
 
 ---
 
@@ -289,23 +290,174 @@ wants shared parentage. Remaining piece: reconciling `h_tree.merges_by_depth`
 against `die_solver`'s own merge counts needs his tiling model rather than ours,
 so the two implementations are not yet cross-checked numerically.
 
+### C10. Measured impact of contention: schemes, layouts, and the system denominator
+
+**Motivation.** W2 built the mechanism (C8) but no number said how much it
+matters, at which denominator, or why it is a latency story rather than an
+energy story. The user asked for concrete results and figures.
+
+**What was done.** Three scripts, all sharing one method — one real mapper run
+per phase supplies the flows and compute/write terms, every scheme × layout ×
+bandwidth combination re-scored analytically on top:
+
+- `analyze_contention_impact.py` — single op (ffn1 prefill): scheme table,
+  layout table, segment load map.
+- `analyze_placement_tradeoff.py` — 7 variants, energy AND latency together:
+  scatter with Pareto front, per-link load vectors.
+- `analyze_contention_system.py` — the whole GPT-2 stack, both phases, with
+  per-scheme thresholds (bandwidth below which the stack moves 1% / 2×);
+  `--replot` redraws from the saved JSON without re-running the mapper.
+
+**Results** (operating point 16,384 words/cycle; anchors pinned in
+`tests/test_contention_anchors.py`):
+
+| result | value |
+|---|---|
+| op latency across schemes (ffn1) | 1.75× (star) → 13.96× (bus); scheme alone **8.00×** |
+| op latency across layouts (mesh, 3×3) | centre → corner glb = **1.67×**; on the fill-exact 2×4 the peak is hub-position-invariant (4× both) — the lever is grid-shape-dependent |
+| system energy across ALL variants | **1.007×** total; two pairs identical to 4 decimals with 8.00×/1.60× latency between them |
+| whole-stack prefill (314.65 ms stall-free) | 1.25× (star) → 6.70× (bus); glb position alone 1.64× |
+| whole-stack decode (14.77 ms stall-free) | caps at **1.18×** — the serial K/V write (90%) shields it |
+| decode counter-example | mesh-corner beats mesh-centre (15.62 vs 15.70 ms): partial occupancy couples active slots to hub position |
+
+**Framing shift (user decision):** link bandwidth is a **platform input** like
+the fabric geometry and the scheme, not a pending calibration — the shipped
+`mlx300.yaml` values are example defaults. Results are therefore stated as
+multipliers, orderings, and thresholds against that input, never absolute
+milliseconds.
+
+> **One line:** contention is a latency lever (8× across schemes, 1.6× from the
+> floorplan) that the energy account is structurally blind to — and it is
+> phase-dependent, capped at 1.18× in decode by the serial write.
+
+### C11. D2D exists (workstream W3): the registry one level up
+
+**Motivation.** O2 -- the die was a flat single-instance off-die port: no
+inter-die topology, no position, no contention; the die level in the fabric
+was degenerate (`per_parent: 1`, `mesh: [1,1]`, no price).
+
+**What was done.**
+- `mlx300_multidie.yaml`: 24 dies on 6×4, one layer per die; die link carries
+  scheme + params + bandwidth + `pj_per_word: 5.0` (example inside the
+  UCIe-class 2–8 pJ/word public band) + `reference_hops: 1.0`. The shipped
+  default stays single-die = D2D-free.
+- `interconnect.Star` learned node→node (through the hub switch, both spokes);
+  `Mesh`/`Bus`/`HTree` already routed arbitrary pairs.
+- `link_occupancy` accepts `nodes: (a, b)` flows -- die flows feed the SAME
+  function as the on-die tree (level-agnostic became literal).
+- `die_to_die_activation` rewritten on (fabric, placement, assignment):
+  layer→die assignment is data; energy bills only the SURPLUS
+  `max(hops − reference_hops, 0)` per word -- replace, never add. Single die
+  and adjacent dies are zero by construction.
+- `verify_against_stats` counts per die (a run always models one die).
+- The former `xfail_single_die_d2d_degenerate_invariant` promoted per the
+  XPASS protocol into `tests/test_d2d.py` (group 15, 7 tests): degeneracy,
+  replace-not-add, conservation + the ffn2-output reconciliation anchor,
+  per-scheme node→node paths, D2D contention through link_occupancy,
+  snake-beats-sequential.
+
+**Results** (`analyze_d2d.py`, closed-form on contention_system.json
+denominators). The operating mode decides what the layout can touch:
+
+- *Single pass* (one request in series): transfers (2.97 ms/boundary) hide
+  behind the whole stack's compute (249 ms) — invisible at any sane link
+  speed, and the chart says so instead of pretending otherwise.
+- *Pipelined* (the serving mode; `die_pipeline_interval`): the busiest die
+  wire races one stage (13.1 ms). At the example 256 w/c the adversarial
+  assignment costs 1.36× and bus 5.21×; at 64 w/c the assignment ALONE spans
+  1.81–5.43× while snake holds 1.00×. Knees per assignment: snake 32 /
+  sequential 64 / adversarial 256 / bus 1,024 w/c.
+- Bandwidth-free quantities: busiest wire 1/2/6 boundaries, surplus energy
+  0/39.3/217.6 µJ (snake/sequential/adversarial). Decode is untouchable in
+  both modes.
+
+Pipeline identities, the exact 2.0 sequential/snake ratio, the 23× bus beat,
+and the assignment ordering are pinned (group 15, 11 tests).
+
+> **One line:** the package joined the same scheme registry, priced by surplus
+> so the old totals survive bit-for-bit -- and the honest headline is a
+> threshold table, not a bottleneck claim.
+
 ---
 
 ## Open
+
+Priority order (what closing each one buys):
+
+| # | gap | what closing it buys | blocks |
+|---|---|---|---|
+| O10 | **over-capacity ops silently mis-account** (weight reload billed at zero) | any model whose layer exceeds one die (1.3B-class and up) becomes simulatable honestly | capacity guard now; `meshX>1` + intra-layer D2D flows for the real fix |
+| O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the search side; lifts the 47% citation ban | search-side integration |
+| O7 | contention = max over busiest wire, no queueing | tightens every latency/throughput multiplier (both levels benefit at once) | credibility of W2/W3 numbers |
+| O1 | core/crossbar links carry no energy (the 1 xfail) | turns the 1.50×/3.62× and 17.8% rankings into joules | DR-1 input |
+| O8 | bus energy charged by distance-to-driver | removes the artifactual star↔bus energy tie | per-scheme wire model |
+| O9 | offload receiving side unmodeled | completes the offload account (die↔unit link + KV streams on die links) | offload go/no-go fidelity |
 
 ### O1. Only the macro-level router carries an interconnect energy model *(xfail)*
 
 `inter_core_in_macro_spatial` / `inter_crossbar_in_core_spatial` are zero-energy
 fanout markers, so the 3.62× and 17.8% results are rankings, not costs.
 Fix: per-level link energy placeholders in the fabric config feed a CostModel
-energy path (real values are DR-1).
+energy path (the per-hop/per-word values are platform inputs — example defaults
+until a chip's own values are filled in; the request for the company's values
+is DR-1).
 
-### O2. D2D does not exist *(xfail)*
 
-`chip2chip_link` is a flat single-instance off-die port; no inter-die topology.
-Fix: parameterized D2D on the fabric schema (die grid, per-link
-bandwidth/latency/energy, deterministic routing). Must REPLACE the flat port's
-charge, not add to it — the single-die degeneracy test pins this.
+### O7. The contention model reads only max(compute, busiest wire)
+
+`link_occupancy` keeps one number per resource and the critical path takes
+`max(compute, serial)` — i.e. perfect compute/communication overlap and no
+queueing. Two consequences, both measured: the true latency lies between the
+max and the sum of the two terms, and load vectors with equal peaks are
+indistinguishable (`3,2,1,1,1,1,1` ≡ `3,3,3,3,3,3,3`) though their power and
+hotspots differ. Fix: report the max/sum bracket per op, or add an overlap
+coefficient as a per-link param; expose the full per-link vector (already
+computed) to consumers instead of only the peak.
+
+### O8. Bus energy is underestimated by construction
+
+`Bus.hops()` charges Manhattan distance to the driver, so bus and star tie at
+mean_hops 1.3125 and get identical re-priced energy — but a real bus drives the
+whole line's capacitance every transfer. The latency side (whole level
+serialized) is right; the energy side needs a per-scheme wire model (e.g.
+`hops()` returning the full bus length regardless of node). Until then the
+"identical energy, 8× latency" pair in C10 is partly a model artifact — the
+qualitative conclusion (energy is contention-blind) survives, the exact tie
+does not. Same gap, smaller: `h_tree.level_length` defaults to 1 per level
+where a physical H-tree lengthens toward the root.
+
+### O10. Over-capacity ops run silently with wrong accounting
+
+Measured (probe, C=2048 M=16384 = 2.0 dies of weights): the mapper does NOT
+fail — it inserts a temporal loop (`for C in [0:4)`) that reuses the same
+crossbars for different weight slices over time. Physically that is
+reprogramming the array mid-inference; the account charges it ZERO energy and
+ZERO latency (the write model bills K/V only). By our own write model the
+omission is of the same order as the op itself (~1.7 mJ + ~2.2 ms per extra
+array-load vs the op's 2.9 mJ / 2.6 ms), and per-inference rewrites would
+exhaust ReRAM endurance in days — the weight-residency premise is violated
+with no warning. GPT-2 medium never triggers this (largest op = 75% of a
+die); a 1.3B-class model triggers it on ffn1/ffn2 (100%+) with one layer =
+3.0 dies.
+
+Fix, two stages: (1) immediate tripwire — raise when an op's weights exceed
+one die's cells; (2) the real path — `chip_in_system.meshX > 1` (already in
+the arch, never exercised): the op spans dies spatially, weights stay
+resident, and the C/M splits generate INTRA-layer die-to-die
+reduction/multicast flows — the same traffic.py structure one level up,
+feeding the same link_occupancy, so D2D contention follows automatically.
+Assignment generalizes from layer→die to op→die-set.
+
+### O9. The offload receiving side is unmodeled
+
+Scenario B counts only what stays on chip: the attention unit itself, the
+die↔unit link, and the KV traffic that link carries are absent. Two
+consequences now that offload results are headline (C10/C11): the offload
+contention numbers are an on-chip-side lower bound, and KV-offload streams
+sharing the die links would add contention the model does not see (§6 items
+8/11 in the SUMMARY). Fix: give the attention unit a node on the package grid
+and route its flows through the same registry — the machinery exists; the
+work is the traffic model for Q/K/V/attention-out volumes.
 
 ### O6. `distance_router` is referenced but does not exist
 
@@ -356,3 +508,22 @@ excluded):
 **Drop (unmodified duplicates of the upstream/workspace copies):**
 - everything else under `io_study/scripts/`, `io_study/models/`,
   `io_study/tutorials/` that diffs clean against workspace
+
+---
+
+## Next up (worklist, priority order)
+
+1. **Search-side integration** — fix O6 (derive `W_MACRO_DIST` from fabric
+   geometry; mean vs max makes the solver layout-sensitive), then use our
+   evaluator as the solver's validator (Spearman harness). Lifts the 47% ban.
+2. **O7: queueing / overlap upgrade** — report the max/sum bracket per op, or
+   an overlap coefficient per link; expose the full per-link vector. Both
+   contention tiers (on-die W2, D2D W3) tighten at once.
+3. **O1: lower-level link energies** — placeholder per-hop/per-word fields
+   already exist in the fabric config (with `slot_pitch_um` to derive from);
+   wire them into a cost path and the xfail flips.
+4. **O9: offload receiving side** — attention unit as a package node.
+5. **io_study merge** — the file-by-file list above; mechanical.
+
+Not scheduled until asked: multi-die capacity packing (assumption 2), giant
+layers across dies (`meshX>1`).

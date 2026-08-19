@@ -265,43 +265,123 @@ E_DRAM_PER_WORD_J = 5.0e-11
 
 
 # ---------------------------------------------------------------------------
-# Die-to-die activation (model-level, the package hierarchy).
+# Die-to-die activation (model-level, the package hierarchy) -- W3.
 #
 # Weights are RESIDENT (ReRAM): one transformer layer per die, programmed once.
-# What crosses dies each inference is the HIDDEN STATE between consecutive layers
-# (weights never move). This is a cross-op / model-level cost that per-op Timeloop
-# cannot see, so we overlay it -- the analogue of the on-die distance overlay, one
-# level up (die<->die via the chip2chip_link).
+# What crosses dies each inference is the HIDDEN STATE between consecutive
+# layers (weights never move) -- a cross-op cost per-op Timeloop cannot see.
 #   prefill: S * d_model words per layer boundary ; decode: d_model words.
+#
+# Geometry now comes from the fabric's DIE level (grid + scheme + params), the
+# same registry the on-die levels use, one level up. `assignment[L]` = which
+# die slot layer L occupies (default: layer L -> slot L mod n_dies; the shipped
+# single-die default puts every layer on die 0).
+#
+# REPLACE, NEVER ADD (the C6 acceptance): CiMLoop's flat chip2chip_link already
+# charges every word once, position-blind. reference_hops (die link config)
+# declares how many die-boundary traversals that flat price covers; the overlay
+# bills only the SURPLUS  max(hops - reference_hops, 0)  per word. Single die
+# (hops = 0) and adjacent dies (hops = 1 = reference) therefore add exactly
+# zero energy -- the pre-D2D totals are preserved by construction.
 # ---------------------------------------------------------------------------
 DIE_HOP_LATENCY_NS = mlx.FABRIC.level("die").link.ns_per_hop   # D2D hop (DR-3)
-CHIP2CHIP_PJ_FALLBACK = 5.0   # per-word die-to-die energy if not extractable (pJ)
 
 
-def die_to_die_activation(cfg: GptConfig, S: int, phase: str, chip2chip_pJ,
-                          n_dies=None, hop_latency_ns=DIE_HOP_LATENCY_NS,
-                          place_fn=pa.place_grid):
-    """Hidden-state transfer between consecutive layers on different dies.
+def die_assignment(cfg: GptConfig, fabric=None):
+    """Default layer -> die-slot assignment: layer L on slot L mod n_dies."""
+    from scripts import fabric as fabric_mod
+    fab = fabric or fabric_mod.default()
+    n_dies = fab.level("die").per_parent
+    return [L % n_dies for L in range(cfg.n_layers)]
 
-    n_dies defaults to n_layers (1 layer / die). Dies are placed on a grid and
-    layer L sits on die L, so consecutive layers L->L+1 cost their Manhattan die
-    distance. Returns energy (J) + latency (s) for one whole forward pass.
+
+def die_to_die_activation(cfg: GptConfig, S: int, phase: str, chip2chip_pJ=None,
+                          fabric=None, placement=None, assignment=None,
+                          hop_latency_ns=None):
+    """Hidden-state transfer between consecutive layers, on the fabric's die
+    grid under its configured scheme. Returns energy (J, SURPLUS beyond the
+    flat charge -- see module comment) + latency (s) for one forward pass,
+    plus the per-boundary flows for link_occupancy (D2D contention).
     """
+    from scripts import fabric as fabric_mod
+    from scripts import interconnect as ic_mod
+    from scripts import placement as placement_mod
+    fab = fabric or fabric_mod.default()
+    lv = fab.level("die")
+    pl = (placement or placement_mod.sequential_fill(fab)).verify(fab)
+    asg = assignment or die_assignment(cfg, fab)
+    if len(asg) != cfg.n_layers:
+        raise ValueError(f"assignment covers {len(asg)} layers, "
+                         f"model has {cfg.n_layers}")
+    if max(asg) >= len(pl.slots["die"]):
+        raise ValueError(f"assignment uses die slot {max(asg)}, fabric has "
+                         f"{len(pl.slots['die'])}")
     if chip2chip_pJ is None:
-        chip2chip_pJ = CHIP2CHIP_PJ_FALLBACK
-    n_dies = n_dies or cfg.n_layers
-    n_boundaries = cfg.n_layers - 1
+        chip2chip_pJ = lv.link.pj_per_word          # example default (DR-3)
+    ref = lv.link.reference_hops if lv.link.reference_hops is not None else 1.0
+    ns_hop = hop_latency_ns if hop_latency_ns is not None else lv.link.ns_per_hop
+
+    die_ic = ic_mod.build(fab, "die", pl)
     words_per_boundary = (S if phase == "prefill" else 1) * cfg.d_model
-    coords = place_fn(n_dies)
-    hops = [pa._manhattan(coords[i], coords[i + 1]) for i in range(n_boundaries)]
-    avg_hop = sum(hops) / max(len(hops), 1)
+    n_boundaries = cfg.n_layers - 1
+    hops, flows = [], []
+    for L in range(n_boundaries):
+        a, b = asg[L], asg[L + 1]
+        h = die_ic.hops(a, b) if a != b else 0.0
+        hops.append(h)
+        if a != b:
+            flows.append({"level": lv.link.name, "level_name": "die",
+                          "nodes": (a, b), "src": f"die{a}", "dst": f"die{b}",
+                          "volume": float(words_per_boundary), "distance": h})
+    surplus = sum(max(h - ref, 0.0) for h in hops)
+    pj = 0.0 if chip2chip_pJ is None else chip2chip_pJ
     total_words = words_per_boundary * n_boundaries
     return {
         "words": total_words,
-        "energy_J": total_words * (chip2chip_pJ * 1e-12) * avg_hop,
-        "latency_s": sum(h * hop_latency_ns for h in hops) * 1e-9,
-        "n_boundaries": n_boundaries, "avg_die_hops": avg_hop, "n_dies": n_dies,
+        "energy_J": words_per_boundary * (pj * 1e-12) * surplus,
+        "latency_s": sum(hops) * ns_hop * 1e-9,
+        "flows": flows,
+        "n_boundaries": n_boundaries,
+        "avg_die_hops": sum(hops) / max(len(hops), 1),
+        "n_dies": lv.per_parent,
     }
+
+
+def die_pipeline_interval(cfg: GptConfig, S: int, phase: str, stage_s: float,
+                          fabric=None, placement=None, assignment=None,
+                          cycle_seconds=None):
+    """Steady-state PIPELINED operation across the die grid: each die holds one
+    layer, different microbatches (prefill requests / independent decode
+    streams) occupy different dies simultaneously, and every layer boundary
+    transfers concurrently each beat.
+
+    This is the operating mode where D2D placement actually reaches the
+    system numbers: the transfer no longer hides behind the WHOLE forward
+    pass's compute (single-pass view) -- it races ONE stage's compute, and the
+    busiest die wire's occupancy per beat sets the interval:
+
+        interval = max(stage_s, busiest_wire_volume / bandwidth * cycle)
+        throughput = 1 / interval
+
+    Assumptions (stated, all optimistic): perfect microbatch pipelining, no
+    bubbles, transfer/compute overlap via double buffering, weights resident.
+    Returns {"interval_s", "net_s", "network_bound", "flows"}. With no die
+    bandwidth set net_s is 0 and the interval is the compute stage -- the same
+    off-by-default discipline as every other contention term.
+    """
+    from scripts import fabric as fabric_mod
+    from scripts import placement as placement_mod
+    import scripts.crossbar_comm as cc
+    fab = fabric or fabric_mod.default()
+    pl = placement or placement_mod.sequential_fill(fab)
+    d = die_to_die_activation(cfg, S, phase, fabric=fab, placement=pl,
+                              assignment=assignment)
+    cyc = cycle_seconds if cycle_seconds is not None else 1.449e-6
+    occ = cc.link_occupancy(d["flows"], fab, cyc, pl)
+    net = occ["serialization_s"]
+    return {"interval_s": max(stage_s, net), "net_s": net,
+            "network_bound": net > stage_s, "flows": d["flows"],
+            "bottleneck": occ["bottleneck"]}
 
 
 def kv_cache_size_bytes(cfg: GptConfig, S: int, dtype_bytes: int = 2):

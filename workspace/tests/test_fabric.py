@@ -79,3 +79,23 @@ def test_mismatched_stats_raise():
     except ValueError:
         return
     raise AssertionError("diverged stats accepted")
+
+def test_slot_pitch_is_carried_and_validated():
+    """slot_pitch_um: platform input with example defaults. Nothing consumes it
+    yet; this pins that (a) the shipped configs state it for every meshed
+    level, (b) it is monotone up the tree, (c) the validator rejects zero /
+    inverted values."""
+    import dataclasses
+    fab = fabric.default()
+    pitched = [lv for lv in fab.levels if lv.slot_pitch_um is not None]
+    assert [lv.name for lv in pitched] == ["die", "macro", "core", "crossbar"]
+    vals = [lv.slot_pitch_um for lv in pitched]
+    assert vals == sorted(vals, reverse=True)          # monotone up the tree
+    bad = dataclasses.replace(
+        fab, levels=[dataclasses.replace(lv, slot_pitch_um=0.0)
+                     if lv.name == "core" else lv for lv in fab.levels])
+    try:
+        bad.validate()
+        raise AssertionError("zero slot_pitch_um must be rejected")
+    except ValueError:
+        pass

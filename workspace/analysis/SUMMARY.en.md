@@ -44,7 +44,7 @@ accounted-by columns):
 **Three main conclusions** (details in §2–§4):
 
 1. **Placement machinery is built at every level and its effects are measured**:
-   crossbar position differs 3.62× (v1 real traffic), region placement differs 17.8% (both are
+   crossbar position differs 1.50× (primary 2×4 layout; 3.62× on the 3×3 comparison, v1 real traffic), region placement differs 17.8% (both are
    rankings); the macro level is priced (line vs mesh = 1.52× NoC energy =
    **0.34%** of a block). The unpriced levels (core/crossbar links, D2D) are
    exactly where the leverage should be larger → each gap is one DR.
@@ -52,7 +52,16 @@ accounted-by columns):
    conversion, ~39% buffering (glb alone 33%); the macro NoC is 0.99% and the flat
    off-die port 0.69% → **within-die placement is not an energy lever** (and these
    transport shares are **lower bounds** — every unpriced term is a network term);
-   the payoff route is **contention (bandwidth) and D2D**.
+   the payoff route is **contention (bandwidth) and D2D**. The contention side is
+   now built and measured (§2.3.1): under shared interconnects the whole-stack
+   prefill differs 5.4× across schemes and 1.6× with the glb position, while
+   decode caps at 1.18× — **placement's leverage is in latency, not energy**.
+   The same holds one level up (W3): pipelined, the layer→die assignment spans
+   5.4× in throughput at +0.08% energy. **Offload amplifies rather than
+   exempts all of this**: removing the write shield and the per-stage compute
+   margin lets contention reach decode for the first time (3×), and the +55%
+   throughput dividend is collected only where the package network is not the
+   bottleneck (§2.3.1d; summary figures: the two placement_impact panels).
 3. **Validation by composition**: that ReRAM writes are expensive is common
    knowledge (it is why these chips are weight-stationary), not a finding.
    Charging the one write inference cannot avoid (K/V) makes decode come out
@@ -143,7 +152,7 @@ never merged as "the on-die network".
 | Bandwidth stalls | demand > link bandwidth | — | — | **mechanism present but inert**: no limits set, `Bandwidth throttling = 1.00` (DR-2)ᵇ |
 | K/V write | serial SET before compute | 21%ᵃ | **90%ᵃ** | added (§3.2) |
 | Propagation | hops × ns/hop, round trip | 0.006% | 0.13% | added (§3.1) |
-| Inter-die hand-offs | D2D links between layers | — | — | not modeled (DR-3) |
+| Inter-die hand-offs | D2D links between layers | 0%ᶜ | 0%ᶜ | added (W3, surplus-priced, §3.5); cannot reach the critical path at example inputs |
 
 ᵃ Shares of a stall-free critical path; they rest on §3.2's write granularity (a K
 append = 64 row-serial SET pulses at the ~8.5 µs placeholder width, no
@@ -210,6 +219,7 @@ fabric config):
 | **`star`** (private links; the pre-W2 model) | none | ❌ **No — and that is a correct property, not a defect**: a private wire has no segment to contend for. Measured: permuting macro slots 0↔7 leaves the serialization bit-identical |
 | **`mesh`** (XY routing) | each grid segment | ✅ yes |
 | **`h_tree`** (k-ary tree) | each tree edge; the **root edge is shared by all** | ✅ yes, but through GROUPING rather than distance |
+| **`bus`** (one shared medium) | the whole bus, one resource | ❌ position moves only energy (wire length to the driver); contention is always the whole level serialized — the **upper bound** |
 
 **The mechanism, stated precisely (and pinned by tests)**: under a routed scheme
 with *equal* flow volumes, congestion depends only on WHICH SLOTS are occupied —
@@ -231,6 +241,108 @@ evidence the model really distinguishes layouts):
 spreads distance more evenly but, being elongated, funnels more flows onto one
 segment. Uniform is not the same as uncongested — a single metric would give the
 opposite recommendation.
+
+### 2.3.1 Measured impact with contention ON (W2 results)
+
+Method: **one** real mapper run per phase supplies the flows and the
+compute/write terms; every scheme × layout × bandwidth combination is re-scored
+analytically on top (isolates the interconnect variable, and costs one
+simulation instead of dozens). Operating point 16,384 words/cycle; **bandwidth
+is a platform input** (users supply their own chip's value, §8), so the results
+are **multipliers, orderings, and thresholds**, not absolute milliseconds.
+Sources: [`analyze_contention_impact.py`](../scripts/analyze_contention_impact.py)
+(single op), [`analyze_placement_tradeoff.py`](../scripts/analyze_placement_tradeoff.py)
+(energy × latency), [`analyze_contention_system.py`](../scripts/analyze_contention_system.py)
+(whole stack).
+
+**(a) Single op (ffn1 prefill, stall-free 2.596 ms).** Identical traffic,
+identical mapping; macros piled on the busiest wire: star 1× / mesh-centre 3× /
+2×4 4× / h-tree 4× / mesh-corner 5× / bus 8× → op latency 1.75× to 13.96×.
+**The scheme alone is 8.00×; on the 3×3 grid, moving the glb from centre to
+corner under the same mesh is 1.67×.** ⚠️ The layout's lever on the PEAK depends
+on the grid shape: on the fill-exact **2×4 the centre and corner hubs both peak
+at 4×** (the elongated grid funnels a full column either way) — see the segment
+map below; only the squarer grid has the 3×→5× headroom. All anchors (including
+the 2×4 invariance) are pinned in `tests/test_contention_anchors.py`.
+
+**(b) This is a latency finding, not an energy finding.** Across the same
+variants, system energy spans **1.007×** total, and two pairs have **identical**
+energy while their latency differs 8.00× / 1.60× (star ↔ bus-centre both
+2.7078 mJ; mesh-corner ↔ bus-corner both 2.7195 mJ). Mechanism: energy reads
+the **mean hop count** (a sum), latency reads the **peak occupancy** (a max) —
+two different statistics of the same load vector, and their orderings can
+disagree (energy ranks mesh-centre first; latency ranks star first).
+Per-level attribution: 1.60× within the router level × its 0.99% share →
+0.74% at the system level.
+![energy vs latency divergence](placement_energy_latency.png)
+![per-link load vectors](placement_link_loads.png)
+
+**(c) The system denominator (GPT-2 medium × 24 blocks, S=512).** The two
+phases answer differently by an order of magnitude, and the reason is phase
+structure — prefill is compute-dominated (79.2%), which contention can
+overtake; decode is write-dominated (90.0%), a serial SET term communication
+cannot rise past:
+
+| scheme / layout | prefill (stall-free 314.65 ms) | decode (stall-free 14.77 ms/token) |
+|---|---|---|
+| star (lower bound) | 391.97 ms (1.25×) | 15.25 ms (1.03×) |
+| mesh, glb centre | 822.79 ms (2.61×) | 15.70 ms (1.06×) |
+| h-tree k=4 | 1121.22 ms (3.56×) | 17.41 ms (1.18×) |
+| mesh, glb corner | 1350.67 ms (4.29×) | 15.62 ms (1.06×) |
+| bus | 2108.01 ms (6.70×) | 17.41 ms (1.18×) |
+
+**Whole-stack prefill: 5.38× across schemes, 1.64× from the glb position alone;
+decode caps at 1.18×.** Each scheme gets two thresholds (bandwidth below which
+the stack moves 1% / doubles) for users to compare their own link bandwidth
+against (mesh-centre: 65,536 / 16,384 w/c). One counter-example worth keeping:
+in decode, mesh-**corner** (15.62) is slightly FASTER than centre (15.70) —
+decode ops occupy a small part of the array, and under a corner hub some flows
+cross **no segment at all**; which slots are active and where the hub sits are
+coupled (mechanism pinned in
+`test_partial_occupancy_couples_layout_to_active_slots`).
+![contention at the system denominator](contention_system.png)
+![where the congestion sits (primary 2×4 layout)](contention_segment_map_2x4.png)
+(3×3 comparison version: `contention_segment_map.png` — centre 3× / corner 5×,
+the source of the 1.64× row above.)
+
+**(d) The offload (scenario B) version** (source
+[`analyze_offload_contention.py`](../scripts/analyze_offload_contention.py),
+closed-form over the static-op accounts; the die↔attention-unit link is not
+modeled — the same stated caveat scenario B carries everywhere): offloading
+attention removes both shields that kept the network invisible. **Prefill**:
+per-die compute shrinks 13.11→8.44 ms, every knee moves up ~1.55× (D2D
+pipelined at 64 w/c: even snake degrades, 1.41×; sequential 2.81×; adversarial
+8.44×); on-die contention multipliers stay near A (2.59×–7.02×). **Decode:
+the write shield (90%) leaves with the attention, and on-die contention
+reaches decode for the first time** — mesh 1.65×, h-tree/bus 2.96× (versus
+1.06×/1.18× under A); D2D becomes visible too (1.14× sequential at 64 w/c).
+**Offload is a throughput win that AMPLIFIES the communication problem — the
+compute it removes is exactly where the transfers used to hide.**
+Three panels: prefill drops everywhere with the spread intact; in decode the
+write block (tan) is the shield hiding the network — remove it and the 3×
+surfaces; the +55% pipelined dividend is paid out only where the package
+network is not the bottleneck.
+![offload contention](offload_contention.png)
+
+**Placement summarized per operating condition** (same layout, each figure
+stands alone — they are not a comparison): three panels = within the die (glb
+position → one request's latency; decode is immune to that choice) / across
+dies (layer→die assignment → pipelined throughput) / the same choices priced
+in energy (full scale, no axis zoom — essentially flat). Attention on chip:
+floorplan 1.64×, assignment 5.4×, energy +0.08%; attention offloaded:
+floorplan 1.71×, assignment 6.0×, energy +0.11%.
+![placement impact, attention on chip](placement_impact_onchip.png)
+![placement impact, attention offloaded](placement_impact_offload.png)
+
+**Known coarseness (and which way it errs).** ① The critical path takes only
+`max(compute, serial)` = perfect overlap of communication and compute; the true
+value lies between max and sum. And only the busiest wire counts, so the load
+vectors `3,2,1,1,1,1,1` and `3,3,3,3,3,3,3` are equivalent — no queueing model.
+② Bus energy is charged by distance to the driver; a real bus drives the whole
+line's capacitance per transfer → bus energy is underestimated, and the
+"star ↔ bus identical energy" tie is partly a model artifact. ③ `h_tree`'s
+`level_length` defaults to 1 per level; a physical H-tree lengthens toward the
+root.
 
 ### 2.4 The pricing boundary, and which way numbers can move
 
@@ -275,16 +387,19 @@ exact, no simulation needed — to-hub mean hops 1.3125 (near-square mesh) vs 2.
 0.65% of block energy) → **moves the whole block by 0.34%**: placement demonstrably
 changes a calibrated cost — and at this level the lever is small.
 
-**Crossbar level (relative map, v1 = 3.62×)**: under the v1 real traffic structure
-(`traffic.py`: a multicast slice crosses an upper edge once, idle instances carry
-zero, shared volume attributed by share), ffn1 uses the full array and a corner
-crossbar costs **3.62×** a central one (the uniform-era 3.58× is retired per the
-CHANGELOG). **The structural difference shows on partially-utilized ops**: a small
+**Crossbar level (relative map; primary 2×4 layout = 1.50×, 3×3 comparison =
+3.62×)**: under the v1 real traffic structure (`traffic.py`: a multicast slice
+crosses an upper edge once, idle instances carry zero, shared volume attributed
+by share), ffn1 uses the full array. On the **primary 2×4 layout** (fill-exact,
+no gray slots) a corner crossbar costs **1.50×** a central one; the 3×3 variant
+stretches that to 3.62× — the spread is itself a function of the layout, which
+is the point of the map (the uniform-era 3.58× is retired per the CHANGELOG;
+the 3.62× cited in §0/§2.4 is the 3×3 comparison value). **The structural difference shows on partially-utilized ops**: a small
 2×2 matmul really uses only **32/256** crossbars with the idle region at zero —
 the uniform model smeared that into a full-array spread. The level still carries
 zero energy → a **ranking**, awaiting DR-1; rankings are what a search consumes.
 
-![per-crossbar communication cost heatmap](crossbar_comm_heatmap.png)
+![per-crossbar communication cost heatmap](crossbar_comm_heatmap_2x4.png)
 
 **Region level (relative map, 17.8%)**: hardware and mapping fixed, only which
 cores each of 6 matmuls occupies changes — dataflow order beats size order by
@@ -364,7 +479,7 @@ reason decode is write-latency-dominated.
 write latency prefill **65.4 ms** / decode **13.3 ms** (90% of decode latency).
 Energy vs latency view (one block):
 
-![energy view vs latency view](energy_vs_latency.png)
+![energy view vs latency view](energy_vs_latency_2x4.png)
 
 | phase | attention share (energy) | attention share (latency) | write share of block latency |
 |---|---|---|---|
@@ -422,13 +537,79 @@ write; source [`scripts/analyze_seqlen_kv.py`](../scripts/analyze_seqlen_kv.py))
 Energy share rises monotonically with S²; the latency share is highest at *small* S
 (write latency ∝ S until the 256-row cap, while compute keeps growing), the curves
 crossing near S≈512.
-![attention share vs sequence length](attention_share_vs_seqlen.png)
+![attention share vs sequence length](attention_share_vs_seqlen_2x4.png)
 
 **KV-cache (a traffic term only when offloaded)**: with attention resident, K/V
 live in the arrays and there is **no** "re-read the cache each step" stream; it
 appears once attention is offloaded — read ∝ G² (dominant), write ∝ G:
-![KV-cache cost vs generation length](kv_cache_vs_genlen.png)
-![energy with vs without KV-cache](energy_with_without_kv.png)
+![KV-cache cost vs generation length](kv_cache_vs_genlen_2x4.png)
+![energy with vs without KV-cache](energy_with_without_kv_2x4.png)
+
+### 3.5 Die-to-die (D2D, W3) — the same registry, one level up
+
+The die level is no longer degenerate: the multi-die variant
+[`mlx300_multidie.yaml`](../models/fabric/mlx300_multidie.yaml) (24 dies on a
+6×4 package grid, one layer per die) gives the die link a scheme (mesh / star /
+bus, the same registry), a bandwidth, a per-word energy (example 5 pJ, inside
+the UCIe-class public band of 2–8 pJ/word), and `reference_hops`. All three
+channels are reused across the boundary: distance via `ic.hops(a,b)`
+(node→node — star routes through the central switch on both spokes, mesh
+XY-routes), contention via the **same** `link_occupancy` (flows tagged
+`nodes:(a,b)`), and energy under the **replace** rule — the flat chip2chip
+charge already bills every word once, so the overlay bills only the SURPLUS
+`max(hops − reference_hops, 0)`; a single die and adjacent dies add zero by
+construction (acceptance pinned in `tests/test_d2d.py`; the former xfail was
+promoted per the XPASS protocol, see tests/CHANGELOG).
+
+**The operating mode decides whether the layout can reach the totals** — the
+correct way to read every D2D number (source
+[`analyze_d2d.py`](../scripts/analyze_d2d.py), system denominators from
+contention_system.json):
+
+- **Single pass** (one request walks the 24 dies in series): each boundary
+  transfer (2.97 ms) hides behind the WHOLE stack's compute (249 ms), so at
+  any sane link speed the total never moves. The honest statement is
+  **invisible in this mode** — a chart that showed a difference here would be
+  the dishonest one.
+- **Pipelined** (the real serving mode: different microbatches on different
+  dies, every boundary transferring concurrently each beat): the transfer
+  races ONE stage's compute (13.1 ms) and the **busiest die wire sets the
+  beat** — the assignment becomes a direct throughput multiplier.
+
+**The whole account (one prefill pass, full stack ×24 layers, scenario A;
+die bandwidth at the example 256 w/c):**
+
+| layer→die assignment | total energy (mJ) | total latency, single pass (ms) | throughput, pipelined @256 (req/s) | @64 |
+|---|---|---|---|---|
+| **snake** | **287.490** | 314.65 | **76.3** | **76.3** |
+| sequential rows | 287.529 | 314.65 | 76.3 | 42.1 |
+| far pairs (adversarial) | 287.707 | 314.65 | 56.2 | 14.0 |
+| bus (sequential) | 287.529 | 314.65 | 14.7 | 3.7 |
+
+Read the three columns together: **energy barely moves** (worst case
++0.22 mJ = +0.08% — the extra traversals billed at 5 pJ/word; the replace rule
+charges only the increment beyond the flat port, and the bus row is
+understated per O8); **single-pass latency does not move at all**;
+**throughput moves a lot** — at 64 w/c sequential is 45% slower than snake,
+adversarial keeps 18%, bus keeps 5%. **The D2D layout is a throughput
+problem, not an energy or single-request-latency problem.** The mechanism:
+the busiest die wire carries 1/2/6/23 boundaries (snake / sequential /
+adversarial / bus) — that integer multiplies the pipelined beat; the
+bandwidth below which throughput suffers spans three octaves with the
+assignment (snake 32 w/c, sequential 64, adversarial 256, bus 1,024). Decode
+carries d_model words per boundary and is untouchable in either mode (the
+write's 90% shields it).
+
+Validation: the pipeline identities (interval = max(stage, busiest-wire
+beat); no bandwidth ⇒ the compute beat exactly), **the sequential/snake
+interval ratio in the network regime equals the load ratio 2.0 exactly**, the
+bus beat identity 23×words/bw, and the assignment ordering
+(snake < sequential < adversarial) are all pinned in `test_d2d.py`
+(group 15, 11 tests).
+
+![d2d assignment impact](d2d_assignment_impact.png)
+![d2d regimes](d2d_regimes.png)
+![d2d segment map](d2d_segment_map.png)
 
 ---
 
@@ -440,7 +621,7 @@ appears once attention is offloaded — read ∝ G² (dominant), write ∝ G:
   only in what is charged; A/B differ in what runs on-chip.
 
 ### 4.1 prefill
-![system comparison prefill](gpt2_system_comparison_prefill.png)
+![system comparison prefill](gpt2_system_comparison_prefill_2x4.png)
 
 | Scenario | Energy | Latency |
 |---|---|---|
@@ -452,7 +633,7 @@ A−C latency = 0.0655 s, **exactly the 65.4 ms write latency**; offload (A→B)
 34% energy, 36% latency.
 
 ### 4.2 decode (one generation step)
-![system comparison decode](gpt2_system_comparison_decode.png)
+![system comparison decode](gpt2_system_comparison_decode_2x4.png)
 
 | Scenario | Energy | Latency |
 |---|---|---|
@@ -473,8 +654,8 @@ energy** — a throughput argument.
 | crossbar (256/die) — relative map | v1 real traffic × Manhattan | **3.62×** (idle-zeroing on partially-used ops) | that level's energy is 0; nothing to scale | measured, **not in the totals** |
 | region (6 matmuls) — relative map | volume-weighted all-pair Manhattan | **17.8%** (BERT) | same | measured, **not in the totals** |
 | core/crossbar link energy | — | — | **0%** (`inter_*_spatial` zero-energy) | **not modeled → DR-1** |
-| bandwidth / contention | — | — | `throttling = 1.00`: no stall representable | **not modeled → DR-2** |
-| inter-die (D2D) | — | — | instances=1 flat port (0.69%); no topology | **not modeled → DR-3** |
+| bandwidth / contention | busiest wire volume/bandwidth, per scheme | prefill stack 1.25–6.70× at the reference input (§2.3.1) | zero until a bandwidth is set (shipped default) | **built (W1/W2); value is a platform input** |
+| inter-die (D2D) | surplus hops × pJ/word; die-wire occupancy | cannot reach the critical path at example inputs (§3.5) | flat port 0.69% + surplus (zero on the shipped single-die default) | **built (W3); values are platform inputs** |
 
 > - The qualitative picture (decode write-bound, offload = throughput win) needs no
 >   calibration; **the magnitudes (10.12×/90%/93%) are set by the write-granularity
@@ -545,14 +726,39 @@ volumes — not a bottleneck:
    energy, off-die port cost — all uncalibrated. Ratios robust; absolutes not.
 7. **Value-distribution granularity**: one distribution per layer; per-crossbar
    spread verified to be a device-class question (§3.3, DR-6).
-8. **Offload accounting**: B counts only what stays on-chip (§4).
+8. **Offload accounting**: B counts only what stays on-chip (§4); **the
+   attention-receiving unit and the die↔unit link are not modeled** — the
+   offload contention results (§2.3.1d) are therefore an on-chip-side lower
+   bound.
+9. **Contention-model coarseness (identical on-die and die-to-die)**: the
+   critical path takes only `max(compute, serial)` = perfect overlap, truth
+   between max and sum; only the busiest wire counts, so equal-peak load
+   vectors are equivalent; no queueing model (FIXLIST O7). Bus energy is
+   charged by distance-to-driver and understated (O8).
+10. **Pipelined-mode assumptions (all optimistic)**: perfect microbatch
+    pipelining, no bubbles, transfer/compute double-buffered, weights
+    resident; pipelined decode presumes multiple independent streams. In the
+    single-pass mode boundary transfers actually happen in sequence; the
+    occupancy model stacks them anyway — a conservative upper bound there
+    (in the pipelined mode the assumption is exact).
+11. **One D2D traffic class only**: inter-layer hidden state; KV-offload
+    streams or host I/O sharing the die links would add contention — not
+    modeled.
 
-**Relaxation route**: ① capacity packing → ② oversized layers across dies
+**Relaxation route**: ① capacity packing → ② giant layers across dies (`meshX>1`) → ③ queueing / overlap coefficient (O7).
 (`meshX>1`).
 
 ---
 
 ## 7. DR data-request map (each → which numbers move, and which way)
+
+> **Framing**: the platform is general, so these are not calibration items the
+> tool cannot run without — they are **platform inputs**, the fields one fills
+> in to instantiate the platform for a specific chip. The DR list is the
+> request for *the company's chip's* input values; until then the example
+> defaults in §8 keep the platform fully runnable, and conclusions are stated
+> as multipliers / orderings / thresholds that do not depend on the example
+> values themselves.
 
 | DR | Data requested | Numbers it moves | Direction |
 |---|---|---|---|
@@ -570,7 +776,7 @@ direction only: **toward underestimation**.
 
 ---
 
-## 8. Placeholder parameters (awaiting company data)
+## 8. Platform inputs (currently example defaults)
 
 | Parameter | Placeholder | Source | Affects | DR |
 |---|---|---|---|---|
@@ -578,6 +784,7 @@ direction only: **toward underestimation**.
 | `T_SET_NS` | 8520 ns | wan SET pulse | write latency (the bottleneck) | DR-5 |
 | `E_DRAM_PER_WORD_J` | 5.0e-11 J | typical DRAM | KV-cache energy | — |
 | `HOP_LATENCY_NS` | 1–5 ns/hop | placeholder | on-die propagation | rel. DR-2 |
+| `slot_pitch_um` (per-level grid step, µm) | crossbar 100 / core 300–400 / macro 600–800 / die 25,000 | example (derived consistently from the nesting) | no consumer yet; declares the physical meaning of a hop so ns_per_hop / hop_scale can later be derived (delay ∝ length, energy ∝ wire capacitance ∝ length) | DR-1/2 related |
 | `DIE_HOP_LATENCY_NS` | 20 ns/hop | placeholder | inter-die latency | DR-3 |
 | per-level `bandwidth` (T2 links / T1 hubs) | unset (= unlimited) | — | stalls; knee at ~2.9e4 w/c ≈ 20 GB/s (§2.2) | DR-2 |
 | `reference_hops` | 1.0 | placeholder | distance-energy scale/sign | DR-4 |
@@ -592,7 +799,7 @@ direction only: **toward underestimation**.
 |---|---|
 | `fabric.py` + `models/fabric/*.yaml` | physical fabric config (single source of truth; `CIMSIM_FABRIC` picks variants) |
 | `placement.py` | explicit Placement (per-level slot tables + verify + JSON; `sequential_fill` reproduces the legacy floorplan bit for bit) |
-| `interconnect.py` | interconnect scheme registry: `star`/`mesh`/`h_tree`, selected per level by `topology:` in the fabric config (§2.3) |
+| `interconnect.py` | interconnect scheme registry: `star`/`mesh`/`h_tree`/`bus`, selected per level by `topology:` in the fabric config (§2.3) |
 | `traffic.py` | real traffic structure (multicast trunks once, idle zeroed, divisibility guard against Timeloop counters) |
 | `make_figures.py` | one driver for every figure (7 stages; `--tag` for config variants without clobbering canonical) |
 | `mlx_system.py` | hardware config (resident die hierarchy) + LAYOUT + runners + `n_dies_for_weights` |
@@ -610,6 +817,11 @@ direction only: **toward underestimation**.
 | `analyze_position_aware.py` | placement × pattern sweep (resnet18) |
 | `analyze_crossbar_value_compare.py` | device×workload 2×2 per-crossbar energy figure (§3.3) |
 | `analyze_bandwidth_sweep.py` | two-tier contention bandwidth sensitivity sweep (§2.2) |
+| `analyze_contention_impact.py` | single-op contention: scheme × layout × bandwidth + segment load map (§2.3.1a) |
+| `analyze_placement_tradeoff.py` | energy × latency divergence: 7-variant scatter + per-link load vectors (§2.3.1b) |
+| `analyze_contention_system.py` | whole-stack contention: GPT-2 both phases × scheme × bandwidth + threshold table; `--replot` redraws from JSON (§2.3.1c) |
+| `analyze_offload_contention.py` | scenario-B (offload) contention/D2D: the multipliers once decode loses its write shield (§2.3.1d) |
+| `analyze_d2d.py` | D2D: layer→die assignment × die scheme × die bandwidth + thresholds + die-grid load map (§3.5) |
 | **search side** (collaborator) | |
 | `die_solver.py` | reduction-clustered placement solver: lambda-1 hierarchical metric + two placers (see §3.1 note) |
 | `placement_sim_compare.py` | encodes a placement as average hops for the simulator ⚠️ **cannot run today**, see FIXLIST O6 |
@@ -659,10 +871,7 @@ they go through `tests/compare_baseline.py`, which diffs a fresh
 acceptance gate for re-plumbing work; model upgrades re-freeze with
 `--freeze v1` plus a changelog entry).
 
-There are also 3 **xfail** (expected-fail) tests — the known-gap list: lower
-levels carry no energy model (DR-1), propagation latency does not vary with
-placement, and D2D does not exist. Each turns green when its gap is closed;
-promote it to a must-pass test at that moment.
+There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism) are pinned in `test_contention_anchors.py` (group 14).
 
 Note: all-green does **not** mean physically correct. It only guarantees "the
 code equals the documented model"; whether the model is right waits for the

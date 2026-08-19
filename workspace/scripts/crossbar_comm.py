@@ -224,8 +224,9 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None):
     With `mesh` the routes overlap on shared segments, which is what finally
     couples PLACEMENT to contention.
 
-    Level-agnostic by construction: when D2D lands, die-to-die links feed this
-    same function. Ownership rule: network links belong to this analytic tier
+    Level-agnostic by construction -- die-to-die flows (tagged with
+    `"nodes": (a, b)` instead of a hub-side `"node"`) feed this same function;
+    llm_workload.die_to_die_activation produces them. Ownership rule: network links belong to this analytic tier
     (only we know per-resource loads; Timeloop has aggregate views only), while
     storage hub bandwidth belongs to Timeloop's native throttling (T1). The two
     tiers compose by MAX, never by sum -- both lower-bound the same
@@ -255,11 +256,14 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None):
             continue
         if lname not in ics:
             ics[lname] = ic_mod.build(fabric, lname, pl)
-        node = f.get("node")
-        if node is None:                      # flow not tagged: treat as private
-            res = [f"{lname}/flow:{f['src']}->{f['dst']}"]
-        else:
+        nodes = f.get("nodes")                # node-to-node flow (D2D: die L->L+1)
+        node = f.get("node")                  # hub-to-node flow (the on-die tree)
+        if nodes is not None:
+            res = [f"{lname}/{r}" for r in ics[lname].path(*nodes)]
+        elif node is not None:
             res = [f"{lname}/{r}" for r in ics[lname].path(ic_mod.HUB, node)]
+        else:                                 # flow not tagged: treat as private
+            res = [f"{lname}/flow:{f['src']}->{f['dst']}"]
         for r in res:
             load[r] = load.get(r, 0.0) + f["volume"]
             witness.setdefault(r, (f["level"], f["src"], f["dst"]))

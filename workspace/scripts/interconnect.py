@@ -103,9 +103,17 @@ class Star(Interconnect):
     PARAMS = {}
 
     def hops(self, a: int, b: int) -> float:
-        return _manh(self.coord(a), self.coord(b))
+        """hub<->node: the private link. node<->node: THROUGH the hub switch
+        (a star has no direct wires between nodes), so the two link lengths
+        sum. First consumer: die-to-die traffic under a central-switch D2D."""
+        if a == HUB or b == HUB or a == b:
+            return _manh(self.coord(a), self.coord(b))
+        return (_manh(self.coord(a), self.hub_coord())
+                + _manh(self.hub_coord(), self.coord(b)))
 
     def path(self, a: int, b: int) -> List[str]:
+        if a != HUB and b != HUB and a != b:      # via the hub: both links busy
+            return [f"{self.NAME}:link{a}", f"{self.NAME}:link{b}"]
         node = b if a == HUB else a
         return [f"{self.NAME}:link{node}"]
 
@@ -299,6 +307,44 @@ class HTree(Interconnect):
 
 
 # --------------------------------------------------------------------------- #
+class Bus(Interconnect):
+    """One shared medium every node taps -- the opposite extreme from `star`.
+
+    Contention is maximal: every flow occupies the same resource, so the bus
+    serializes the WHOLE level's traffic regardless of who sits where. Distance
+    still matters, but only for energy/latency per transfer (wire length to the
+    driver), never for contention. Cheapest in area, worst in throughput.
+    """
+
+    NAME = "bus"
+    PARAMS = {"driver": (False, "center (default) | corner | node:<i> -- where "
+                                "the bus is driven from")}
+
+    def _setup(self):
+        spec = self.params.get("driver", "center")
+        if isinstance(spec, str) and spec.startswith("node:"):
+            self._drv = self.slots[int(spec.split(":", 1)[1])]
+        elif spec == "corner":
+            self._drv = (min(s[0] for s in self.slots),
+                         min(s[1] for s in self.slots))
+        elif spec == "center":
+            n = len(self.slots)
+            self._drv = (sum(s[0] for s in self.slots) / n,
+                         sum(s[1] for s in self.slots) / n)
+        else:
+            raise ValueError(f"bus: unknown driver spec '{spec}'")
+
+    def hub_coord(self) -> Slot:
+        return self._drv
+
+    def hops(self, a: int, b: int) -> float:
+        return _manh(self.coord(a), self.coord(b))
+
+    def path(self, a: int, b: int) -> List[str]:
+        return [f"{self.NAME}:medium"]
+
+
+# --------------------------------------------------------------------------- #
 _REGISTRY: Dict[str, type] = {}
 
 
@@ -339,3 +385,4 @@ def build(fabric, level_name: str, placement) -> Interconnect:
 register(Star)
 register(Mesh)
 register(HTree)
+register(Bus)
