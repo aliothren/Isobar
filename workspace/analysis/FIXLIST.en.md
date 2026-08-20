@@ -337,9 +337,9 @@ inter-die topology, no position, no contention; the die level in the fabric
 was degenerate (`per_parent: 1`, `mesh: [1,1]`, no price).
 
 **What was done.**
-- `mlx300_multidie.yaml`: 24 dies on 6×4, one layer per die; die link carries
-  scheme + params + bandwidth + `pj_per_word: 5.0` (example inside the
-  UCIe-class 2–8 pJ/word public band) + `reference_hops: 1.0`. The shipped
+- `mlx300_multidie.yaml`: 24 dies on 6×4 (superseded for 355M by the feasible 48-die config, C13); die link carries
+  scheme + params + bandwidth + `pj_per_word: 10.0` (midpoint of Simba GRS's
+  measured 6.6–14 pJ/word band, see ANCHORS.md) + `reference_hops: 1.0`. The shipped
   default stays single-die = D2D-free.
 - `interconnect.Star` learned node→node (through the hub switch, both spokes);
   `Mesh`/`Bus`/`HTree` already routed arbitrary pairs.
@@ -365,10 +365,10 @@ denominators). The operating mode decides what the layout can touch:
 - *Pipelined* (the serving mode; `die_pipeline_interval`): the busiest die
   wire races one stage (13.1 ms). At the example 256 w/c the adversarial
   assignment costs 1.36× and bus 5.21×; at 64 w/c the assignment ALONE spans
-  1.81–5.43× while snake holds 1.00×. Knees per assignment: snake 32 /
-  sequential 64 / adversarial 256 / bus 1,024 w/c.
+  1.81–5.43× while snake holds 1.00×. Knees per assignment (48-die feasible config): snake 64 /
+  sequential 128 / adversarial 512 / bus 4,096 w/c.
 - Bandwidth-free quantities: busiest wire 1/2/6 boundaries, surplus energy
-  0/39.3/217.6 µJ (snake/sequential/adversarial). Decode is untouchable in
+  0/183.5/1368.4 µJ (snake/sequential/adversarial, 48-die config, at the measured 10 pJ/word). Decode is untouchable in
   both modes.
 
 Pipeline identities, the exact 2.0 sequential/snake ratio, the 23× bus beat,
@@ -416,6 +416,18 @@ die flows feed the same link_occupancy. Tests: group 16 (capacity, 6).
 > **One line:** no silent path remains -- an over-capacity op must pick a
 > mechanism, both are priced with existing primitives, and the choice
 > between them is itself a platform result (a die-bandwidth threshold).
+### C13. O11 closed: the feasible layer→die configuration is now the one in use
+
+A gpt2-medium layer is 25.2M cells = 1.5 dies, so the earlier "one layer per
+die, 24 dies" example was capacity-infeasible. The configuration now used by
+every 355M die-level analysis is `mlx300_multidie48.yaml`: 48 dies on 6×8,
+TWO dies per layer (attention half: qkv + K/V arrays + out_proj; FFN half:
+ffn1 + ffn2, filling its die exactly), 47 hidden-state hand-offs per pass.
+Re-scored results: worst-ordering energy +0.48% (was +0.15% under the
+infeasible config); pipelined knees 0.04–0.35 GB/s for routed orderings
+(35–280× under the GRS anchor) and 2.8 GB/s for a shared-interposer bus —
+only 4.4× under the anchor, the one pressured case at 355M. Docs, figures,
+and the report were updated to this configuration.
 
 ---
 
@@ -425,7 +437,6 @@ Priority order (what closing each one buys):
 
 | # | gap | what closing it buys | blocks |
 |---|---|---|---|
-| O11 | layer→die examples ignore the 2-cells-per-weight capacity | feasible assignments + corrected §1/§6 claims; re-run analyze_d2d | follow-up of C12 |
 | O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the search side; lifts the 47% citation ban | search-side integration |
 | O7 | contention = max over busiest wire, no queueing | tightens every latency/throughput multiplier (both levels benefit at once) | credibility of W2/W3 numbers |
 | O1 | core/crossbar links carry no energy (the 1 xfail) | turns the 1.50×/3.62× and 17.8% rankings into joules | DR-1 input |
@@ -439,7 +450,11 @@ fanout markers, so the 3.62× and 17.8% results are rankings, not costs.
 Fix: per-level link energy placeholders in the fabric config feed a CostModel
 energy path (the per-hop/per-word values are platform inputs — example defaults
 until a chip's own values are filled in; the request for the company's values
-is DR-1).
+is DR-1). Positioning decision (anchored-calibration round): O1 is NOT being
+closed for the current paper deadline — the anchored evidence explicitly
+covers scheme × hub position only, the core-level region allocation stays a
+ranking, and O1 is listed as a PREREQUISITE of the search-space work (the
+region dimension cannot join the objective until its links carry a price).
 
 
 ### O7. The contention model reads only max(compute, busiest wire)
@@ -464,18 +479,6 @@ serialized) is right; the energy side needs a per-scheme wire model (e.g.
 qualitative conclusion (energy is contention-blind) survives, the exact tie
 does not. Same gap, smaller: `h_tree.level_length` defaults to 1 per level
 where a physical H-tree lengthens toward the root.
-
-### O11. Layer→die assignments must respect the honest capacity
-
-Fallout of the CELLS_PER_WEIGHT correction (C12): a gpt2-medium LAYER is
-25.2M cells = 1.5 dies, so the W3 example assignment "one layer per die, 24
-dies" is capacity-infeasible as stated -- the D2D results' multipliers and
-mechanisms stand (boundary volumes and the busiest-wire integers do not
-depend on it), but the example configuration needs either 2 dies/layer
-(48 dies) or op-granular assignment, and the SUMMARY §1/§6 capacity claims
-("one layer = 75% of a die", "packing would need ~6-8 dies") need the 2x
-correction. Fix: recompute the assignment examples with `dies_for_op`, update
-docs, re-run analyze_d2d with a feasible assignment.
 
 
 ### O9. The offload receiving side is unmodeled

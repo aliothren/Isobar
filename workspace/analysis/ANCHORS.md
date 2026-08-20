@@ -17,11 +17,16 @@ our threshold curves" is a sourced statement, not a guess. Consumed by
 Also in the same comparison table: Celerity 96 Gb/s (16 nm silicon, 5×5
 mesh), Ou et al. 45 Gb/s — bracketing LOW and MID.
 
+Citation discipline: the ESP figure is a SECONDARY citation (FlooNoC's
+comparison table). Before any external submission, either replace it with
+the primary ESP publication's own number or keep the transitive citation
+with an explicit "as reported in [FlooNoC]" footnote — do not cite it bare.
+
 ## Die-to-die (package), per link, one direction
 
 | value | system | provenance | notes |
 |---|---|---|---|
-| **12.5 GB/s** (100 Gb/s) | Simba package GRS mesh | same JSSC 2020: "36 dice ... mesh network with 100 Gb/s interconnect in each link direction"; lanes run 11–25 Gb/s at **0.82–1.75 pJ/bit** | silicon-measured D2D on an organic substrate; the pJ/bit range brackets our 5 pJ/word (=0.63 pJ/bit) example as OPTIMISTIC by ~1.3–2.8× |
+| **12.5 GB/s** (100 Gb/s) | Simba package GRS mesh | same JSSC 2020: "36 dice ... mesh network with 100 Gb/s interconnect in each link direction"; lanes run 11–25 Gb/s at **0.82–1.75 pJ/bit** | silicon-measured D2D on an organic substrate. **Adopted**: the die-link default energy is now 10 pJ/word = the midpoint of this measured band (6.6–14 pJ/word), replacing the earlier optimistic 5 pJ/word example |
 
 ## Conversion into the simulator's unit
 

@@ -1,0 +1,86 @@
+# Multi-die variant: 24 dies on a 6x4 package grid, one transformer layer
+# per die. Selected via CIMSIM_FABRIC or passed explicitly to the D2D
+# overlay; the shipped default (mlx300.yaml) stays single-die = D2D-free.
+# Physical fabric of the MLX300-class chip -- the single source of truth for
+# level counts, grid geometry, and per-level link parameters. The CiMLoop arch
+# YAMLs stay the source of the LOGICAL hierarchy (storage levels, spatial
+# fanouts); scripts/fabric.py cross-checks the two and raises on mismatch.
+#
+# Conventions:
+#   levels        top -> bottom. `per_parent` = instances of this level inside
+#                 one parent; `mesh` = the [X, Y] grid they occupy in the parent
+#                 (slots >= per_parent; spares stay empty -- the gray cells in
+#                 the floorplan heatmap).
+#   link          the network connecting this level's instances to their
+#                 parent's hub (so `macro.link` is the die NoC, `die.link` is
+#                 die-to-die). `cimloop_component` marks a link whose energy is
+#                 a calibrated CiMLoop component (re-priced by distance);
+#                 `pj_per_word: 0.0` records honestly that the level is
+#                 currently uncharged.
+#   calibration   the data request (DR-x, see SUMMARY section 7) that turns the
+#                 placeholder into a calibrated value.
+#   bandwidth_words_per_cycle (link)  T2 static-contention input; null = no
+#                 limit (today's default -- setting it activates link_occupancy).
+#   hub_bandwidth_words_per_cycle (level)  T1 storage bandwidth pushed into
+#                 Timeloop (the die's glb); null = no limit. Both are DR-2.
+
+fabric:
+  name: mlx300-multidie48
+  levels:
+  # slot_pitch_um: physical centre-to-centre distance between adjacent slots of
+  # the level's grid, in micrometres. PLATFORM INPUT with example defaults --
+  # nothing consumes it yet; it gives hop counts a declared physical meaning so
+  # ns_per_hop / hop_scale can later be derived instead of hand-filled. The
+  # example values follow the nesting (crossbar 100 um base x each level's mesh
+  # X-extent); the die value is a package-level die-to-die spacing example.
+    - name: package
+      per_parent: 1
+
+    - name: die
+      slot_pitch_um: 25000.0
+      per_parent: 48        # gpt2-medium at the HONEST capacity (2 cells per
+                            # weight): one layer = 1.5 dies, so the feasible
+                            # assignment is TWO dies per layer (attention half
+                            # + FFN half; the FFN half fills its die exactly).
+                            # A CiMLoop run still models ONE die -- the package
+                            # dimension lives in the D2D overlay only.
+      mesh: [6, 8]
+      # D2D: routed like the on-die NoC, one level up. pj_per_word = 10.0 is
+      # the midpoint of the MEASURED band of Simba's package GRS links
+      # (0.82-1.75 pJ/bit = 6.6-14 pJ / 8-bit word; Zimmer et al., JSSC 2020
+      # -- see analysis/ANCHORS.md). Replaced the earlier 5 pJ/word example,
+      # which that measurement showed to be optimistic by 1.3-2.8x.
+      # reference_hops: how many traversals the flat CiMLoop charge already
+      # covers -- the overlay bills only the SURPLUS beyond it (replace, never
+      # add; a single die or adjacent dies add zero).
+      link: {name: "die<->die", topology: mesh, params: {routing: xy, hub: center},
+             ns_per_hop: 20.0, pj_per_word: 10.0, reference_hops: 1.0,
+             calibration: DR-3}
+
+    - name: macro
+      slot_pitch_um: 600.0
+      per_parent: 8
+      mesh: [3, 3]
+      link: {name: "glb<->macro", topology: star, params: {}, cimloop_component: router,
+             reference_hops: 1.0, ns_per_hop: 5.0, calibration: DR-4}
+
+    - name: core
+      slot_pitch_um: 300.0
+      per_parent: 4
+      mesh: [2, 2]
+      link: {name: "macro<->core", topology: star, params: {}, ns_per_hop: 2.0, pj_per_word: 0.0,
+             calibration: DR-1}
+
+    - name: crossbar
+      slot_pitch_um: 100.0
+      per_parent: 8
+      mesh: [3, 3]
+      link: {name: "core<->crossbar", topology: star, params: {}, ns_per_hop: 1.0, pj_per_word: 0.0,
+             calibration: DR-1}
+
+  # the CiMLoop configs this fabric must stay consistent with
+  cimloop:
+    system: ws_chip2chip_link
+    chip: mlx_die
+    tile: mlx_core
+    macro: wan_nature_2022

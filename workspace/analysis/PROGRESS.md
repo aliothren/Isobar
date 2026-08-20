@@ -103,7 +103,7 @@ changes when that stops being true.
 | macro network (priced) | grid vs line arrangement; full setting sweep | 1.5× – 3.0× | router = 0.65% of a block | **≤ 0.34%** | `analyze_position_aware.py` |
 | crossbar map (unpriced level) | corner vs centre position | 1.50× (2×4 die layout; 3.62× on the 3×3 variant) | level carries no energy price | ranking only (honest note: not in totals) | `crossbar_comm.py` |
 | core regions (unpriced level) | which cores six matmuls occupy | 17.8% | same | ranking only | `analyze_region_locality.py` |
-| die-to-die (priced) | worst vs best layer→die ordering | +217.6 µJ per pass | vs 287.5 mJ total | **+0.08%** | `analyze_d2d.py` |
+| die-to-die (priced) | worst vs best unit→die ordering (feasible 48-die config, 2 dies/layer) | +1.37 mJ per pass | vs 287.5 mJ total | **+0.48%** | `analyze_d2d.py` |
 
 ![per-crossbar relative cost map](crossbar_comm_heatmap_2x4.png)
 
@@ -128,7 +128,7 @@ three orders of magnitude), so no reordering of dies can move much energy.
   grows 0.34% → 3.4% of a block — still single digits.
 - Charge cross-die transfers for **every** hop (instead of only hops beyond
   the first, which the flat port already bills): the worst ordering costs
-  0.28 mJ = **0.097%** of a pass.
+  1.61 mJ = **0.56%** of a pass.
 
 The conclusion survives both.
 
@@ -264,14 +264,20 @@ anchored grid covers scheme × buffer position, not region assignment.
 
 ### 5.3 Die-to-die: safe by a wide margin (at this model's granularity)
 
-The layer hand-off is 0.52M words. Even in the most demanding operating mode
-(pipelined serving, every boundary transferring each beat), throughput
-degrades only below **0.02–0.7 GB/s** depending on the layer ordering —
-while the one silicon-measured die-to-die anchor we have (Simba's package
-mesh: 100 Gb/s = 12.5 GB/s per link direction, at 0.82–1.75 pJ/bit; see
-[ANCHORS.md](ANCHORS.md)) sits at **18× to 570×** those thresholds. Its
-measured pJ/bit also brackets our 5 pJ/word example as optimistic by
-~1.3–2.8×, which strengthens rather than weakens the margin conclusion. In single-request operation the hand-off (2.97 ms at the
+Every hand-off is 0.52M words (feasible 48-die configuration: two dies per
+layer — attention half + FFN half — so 47 hand-offs per pass). Even in the
+most demanding operating mode (pipelined serving, every boundary
+transferring each beat, stage 7.9 ms), throughput degrades only below
+**0.04–0.35 GB/s** for routed-mesh orderings — **35× to 280×** under the one
+silicon-measured die-to-die anchor we have (Simba's package mesh: 100 Gb/s
+= 12.5 GB/s per link direction, at 0.82–1.75 pJ/bit; see
+[ANCHORS.md](ANCHORS.md)). One exception at this granularity: a single
+shared-interposer **bus** degrades below **2.8 GB/s**, only 4.4× under the
+anchor — shared-medium packaging is not comfortably provisioned even at
+355M. Its
+measured pJ/bit band (6.6–14 pJ/word) is now also the source of our default
+per-word energy (10 pJ, the band midpoint) — the earlier 5 pJ example it
+replaced was optimistic by 1.3–2.8×. In single-request operation the hand-off (2.97 ms at the
 example link) hides entirely behind the stack's 249 ms of compute.
 
 ![single-pass vs pipelined: when the package network can matter](d2d_regimes.png)
@@ -301,7 +307,7 @@ weights):
 | granularity | volume ÷ capacity | status |
 |---|---|---|
 | largest single operator (ffn1) | **0.50** | safe — this is what today's runs use |
-| one whole layer (6 operators) | **1.50** | already past the flip: a layer needs 2 dies, so the "one layer per die" example is a capacity idealisation (registered as an open fix) |
+| one whole layer (6 operators) | **1.50** | already past the flip at layer granularity: the feasible configuration places TWO dies per layer (attention half + FFN half, the latter filling its die exactly) — now the configuration all 355M die-level results use |
 
 **The flip, measured.** A probe operator sized at 4 dies of weights (a
 2.7B-class FFN shape) was run with the new multi-die spatial split (weights
@@ -310,9 +316,9 @@ stay resident, the operator spans 4 dies):
 | where the 4 dies sit on the package | busiest package wire | avg hops | extra energy | op latency @0.18 GB/s | @2.8 GB/s | @45 GB/s |
 |---|---|---|---|---|---|---|
 | clustered at the attach point | 1.0× | 0.75 | 0 mJ | 81.6 ms | 5.1 ms | 0.65 ms |
-| one row | 2.0× | 3.00 | 0.58 mJ | 163.2 ms | 10.2 ms | 0.65 ms |
-| one column | 4.0× | 3.00 | 0.58 mJ | 326.3 ms | 20.4 ms | 1.27 ms |
-| four corners | 2.0× | 4.00 | 0.87 mJ | 163.2 ms | 10.2 ms | 0.65 ms |
+| one row | 2.0× | 3.00 | 1.15 mJ | 163.2 ms | 10.2 ms | 0.65 ms |
+| one column | 4.0× | 3.00 | 1.15 mJ | 326.3 ms | 20.4 ms | 1.27 ms |
+| four corners | 2.0× | 4.00 | 1.73 mJ | 163.2 ms | 10.2 ms | 0.65 ms |
 
 Past the flip, everything changes character (`analyze_multidie_placement.py`):
 
@@ -321,10 +327,53 @@ Past the flip, everything changes character (`analyze_multidie_placement.py`):
   whole model's boundary total (12.1M);
 - die placement now moves the **single operator's** latency by 4× — no
   pipelining framing needed;
-- the extra energy (up to 0.87 mJ against the operator's 2.24 mJ of compute)
-  makes die placement an **energy** variable for the first time (+39%);
+- the extra energy (up to 1.73 mJ against the operator's 2.24 mJ of compute,
+  at the measured 10 pJ/word) makes die placement an **energy** variable for
+  the first time (+77%);
 - the bandwidth needed to stay compute-bound rises to ~45 GB/s — on-die
   class, no longer trivially satisfied by real D2D links.
+
+**The flip, completed: a full model past the boundary.** The whole
+2.7B-class model (d=2560, ff=10240, 32 layers) was then simulated end to end
+— the first full model on this platform whose operators span dies (4/2/5/5
+dies for the static operators, by the residency tiler; the power-of-two
+fanout grid needs more dies than raw capacity says, a utilisation loss the
+run charges honestly). At the measured D2D anchor (Simba GRS, 12.5 GB/s):
+
+| die placement of each op's die-set | prefill stack (NoC @ ESP 32 GB/s) | extra D2D energy per pass |
+|---|---|---|
+| clustered at the attach point | 946 ms (1.07×) | **0 mJ** |
+| row-fill (naive sequential) | 1599 ms (**1.82×**) | **792 mJ = +34% of the model's 2297 mJ** |
+| spread | 1510 ms (1.71×) | 829 mJ (+36%) |
+
+Die placement is now a first-order variable on BOTH axes — the +34% energy
+figure is the same decision that was worth +0.15% at tier S. Accounting
+note: the temporal-rewrite mechanism fires zero times in these runs (every
+operator's weights stay resident, verified per mapping); the only write
+charged is the attention K/V programming in the on-chip condition. In the
+**offloaded-decode** condition (attention and its write off chip, on-chip
+side counted) the write shield is gone and die placement moves each token
+**1.10× → 2.08×** (1.43 → 2.70 ms) at the GRS anchor — insensitive to the
+on-die NoC tier, i.e. a pure die-to-die effect. (Caveat: the v1 anchor model
+routes all intra-op flows through the package attach point; an owner-die
+refinement would reduce, not remove, these numbers.)
+
+Value distributions: the tier-L runs use REAL operand histograms extracted
+from facebook/opt-2.7b itself (192 per-layer histograms,
+`extract_opt2p7b_hists.py` — the model whose shapes these runs use), not
+borrowed GPT-2 ones; the substitution moved every energy by ≤1.4% (whole
+stack −1.2%), which also bounds how much the earlier borrowed-distribution
+approximation mattered. The per-crossbar distribution machinery was
+regression-checked after all the recent plumbing: spreads reproduce at
+1.000× / 1.002× / 1.010× / 1.199× (the last vs 1.204× — drift from
+unseeded random CNN sample inputs, not from code).
+
+Scale-study figures: `anchored_sweep.png` (tier S), `scale_tier_probe.png`
+(tier M), `scale_tier_2p7b.png` (tier L), `scale_combined.png` (all three).
+
+![tier M](scale_tier_probe.png)
+![tier L](scale_tier_2p7b.png)
+![layout leverage vs scale](scale_combined.png)
 
 ### 6.2 Ratio two: per-die compute time ÷ hand-off time
 
@@ -370,10 +419,18 @@ Three measured reasons an automatic search is warranted:
 
 ![energy and latency rank the layouts differently](placement_energy_latency.png)
 
-2. **A measured counter-intuitive case.** In decode, the corner buffer
-   position slightly *beats* the centre (15.62 vs 15.70 ms/token): decode
-   only occupies part of the array, and which slots are active couples to
-   where the buffer sits. "Corner is always worse" is false.
+2. **A measured counter-intuitive case — with its survival check.** In
+   decode with attention on chip, the corner buffer position slightly
+   *beats* the centre (15.62 vs 15.70 ms/token): decode only occupies part
+   of the array, and which slots are active couples to where the buffer
+   sits. A dedicated sweep (`analyze_corner_flip.py`) checked whether this
+   reversal flips along the bandwidth axis inside the published range: **it
+   never does** — the sign difference is between *operating conditions*
+   (prefill prefers centre by up to 1.65×; on-chip decode prefers corner by
+   ~0.5%, at every in-band bandwidth), and its magnitudes are so asymmetric
+   that centre wins any joint objective. "Corner is always worse" is false,
+   but the search argument rests on the metric disagreement and the 1.65×
+   lever, not on this reversal.
 
 3. **The synthesis.** Multiplicative effects (§4) landing exactly in the
    plausible-bandwidth zone (§5), with intuition demonstrably failing (this
@@ -396,9 +453,9 @@ Three measured reasons an automatic search is warranted:
 | 3 | die | wiring scheme | stack latency | 1.25–6.70× | below per-scheme threshold (§5.2) | `analyze_contention_system.py` |
 | 4 | die | buffer position | stack latency | 1.64× | same | same |
 | 5 | die | scheme (decode, attention offloaded) | token latency | 1.2–3.0× | write no longer masks | `analyze_offload_contention.py` |
-| 6 | package | layer ordering | energy | ≤+0.08% | operator fits one die | `analyze_d2d.py` |
-| 7 | package | layer ordering | pipelined throughput | 1.8–5.4× | link below 0.02–0.7 GB/s | same |
-| 8 | package | die-set placement of a spanning operator | op latency / energy | 4× / +39% | operator exceeds one die | `analyze_multidie_placement.py` |
+| 6 | package | layer ordering | energy | ≤+0.15% | operator fits one die | `analyze_d2d.py` |
+| 7 | package | unit ordering (48-die config) | pipelined throughput | up to 8× | mesh orderings below 0.04–0.35 GB/s; bus below 2.8 GB/s | same |
+| 8 | package | die-set placement of a spanning operator | op latency / energy | 4× / +77% | operator exceeds one die | `analyze_multidie_placement.py` |
 
 ### 8.2 Assumptions, and which conclusion flips if one fails
 

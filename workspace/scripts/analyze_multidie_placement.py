@@ -26,7 +26,7 @@ from scripts import mlx_system as mlx
 from scripts import placement as pm
 
 BW = [256.0, 4096.0, 65536.0]
-PJ = 5.0e-12                       # die link example default, per word per hop
+PJ = 10.0e-12                      # die link, Simba GRS measured-band midpoint
 
 
 def with_bw(fab, bw):
@@ -75,6 +75,7 @@ def main():
     for bw in BW:
         hdr += f"{f'op lat @{bw:,.0f}':>15}"
     print(hdr)
+    rows = []
     for label, slots4 in PLACES:
         pl = placed(fab, slots4)
         m = ic.build(fab, "die", pl)
@@ -85,16 +86,32 @@ def main():
                f"{max(_loads(flows, with_bw(fab, 256.0), pl).values())/dvol:>12.1f}x"
                f"{sum(hops)/len(hops):>10.2f}"
                f"{surplus*PJ*1e3:>9.2f} mJ")
+        lats = {}
         for bw in BW:
             occ = cc.link_occupancy(flows, with_bw(fab, bw),
                                     res.cycle_seconds, pl)
-            lat = max(comp, occ["serialization_s"])
-            row += f"{lat*1e3:>13.2f} ms"
+            lats[str(int(bw))] = max(comp, occ["serialization_s"])
+            row += f"{lats[str(int(bw))]*1e3:>13.2f} ms"
         print(row)
+        rows.append({"label": label,
+                     "busiest_x": max(_loads(flows, with_bw(fab, 256.0),
+                                             pl).values()) / dvol,
+                     "mean_hops": sum(hops) / len(hops),
+                     "surplus_J": surplus * PJ, "lat_s": lats})
 
     print("\n  reference: the inter-layer boundary lever at the same grid was "
-          "1x vs 2x busiest wire (snake vs sequential), surplus 0-0.22 mJ "
+          "1x vs 2x busiest wire (snake vs sequential), surplus 0-0.44 mJ "
           "per PASS (23 boundaries)")
+
+    import json
+    with open(os.path.join("/home/workspace/analysis",
+                           "multidie_placement.json"), "w") as f:
+        json.dump({"op": {"C": 2048, "M": 16384, "dies": lw.dies_for_op(big)},
+                   "compute_s": comp, "die_edge_words": dvol,
+                   "cycle_s": res.cycle_seconds,
+                   "placements": [{k: v for k, v in r.items()} for r in rows]},
+                  f, indent=1)
+    print("JSON -> multidie_placement.json")
 
 
 def _loads(flows, fab, pl):

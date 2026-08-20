@@ -43,23 +43,31 @@ from scripts import llm_workload as lw
 from scripts import placement as placement_mod
 
 OUT = "/home/workspace/analysis"
-MULTI = "/home/workspace/models/fabric/mlx300_multidie.yaml"
+# Feasible 355M assignment at the honest capacity (2 cells/weight): a layer
+# is 1.5 dies, so each layer occupies TWO dies -- an attention half (qkv +
+# K/V arrays + out_proj) and an FFN half (ffn1 + ffn2, exactly one full die).
+# 48 units chained on a 6x8 package; every hand-off carries one hidden state
+# (S x d_model words), within a layer (attn->ffn) and across layers alike.
+MULTI = "/home/workspace/models/fabric/mlx300_multidie48.yaml"
+UNITS = 48
 CYC = 1.449e-6
 S = 512
 BW_SWEEP = [float(2 ** k) for k in range(0, 15)]
 BW_POINT = 256.0
 CFG = lw.GptConfig()
 WORDS = S * CFG.d_model
+UCFG = lw.GptConfig(d_model=CFG.d_model, n_heads=CFG.n_heads, d_ff=CFG.d_ff,
+                    n_layers=UNITS, name="units48")   # 48-unit hand-off chain
 
 
 def assignments(fab):
     mx, _ = fab.level("die").mesh
-    n = CFG.n_layers
+    n = UNITS
     snake = []
     for L in range(n):
         row, col = divmod(L, mx)
         snake.append(row * mx + (mx - 1 - col if row % 2 else col))
-    adv = [L // 2 if L % 2 == 0 else 23 - L // 2 for L in range(n)]
+    adv = [L // 2 if L % 2 == 0 else (n - 1) - L // 2 for L in range(n)]
     return [("snake", snake), ("sequential rows", list(range(n))),
             ("far pairs (adversarial)", adv)]
 
@@ -84,7 +92,14 @@ def main():
         sysdata = json.load(f)
     sf = sysdata["phases"]["prefill"]["stall_free_s"]
     comp = sysdata["phases"]["prefill"]["compute_s"]
-    stage = sf / CFG.n_layers
+    # per-unit pipeline stage = the slower HALF of a layer (attention half:
+    # qkv + qk^t + av + out_proj incl. the K/V write; ffn half: ffn1 + ffn2)
+    perh = next(iter(sysdata["phases"]["prefill"]["per_op"].values()))
+    attn_h = sum(o["compute_s"] + o["write_s"] for o in perh
+                 if o["name"] in ("qkv_proj", "qk^t", "av", "out_proj"))
+    ffn_h = sum(o["compute_s"] + o["write_s"] for o in perh
+                if o["name"] in ("ffn1", "ffn2"))
+    stage = max(attn_h, ffn_h)
     base = fabric_mod.from_yaml(MULTI)
     print(f"{base.level('die').per_parent} dies on {base.level('die').mesh}; "
           f"prefill stall-free {sf*1e3:.2f} ms, one stage {stage*1e3:.2f} ms\n")
@@ -95,7 +110,7 @@ def main():
     fabM = with_link(base, "mesh", {"routing": "xy", "hub": "center"}, BW_POINT)
     pl = placement_mod.sequential_fill(fabM)
     for label, asg in assignments(fabM):
-        d = lw.die_to_die_activation(CFG, S, "prefill", fabric=fabM,
+        d = lw.die_to_die_activation(UCFG, S, "prefill", fabric=fabM,
                                      assignment=asg)
         occ = cc.link_occupancy(d["flows"], fabM, CYC, pl)
         busiest = occ["bottleneck"]["volume"] / WORDS if occ["bottleneck"] else 0
@@ -109,7 +124,7 @@ def main():
 
     # ---------------- two modes over bandwidth
     def single_pass_mult(fab, asg):
-        d = lw.die_to_die_activation(CFG, S, "prefill", fabric=fab,
+        d = lw.die_to_die_activation(UCFG, S, "prefill", fabric=fab,
                                      assignment=asg)
         occ = cc.link_occupancy(d["flows"], fab, CYC,
                                 placement_mod.sequential_fill(fab))
@@ -117,14 +132,14 @@ def main():
         return (wr + max(comp, occ["serialization_s"]) + (sf - wr - comp)) / sf
 
     def pipe_mult(fab, asg):
-        d = lw.die_pipeline_interval(CFG, S, "prefill", stage, fabric=fab,
+        d = lw.die_pipeline_interval(UCFG, S, "prefill", stage, fabric=fab,
                                      assignment=asg, cycle_seconds=CYC)
         return d["interval_s"] / stage
 
     VARIANTS = [(lbl, "mesh", {"routing": "xy", "hub": "center"}, asg)
                 for lbl, asg in assignments(base)]
     VARIANTS.append(("bus (shared interposer)", "bus", {"driver": "center"},
-                     list(range(CFG.n_layers))))
+                     list(range(UNITS))))
 
     single, pipe = {}, {}
     for lbl, topo, params, asg in VARIANTS:
@@ -215,9 +230,10 @@ def main():
     print(f"PNG -> {p2}")
 
     # ---------------- figure 3: segment maps per assignment
-    fig, axes = plt.subplots(1, 3, figsize=(15.5, 4.2))
-    for ax, (label, asg) in zip(axes, assignments(fabM)):
-        d = lw.die_to_die_activation(CFG, S, "prefill", fabric=fabM,
+    pair = [assignments(fabM)[0], assignments(fabM)[2]]   # snake vs adversarial
+    fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.6))
+    for ax, (label, asg) in zip(axes, pair):
+        d = lw.die_to_die_activation(UCFG, S, "prefill", fabric=fabM,
                                      assignment=asg)
         occ = cc.link_occupancy(d["flows"], fabM, CYC, pl)
         loads = {e["resource"]: e["volume"] for e in occ["per_link"]}
@@ -231,12 +247,12 @@ def main():
                     color=plt.cm.YlOrRd(0.25 + 0.7 * v / peak),
                     solid_capstyle="round", zorder=1)
             ax.text((pp[0] + qq[0]) / 2, (pp[1] + qq[1]) / 2,
-                    f"{v/WORDS:.0f}", fontsize=7.5, ha="center", va="center",
+                    f"{v/WORDS:.0f}", fontsize=9, ha="center", va="center",
                     zorder=3, bbox=dict(fc="white", ec="none", alpha=0.85,
                                         pad=0.1))
         for i, sl in enumerate(pl.slots["die"]):
             ax.plot(sl[0], sl[1], "s", ms=15, mfc="#dfe6ee", mec="k", zorder=2)
-            ax.text(sl[0], sl[1], f"{asg.index(i)}", fontsize=6.5, ha="center",
+            ax.text(sl[0], sl[1], f"{asg.index(i)}", fontsize=7, ha="center",
                     va="center", zorder=4)
         busiest = peak / WORDS
         ax.set_title(f"{label}\nbusiest wire: {busiest:.0f} boundaries "

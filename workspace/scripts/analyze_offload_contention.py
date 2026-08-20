@@ -165,11 +165,22 @@ def make_figure(sysd, out):
     # ---- (3) pipelined throughput at 64 w/c
     ax = axes[2]
     CYC, WORDS = 1.449e-6, 512 * 1024
-    stage_A = pre_A["stall_free_s"] / N_LAYERS
-    stage_B = out["d2d_prefill_B"]["stage_B_s"]
+    # FEASIBLE 48-die configuration (two dies per layer): stage = the slower
+    # half-layer; busiest-wire integers from the 6x8 chain (snake 1,
+    # sequential 2, far pairs 8, bus 47). Read at a LOW example input
+    # (64 w/c ~ 0.044 GB/s) -- measured D2D links sit two orders higher, so
+    # this panel illustrates the mechanism, not an expected operating point.
+    perh = pre_A["per_op"]["mesh, glb centre"]
+    attn_h = sum(o["compute_s"] + o["write_s"] for o in perh
+                 if o["name"] in ("qkv_proj", "qk^t", "av", "out_proj"))
+    ffn_h = sum(o["compute_s"] + o["write_s"] for o in perh
+                if o["name"] in ("ffn1", "ffn2"))
+    stage_A = max(attn_h, ffn_h)
+    stage_B = max(attn_h - sum(o["write_s"] + o["compute_s"] for o in perh
+                               if o["name"] in ("qk^t", "av")), ffn_h)
     labels3 = ["ideal\nnetwork", "snake", "sequential", "far pairs\n(worst)",
                "bus"]
-    busiest = [0, 1, 2, 6, 23]
+    busiest = [0, 1, 2, 8, 47]
     def thr(stage, b):
         net = b * WORDS / 64.0 * CYC
         return 1.0 / max(stage, net)
@@ -188,7 +199,7 @@ def make_figure(sysd, out):
                 ha="center", fontsize=8.5, fontweight="bold",
                 color="#b33f2b" if gain < 1 else "#1c6b60")
     ax.set_xticks(x3); ax.set_xticklabels(labels3, fontsize=8.5)
-    ax.set_ylabel("pipelined throughput (requests/s), die links 64 w/c")
+    ax.set_ylabel("pipelined throughput (requests/s)\n@64 w/c EXAMPLE input (48-die config)")
     ax.set_title("The offload dividend (+55%) is paid out\n"
                  "only where the package network is not the bottleneck",
                  fontsize=10)

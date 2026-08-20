@@ -41,7 +41,8 @@ from scripts import crossbar_value as cvmod
 # means pointing at its workload. Static (projection/FFN) and dynamic (attention)
 # ops draw from matching layer types so their value distributions differ.
 DEFAULT_HIST_SOURCE = "gpt2_medium"
-_HIST_TYPES = {"static": ("Conv1D", "Linear"), "dynamic": ("GPT2Attention",)}
+_HIST_TYPES = {"static": ("Conv1D", "Linear"),
+               "dynamic": ("GPT2Attention", "OPTAttention")}
 
 # Rough ReRAM SET (program) energy per cell for the wan device
 # (~ V^2/R_on * t_set = 1.75^2 / 25e4 * 8520e-9 ~= 1e-10 J/cell).
@@ -192,31 +193,62 @@ def _die_tiling(c_res: int, m_res: int):
     """Closed-form spatial tiling of one die for a C_res x M_res weight slice.
 
     Rows are C-only (256/array); columns hold 256//CELLS_PER_WEIGHT = 128
-    weights of M per array (the other half is the weight-slice dim Y). The
-    fanout menu is macro 8 x core 4 x crossbar 8 = 256 array tiles. Returns
-    per-level (C, M) spatial factors covering ceil(C/256) x ceil(M/128) tiles
-    exactly, or None if the slice does not fit. Exists because the arch's
+    weights of M per array. The fanout menu is macro 8 x core 4 x crossbar 8
+    = 256 array tiles, all powers of two -- so a non-power-of-two slice
+    (e.g. d=2560 shapes) must OVER-allocate: the per-level spatial factors
+    must divide the slice dims, cover them within array capacity, and fit the
+    fanouts jointly. Returns [(C_f, M_f) per level] minimising wasted tiles,
+    or None if no allocation exists (then the op needs more dies than raw
+    capacity says -- utilisation loss from the power-of-two grid, a real
+    effect the capacity ceiling alone hides). Exists because the arch's
     greedy M-first maximize_dims can starve C and silently fall back to
     temporal weight tiling (= phantom reload) even for shapes that fit."""
-    cT = -(-c_res // 256)
-    mT = -(-m_res // (256 // CELLS_PER_WEIGHT))
-    if cT * mT > 256:
-        return None
     fan = [8, 4, 8]                                  # macro, core, crossbar
+
     def _divs(n):
         return [d for d in range(1, n + 1) if n % d == 0]
+
+    best = None
     for c0 in _divs(fan[0]):
         for c1 in _divs(fan[1]):
             for c2 in _divs(fan[2]):
-                if c0 * c1 * c2 != cT:
+                pc = c0 * c1 * c2
+                if c_res % pc or c_res // pc > 256:
                     continue
-                m_room = [fan[0] // c0, fan[1] // c1, fan[2] // c2]
-                for m0 in _divs(m_room[0]):
-                    for m1 in _divs(m_room[1]):
-                        for m2 in _divs(m_room[2]):
-                            if m0 * m1 * m2 == mT:
-                                return [(c0, m0), (c1, m1), (c2, m2)]
-    return None
+                for m0 in _divs(fan[0] // c0):
+                    for m1 in _divs(fan[1] // c1):
+                        for m2 in _divs(fan[2] // c2):
+                            pm = m0 * m1 * m2
+                            if m_res % pm:
+                                continue
+                            if m_res // pm > 256 // CELLS_PER_WEIGHT:
+                                continue
+                            waste = pc * pm           # tiles used; fewer = better
+                            cand = (waste, [(c0, m0), (c1, m1), (c2, m2)])
+                            if best is None or cand[0] < best[0]:
+                                best = cand
+    return best[1] if best else None
+
+
+def plan_spatial(op: Op):
+    """How many dies the op ACTUALLY needs under the residency constraint,
+    with the split dim and per-die tiling. May exceed dies_for_op (the raw
+    capacity ceiling): the power-of-two fanout grid cannot always realise a
+    non-power-of-two slice even when the cells would fit. Returns
+    (n_dies, split_dim_or_None, tiles) or raises if nothing up to the
+    package size works."""
+    lo = dies_for_op(op)
+    for n in range(lo, 25):
+        for dim in ("M", "C") if n > 1 else (None,):
+            if dim is not None and getattr(op, dim) % n:
+                continue
+            c = op.C // n if dim == "C" else op.C
+            m = op.M // n if dim == "M" else op.M
+            t = _die_tiling(c, m)
+            if t is not None:
+                return n, dim, t
+    raise ValueError(f"{op.name}: no residency tiling up to 24 dies "
+                     f"(C={op.C}, M={op.M})")
 
 
 def _temporal_weight_loads(mapping_text: str) -> int:
@@ -249,6 +281,18 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
               + distance propagation (hops x hop_latency, the position-aware term)
     """
     n_dies_op = dies_for_op(op)
+    spatial_plan = None
+    if overcapacity == "spatial_multi_die" and op.kind == "static":
+        # The gate must use the TILING planner, not the raw capacity ceiling:
+        # a fitting-but-untilable shape (e.g. C=2560 on the power-of-two
+        # fanout grid) would otherwise fall through to the greedy default and
+        # reload silently.
+        spatial_plan = plan_spatial(op)
+        if spatial_plan[0] != n_dies_op:
+            print(f"    [O10 spatial: capacity says {n_dies_op} die(s) but "
+                  f"the power-of-two fanout grid needs {spatial_plan[0]} -- "
+                  "utilisation loss, charged honestly]", flush=True)
+        n_dies_op = spatial_plan[0]
     rewrite = None
     if n_dies_op > 1:
         if overcapacity == "reject":
@@ -282,33 +326,19 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
 
     def callfunc(spec):
         mlx.mlx_die_callfunc(spec)                  # hierarchy meshX
-        if n_dies_op > 1 and overcapacity == "spatial_multi_die":
+        if spatial_plan is not None:
+            # Pin the whole per-die C/M tiling closed-form (chosen by the
+            # planner above -- M-split preferred: input multicast across dies
+            # beats a cross-die partial-sum reduction). We must not leave
+            # this to the arch's greedy M-first maximize_dims: it can starve
+            # C and dump the remainder into glb's temporal sink -- the
+            # phantom reload this policy exists to eliminate.
+            _n, _dim, _tiles = spatial_plan
             _chip = spec.architecture.find("chip_in_system")
-            _chip.spatial.meshX = n_dies_op
-            # Choose the die-split dim by TILING FEASIBILITY (prefer M: input
-            # multicast across dies beats cross-die partial-sum reduction),
-            # then pin the whole per-die C/M tiling closed-form. We must not
-            # leave this to the arch's greedy M-first maximize_dims: it can
-            # starve C and dump the remainder into glb's temporal sink --
-            # the phantom reload this policy exists to eliminate.
-            _plan = None
-            for _dim in ("M", "C"):
-                _sz = getattr(op, _dim)
-                if _sz % n_dies_op:
-                    continue
-                _c = op.C // n_dies_op if _dim == "C" else op.C
-                _m = op.M // n_dies_op if _dim == "M" else op.M
-                _t = _die_tiling(_c, _m)
-                if _t is not None:
-                    _plan = (_dim, _t)
-                    break
-            if _plan is None:
-                raise ValueError(
-                    f"{op.name}: no exact spatial tiling across "
-                    f"{n_dies_op} dies (C={op.C}, M={op.M})")
-            _dim, _tiles = _plan
-            _chip.constraints.spatial.factors.append(
-                f'"{_dim}={n_dies_op}"')
+            if _n > 1:
+                _chip.spatial.meshX = _n
+            if _dim is not None:
+                _chip.constraints.spatial.factors.append(f'"{_dim}={_n}"')
             for _cname, (_cf, _mf) in zip(
                     ("macro_in_die", "core_in_macro", "crossbar_in_core"),
                     _tiles):
@@ -340,7 +370,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
                           callfunc=callfunc, place_fn=place_fn, placement=pl)
     res = r["result"]
     write_J = op.write_cells * e_write if op.kind == "dynamic" else 0.0
-    if n_dies_op > 1 and overcapacity == "spatial_multi_die":
+    if spatial_plan is not None:
         import os as _os
         _mp = _os.path.join(res.output_dir, "timeloop-mapper.map.txt")
         _txt = open(_mp).read() if _os.path.exists(_mp) else ""
@@ -348,7 +378,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
             raise ValueError(
                 f"{op.name}: spatial_multi_die mapping still temporally "
                 "re-tiles the weights -- residency constraint did not hold")
-        if "inter_chip_in_system_spatial" not in _txt:
+        if n_dies_op > 1 and "inter_chip_in_system_spatial" not in _txt:
             raise ValueError(
                 f"{op.name}: mapper did not use the {n_dies_op}-die spatial "
                 "fanout")

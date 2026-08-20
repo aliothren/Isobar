@@ -42,15 +42,16 @@ fabric:
                             # CiMLoop run still models ONE die -- the package
                             # dimension lives in the D2D overlay only
       mesh: [6, 4]
-      # D2D: routed like the on-die NoC, one level up. pj_per_word is the
-      # EXAMPLE default for one die-boundary traversal (UCIe-class public band
-      # is ~0.25-1 pJ/bit = 2-8 pJ / 8-bit word); the run-extracted
-      # chip2chip_link unit energy takes precedence when available.
+      # D2D: routed like the on-die NoC, one level up. pj_per_word = 10.0 is
+      # the midpoint of the MEASURED band of Simba's package GRS links
+      # (0.82-1.75 pJ/bit = 6.6-14 pJ / 8-bit word; Zimmer et al., JSSC 2020
+      # -- see analysis/ANCHORS.md). Replaced the earlier 5 pJ/word example,
+      # which that measurement showed to be optimistic by 1.3-2.8x.
       # reference_hops: how many traversals the flat CiMLoop charge already
       # covers -- the overlay bills only the SURPLUS beyond it (replace, never
       # add; a single die or adjacent dies add zero).
       link: {name: "die<->die", topology: mesh, params: {routing: xy, hub: center},
-             ns_per_hop: 20.0, pj_per_word: 5.0, reference_hops: 1.0,
+             ns_per_hop: 20.0, pj_per_word: 10.0, reference_hops: 1.0,
              calibration: DR-3}
 
     - name: macro

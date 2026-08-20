@@ -56,10 +56,10 @@ accounted-by columns):
    now built and measured (§2.3.1): under shared interconnects the whole-stack
    prefill differs 5.4× across schemes and 1.6× with the glb position, while
    decode caps at 1.18× — **placement's leverage is in latency, not energy**.
-   The same holds one level up (W3): pipelined, the layer→die assignment spans
-   5.4× in throughput at +0.08% energy. **Offload amplifies rather than
+   The same holds one level up (W3, 48-die feasible configuration): pipelined,
+   the unit→die assignment spans up to 8× in throughput at +0.48% energy. **Offload amplifies rather than
    exempts all of this**: removing the write shield and the per-stage compute
-   margin lets contention reach decode for the first time (3×), and the +55%
+   margin lets contention reach decode for the first time (3×), and the +53%
    throughput dividend is collected only where the package network is not the
    bottleneck (§2.3.1d; summary figures: the two placement_impact panels).
 3. **Validation by composition**: that ReRAM writes are expensive is common
@@ -315,12 +315,12 @@ pipelined at 64 w/c: even snake degrades, 1.41×; sequential 2.81×; adversarial
 8.44×); on-die contention multipliers stay near A (2.59×–7.02×). **Decode:
 the write shield (90%) leaves with the attention, and on-die contention
 reaches decode for the first time** — mesh 1.65×, h-tree/bus 2.96× (versus
-1.06×/1.18× under A); D2D becomes visible too (1.14× sequential at 64 w/c).
+1.06×/1.18× under A); D2D becomes visible too (sequential ~2.3× at the 64 w/c example input; still free at the measured anchor).
 **Offload is a throughput win that AMPLIFIES the communication problem — the
 compute it removes is exactly where the transfers used to hide.**
 Three panels: prefill drops everywhere with the spread intact; in decode the
 write block (tan) is the shield hiding the network — remove it and the 3×
-surfaces; the +55% pipelined dividend is paid out only where the package
+surfaces; the +53% pipelined dividend is paid out only where the package
 network is not the bottleneck.
 ![offload contention](offload_contention.png)
 
@@ -329,8 +329,8 @@ stands alone — they are not a comparison): three panels = within the die (glb
 position → one request's latency; decode is immune to that choice) / across
 dies (layer→die assignment → pipelined throughput) / the same choices priced
 in energy (full scale, no axis zoom — essentially flat). Attention on chip:
-floorplan 1.64×, assignment 5.4×, energy +0.08%; attention offloaded:
-floorplan 1.71×, assignment 6.0×, energy +0.11%.
+floorplan 1.64×, assignment 5.4×, energy +0.15%; attention offloaded:
+floorplan 1.71×, assignment up to 8× (48-die feasible configuration, 64 w/c example input).
 ![placement impact, attention on chip](placement_impact_onchip.png)
 ![placement impact, attention offloaded](placement_impact_offload.png)
 
@@ -548,10 +548,12 @@ appears once attention is offloaded — read ∝ G² (dominant), write ∝ G:
 ### 3.5 Die-to-die (D2D, W3) — the same registry, one level up
 
 The die level is no longer degenerate: the multi-die variant
-[`mlx300_multidie.yaml`](../models/fabric/mlx300_multidie.yaml) (24 dies on a
-6×4 package grid, one layer per die) gives the die link a scheme (mesh / star /
-bus, the same registry), a bandwidth, a per-word energy (example 5 pJ, inside
-the UCIe-class public band of 2–8 pJ/word), and `reference_hops`. All three
+[`mlx300_multidie48.yaml`](../models/fabric/mlx300_multidie48.yaml) (48 dies on
+a 6×8 package grid; at the honest capacity a layer is 1.5 dies, so the
+feasible assignment is TWO dies per layer — attention half + FFN half, the
+latter filling its die exactly) gives the die link a scheme (mesh / star /
+bus, the same registry), a bandwidth, a per-word energy (10 pJ — the midpoint of Simba GRS's
+measured 6.6–14 pJ/word band, see ANCHORS.md), and `reference_hops`. All three
 channels are reused across the boundary: distance via `ic.hops(a,b)`
 (node→node — star routes through the central switch on both spokes, mesh
 XY-routes), contention via the **same** `link_occupancy` (flows tagged
@@ -566,37 +568,38 @@ correct way to read every D2D number (source
 [`analyze_d2d.py`](../scripts/analyze_d2d.py), system denominators from
 contention_system.json):
 
-- **Single pass** (one request walks the 24 dies in series): each boundary
-  transfer (2.97 ms) hides behind the WHOLE stack's compute (249 ms), so at
-  any sane link speed the total never moves. The honest statement is
-  **invisible in this mode** — a chart that showed a difference here would be
-  the dishonest one.
+- **Single pass** (one request walks the 48 units in series): each hand-off
+  transfer (2.97 ms @256 w/c) hides behind the WHOLE stack's compute
+  (249 ms), so at any sane link speed the total never moves. The honest
+  statement is **invisible in this mode** — a chart that showed a difference
+  here would be the dishonest one.
 - **Pipelined** (the real serving mode: different microbatches on different
-  dies, every boundary transferring concurrently each beat): the transfer
-  races ONE stage's compute (13.1 ms) and the **busiest die wire sets the
-  beat** — the assignment becomes a direct throughput multiplier.
+  dies, every hand-off transferring concurrently each beat): the transfer
+  races the SLOWER HALF-LAYER's compute (7.92 ms) and the **busiest die wire
+  sets the beat** — the assignment becomes a direct throughput multiplier.
 
 **The whole account (one prefill pass, full stack ×24 layers, scenario A;
 die bandwidth at the example 256 w/c):**
 
 | layer→die assignment | total energy (mJ) | total latency, single pass (ms) | throughput, pipelined @256 (req/s) | @64 |
 |---|---|---|---|---|
-| **snake** | **287.490** | 314.65 | **76.3** | **76.3** |
-| sequential rows | 287.529 | 314.65 | 76.3 | 42.1 |
-| far pairs (adversarial) | 287.707 | 314.65 | 56.2 | 14.0 |
-| bus (sequential) | 287.529 | 314.65 | 14.7 | 3.7 |
+| **snake** | **287.490** | 314.65 | **126.3** | **84.3** |
+| ideal network | — | 314.65 | 126.3 | 126.3 |
+| sequential rows | 287.674 | 314.65 | 126.3 | 42.1 |
+| far pairs (adversarial) | 288.858 | 314.65 | 42.1 | 10.5 |
+| bus (sequential) | 287.674 | 314.65 | 7.2 | 1.8 |
 
 Read the three columns together: **energy barely moves** (worst case
-+0.22 mJ = +0.08% — the extra traversals billed at 5 pJ/word; the replace rule
++1.37 mJ = +0.48% — the extra traversals billed at the measured 10 pJ/word; the replace rule
 charges only the increment beyond the flat port, and the bus row is
 understated per O8); **single-pass latency does not move at all**;
 **throughput moves a lot** — at 64 w/c sequential is 45% slower than snake,
 adversarial keeps 18%, bus keeps 5%. **The D2D layout is a throughput
 problem, not an energy or single-request-latency problem.** The mechanism:
-the busiest die wire carries 1/2/6/23 boundaries (snake / sequential /
+the busiest die wire carries 1/2/8/47 hand-offs (snake / sequential /
 adversarial / bus) — that integer multiplies the pipelined beat; the
 bandwidth below which throughput suffers spans three octaves with the
-assignment (snake 32 w/c, sequential 64, adversarial 256, bus 1,024). Decode
+assignment (snake 64 w/c, sequential 128, adversarial 512, bus 4,096). Decode
 carries d_model words per boundary and is untouchable in either mode (the
 write's 90% shields it).
 
