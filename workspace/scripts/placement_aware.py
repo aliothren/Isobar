@@ -296,11 +296,15 @@ def position_aware_cost(
         lvl = comp_level.get(name)
         if lvl is None:
             return hops_fn(place_fn(fanout))
+        # stats fanouts are system-wide; a multi-die run (chip meshX > 1)
+        # multiplies every on-die fanout by the die count -- normalize per die
+        n_chips = levels.get("chip2chip_link", {}).get("fanout", 1) or 1
+        fanout = fanout // n_chips or fanout
         slots = placement.slots[lvl]
         if len(slots) != fanout:
             raise ValueError(
-                f"{name}: stats fanout {fanout} != {lvl} slots {len(slots)} -- "
-                "fabric config and run diverged")
+                f"{name}: per-die stats fanout {fanout} != {lvl} slots "
+                f"{len(slots)} -- fabric config and run diverged")
         from scripts import interconnect as ic_mod
         return ic_mod.build(fabric, lvl, placement).mean_hops()
 

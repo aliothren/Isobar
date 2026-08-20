@@ -151,9 +151,13 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
         ts = traffic.extract(output_dir, fab, stats_text=txt)
         ev = ts.edge_volumes()
         shares = ts.leaf_shares()
-        f_m, f_c, f_x = ts.active_fanouts()
+        fanouts = ts.active_fanouts()
+        f_d = fanouts[0] if len(fanouts) == 4 else 1     # op spans f_d dies
+        f_m, f_c, f_x = fanouts[-3:]
         vol_edge = {lv: ev[lv]["in"] + ev[lv]["out"]
                     for lv in (lvl_m.name, lvl_c.name, lvl_x.name)}
+        if len(fanouts) == 4:
+            vol_edge["die"] = ev["die"]["in"] + ev["die"]["out"]
     elif model == "uniform":
         in_per_xb = cbs._per_tensor_volume(txt, "row_drivers") / nX
         out_per_xb = cbs._per_tensor_volume(txt, "adc") / nX
@@ -181,6 +185,23 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
 
     flows = []
     per_xb = np.zeros(nX)
+
+    # Intra-op die-level flows (spatial_multi_die): the op's slices live on
+    # f_d dies; each die's edge carries its unique input slice down and its
+    # (un-merged) outputs up, exactly like every tree level below -- the v1
+    # anchor is the die scheme's hub (the package attach point; an
+    # output-owner-die refinement is a follow-up). The on-die tree flows
+    # below describe ONE die (the dies are identical by construction).
+    die_lv = fab.level("die")
+    if model == "structured" and "die" in [getattr(sp, "level", None)
+                                           for sp in ts.splits]:
+        ic_die = ic_mod.build(fab, "die", pl)
+        for d in range(die_lv.per_parent):
+            d_on = d < f_d
+            flows.append({"level": die_lv.link.name, "level_name": "die",
+                          "node": d, "src": "package", "dst": f"die{d}",
+                          "volume": vol_edge["die"] if d_on else 0.0,
+                          "distance": ic_die.hops(ic_mod.HUB, d)})
 
     gid = 0
     for m in range(nM):

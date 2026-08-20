@@ -85,11 +85,14 @@ def hierarchy(output_dir):
     levels = pa.perceive(stats_path)
     def fanout(name):
         return levels.get(name, {}).get("fanout", 0)
-    n_macros = fanout(LEVEL_MARKERS["macro"]) or 1
-    n_cores = fanout(LEVEL_MARKERS["core"]) or 1
-    n_crossbars = fanout(LEVEL_MARKERS["crossbar"]) or 1
+    # counts are reported system-wide; normalize to PER DIE (a multi-die run,
+    # chip_in_system.meshX > 1, multiplies every on-die fanout by n_chips)
+    n_chips = fanout("chip2chip_link") or 1
+    n_macros = (fanout(LEVEL_MARKERS["macro"]) or 1) // n_chips or 1
+    n_cores = (fanout(LEVEL_MARKERS["core"]) or 1) // n_chips or 1
+    n_crossbars = (fanout(LEVEL_MARKERS["crossbar"]) or 1) // n_chips or 1
     hier = {"n_macros": n_macros, "n_cores": n_cores,
-            "n_crossbars": n_crossbars, "levels": levels}
+            "n_crossbars": n_crossbars, "n_chips": n_chips, "levels": levels}
     # The fabric config is the authority on physical structure; the counts
     # parsed here are only a consistency check against it (raises on mismatch).
     from scripts import fabric

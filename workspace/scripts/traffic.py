@@ -172,8 +172,26 @@ def extract(output_dir=None, fabric=None, mapping_text=None, stats_text=None):
             factors[dim] = factors.get(dim, 1) * factor
         splits.append(LevelSplit(level_name, factors))
 
+    # DIE level (spatial_multi_die, O10): a chip-level spatial split in the
+    # mapping means the op spans dies. Same LevelSplit semantics one level up:
+    # a C-split there is a cross-die partial-sum reduction, an M-split a
+    # cross-die input multicast. Absent (meshX=1) nothing changes.
+    die_loops = parsed.get("inter_chip_in_system_spatial", [])
+    die_factors = {}
+    for dim, factor, _axis in die_loops:
+        if factor > 1:
+            die_factors[dim] = die_factors.get(dim, 1) * factor
+    if die_factors:
+        die_lv = fab.level("die")
+        die_split = LevelSplit("die", die_factors)
+        if die_split.fanout > die_lv.per_parent:
+            raise ValueError(f"mapping spans {die_split.fanout} dies but the "
+                             f"fabric has {die_lv.per_parent}")
+        splits.insert(0, die_split)
+
     # capacity guard: the mapper cannot use more instances than the fabric has
-    for s, lv in zip(splits, tree):
+    tree_splits = splits[-3:]
+    for s, lv in zip(tree_splits, tree):
         if s.fanout > lv.per_parent:
             raise ValueError(f"mapping uses {s.fanout} {lv.name} instances but "
                              f"the fabric has {lv.per_parent}")

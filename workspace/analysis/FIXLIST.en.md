@@ -378,6 +378,45 @@ and the assignment ordering are pinned (group 15, 11 tests).
 > so the old totals survive bit-for-bit -- and the honest headline is a
 > threshold table, not a bottleneck claim.
 
+### C12. O10 closed: over-capacity ops now have two explicit mechanisms
+
+**What was done.** `run_op(op, overcapacity=...)`: `reject` (default -- the
+tripwire), `temporal_rewrite`, `spatial_multi_die`. Probe op (C=2048,
+M=16384 = 67.1M cells = 4 dies), measured end to end:
+
+| mechanism | energy | latency | notes |
+|---|---|---|---|
+| silent (before) | 2.93 mJ | 2.60 ms | reload billed at zero -- the bug |
+| temporal_rewrite | 9.64 mJ | 11.32 ms | every cell reprogrammed per pass (K/V-write primitives); endurance ~1e8 inferences |
+| spatial_multi_die | 2.24 mJ | 0.65 ms compute | zero reload; +4 intra-op die flows x 14.4M words -> at 256 w/c the busiest die wire serializes 163 ms |
+
+So the mechanism CHOICE is a bandwidth question the platform now answers:
+spatial wins on energy always (4.3x) and on latency only above ~3,700
+words/cycle of die bandwidth; below that the rewrite is faster but burns
+endurance. Implementation: capacity guard + `static_rewrite_cost` (charged
+via the K/V write channel, mapping cross-checked against parsed temporal
+weight tiles); spatial = `chip_in_system.meshX` + a closed-form per-die
+tiler that PINS all four levels' C/M spatial factors (macro/core/crossbar +
+chip) and bans glb's temporal C/M remainder sinks; die split extracted by
+traffic.py (`inter_chip_in_system_spatial` -> LevelSplit("die")), intra-op
+die flows feed the same link_occupancy. Tests: group 16 (capacity, 6).
+
+**Two extra findings caught on the way:**
+1. **The greedy M-first `maximize_dims` can force phantom reloads even for
+   shapes that FIT** (it starves C and glb's `C=-1` remainder sink absorbs
+   the difference at zero cost). GPT-2 medium dodges it only because its
+   C=1024 fills the row budget exactly. The spatial policy's explicit tiler
+   bypasses the greedy entirely.
+2. **A weight occupies TWO cells** (W4A8 differential encoding,
+   N_WEIGHT_SLICES=2 -- the `Y in [0:2)` split in every mapping): one die
+   holds 8.39M weights, not 16.78M. The capacity model now uses
+   CELLS_PER_WEIGHT=2; doc claims scaled by the old constant are wrong by 2x
+   (see O11).
+
+> **One line:** no silent path remains -- an over-capacity op must pick a
+> mechanism, both are priced with existing primitives, and the choice
+> between them is itself a platform result (a die-bandwidth threshold).
+
 ---
 
 ## Open
@@ -386,7 +425,7 @@ Priority order (what closing each one buys):
 
 | # | gap | what closing it buys | blocks |
 |---|---|---|---|
-| O10 | **over-capacity ops silently mis-account** (weight reload billed at zero) | any model whose layer exceeds one die (1.3B-class and up) becomes simulatable honestly | capacity guard now; `meshX>1` + intra-layer D2D flows for the real fix |
+| O11 | layer→die examples ignore the 2-cells-per-weight capacity | feasible assignments + corrected §1/§6 claims; re-run analyze_d2d | follow-up of C12 |
 | O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the search side; lifts the 47% citation ban | search-side integration |
 | O7 | contention = max over busiest wire, no queueing | tightens every latency/throughput multiplier (both levels benefit at once) | credibility of W2/W3 numbers |
 | O1 | core/crossbar links carry no energy (the 1 xfail) | turns the 1.50×/3.62× and 17.8% rankings into joules | DR-1 input |
@@ -426,27 +465,18 @@ qualitative conclusion (energy is contention-blind) survives, the exact tie
 does not. Same gap, smaller: `h_tree.level_length` defaults to 1 per level
 where a physical H-tree lengthens toward the root.
 
-### O10. Over-capacity ops run silently with wrong accounting
+### O11. Layer→die assignments must respect the honest capacity
 
-Measured (probe, C=2048 M=16384 = 2.0 dies of weights): the mapper does NOT
-fail — it inserts a temporal loop (`for C in [0:4)`) that reuses the same
-crossbars for different weight slices over time. Physically that is
-reprogramming the array mid-inference; the account charges it ZERO energy and
-ZERO latency (the write model bills K/V only). By our own write model the
-omission is of the same order as the op itself (~1.7 mJ + ~2.2 ms per extra
-array-load vs the op's 2.9 mJ / 2.6 ms), and per-inference rewrites would
-exhaust ReRAM endurance in days — the weight-residency premise is violated
-with no warning. GPT-2 medium never triggers this (largest op = 75% of a
-die); a 1.3B-class model triggers it on ffn1/ffn2 (100%+) with one layer =
-3.0 dies.
+Fallout of the CELLS_PER_WEIGHT correction (C12): a gpt2-medium LAYER is
+25.2M cells = 1.5 dies, so the W3 example assignment "one layer per die, 24
+dies" is capacity-infeasible as stated -- the D2D results' multipliers and
+mechanisms stand (boundary volumes and the busiest-wire integers do not
+depend on it), but the example configuration needs either 2 dies/layer
+(48 dies) or op-granular assignment, and the SUMMARY §1/§6 capacity claims
+("one layer = 75% of a die", "packing would need ~6-8 dies") need the 2x
+correction. Fix: recompute the assignment examples with `dies_for_op`, update
+docs, re-run analyze_d2d with a feasible assignment.
 
-Fix, two stages: (1) immediate tripwire — raise when an op's weights exceed
-one die's cells; (2) the real path — `chip_in_system.meshX > 1` (already in
-the arch, never exercised): the op spans dies spatially, weights stay
-resident, and the C/M splits generate INTRA-layer die-to-die
-reduction/multicast flows — the same traffic.py structure one level up,
-feeding the same link_occupancy, so D2D contention follows automatically.
-Assignment generalizes from layer→die to op→die-set.
 
 ### O9. The offload receiving side is unmodeled
 

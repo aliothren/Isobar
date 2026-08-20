@@ -33,3 +33,16 @@ form deliberately: pricing lives on the multi-die variant + surplus model
 (`reference_hops` semantics), NOT on the default config's `pj_per_word`, so
 the old literal check (`pj_per_word is not None` on the default) would have
 been the wrong thing to promote.
+
+## Anchored findings (upgrade protocol)
+
+The contention results were promoted from placeholder sensitivities to
+findings stated at PUBLISHED link bandwidths (analysis/ANCHORS.md: Simba
+on-die 8.75 GB/s silicon-measured, ESP 32 GB/s, FlooNoC 80.6 GB/s). Per the
+upgrade rule, the promotion is pinned as group 17
+(test_anchored_findings.py) against the frozen fixture
+stack_per_op_v1.json: low-anchor spread 1.42-8.60x, the 1.65x hub-position
+lever, high-anchor collapse, the mid-anchor condition divergence, the
+three anchors landing consistently with the PREVIOUSLY published thresholds
+(blind-test coherence), and the h-tree==bus decode tie being trunk physics
+rather than a transcription merge.

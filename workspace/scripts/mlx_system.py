@@ -102,7 +102,10 @@ FABRIC = _fabric.default()
 N_MACROS_PER_DIE = FABRIC.level("macro").per_parent
 N_CORES_PER_MACRO = FABRIC.level("core").per_parent
 CROSSBARS_PER_CORE = FABRIC.level("crossbar").per_parent
-CROSSBARS_PER_DIE = FABRIC.count_below("crossbar")                # 256
+# count_below spans the whole package; a multi-die fabric must not inflate
+# the PER-DIE constants (that silently disabled the O10 capacity guard once).
+CROSSBARS_PER_DIE = (FABRIC.count_below("crossbar")
+                     // FABRIC.count_below("die"))                # 256
 # One die weight capacity (4-bit cells): 256 crossbars x 256x256 x 4b = 8.4 MB
 # = 16.8 M 4-bit weights. GPT-2 medium (302 M weights) is thus RESIDENT across
 # ~18 dies (4-bit) / ~36 (8-bit); the 256-die package holds it easily. A single

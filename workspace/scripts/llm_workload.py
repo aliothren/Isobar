@@ -137,9 +137,105 @@ def _base_layer():
     return _BASE_LAYER
 
 
+# ---------------------------------------------------------------------------
+# Over-capacity policy (FIXLIST O10).
+#
+# An op whose weights exceed one die's cells has NO silent path any more:
+#   reject           (default) refuse to run -- the tripwire.
+#   temporal_rewrite  run on one die; Timeloop time-multiplexes the arrays,
+#                     which physically means reprogramming them EVERY pass.
+#                     We charge that with the same primitives as the K/V write
+#                     (E_WRITE_PER_CELL_J per cell; row-serial SET pulses,
+#                     columns and crossbars parallel) and surface the
+#                     endurance consequence. Static ops only.
+#   spatial_multi_die the op spans ceil(cells/die) dies (chip_in_system.meshX);
+#                     weights stay resident. Requires a fabric whose die level
+#                     has enough instances (CIMSIM_FABRIC=...multidie).
+# ---------------------------------------------------------------------------
+DIE_WEIGHT_CELLS = mlx.CROSSBARS_PER_DIE * 256 * 256   # 4-bit cells
+# The wan W4A8 device ENCODES a 4-bit weight into 8 bits across two 4-bit
+# cells (N_WEIGHT_SLICES=2 -- the `Y in [0:2)` column split in every mapping),
+# so a weight occupies TWO cells and an array holds 256 rows x 128 weights.
+# Getting this wrong by 2x is exactly how "one layer per die" over-promised.
+CELLS_PER_WEIGHT = 2
+# ReRAM write endurance, cycles per cell. EXAMPLE DEFAULT (platform input):
+# public figures span 1e6..1e12 depending on device class.
+ENDURANCE_CYCLES = 1.0e8
+
+
+def op_weight_cells(op: Op) -> int:
+    """Physical cells the op's resident operand occupies."""
+    return op.C * op.M * op.N * CELLS_PER_WEIGHT
+
+
+def dies_for_op(op: Op) -> int:
+    return -(-op_weight_cells(op) // DIE_WEIGHT_CELLS)
+
+
+def static_rewrite_cost(op: Op, e_write=E_WRITE_PER_CELL_J,
+                        t_set_ns=T_SET_NS):
+    """Per-inference cost of temporal weight reuse: EVERY cell is rewritten
+    once per pass (the arrays end each pass holding the last tile, so even
+    the first tile must be re-programmed next time). Rows are written
+    serially at T_SET each; the columns of a row and all crossbars program in
+    parallel -- the same conventions as the K/V write model."""
+    cells = op_weight_cells(op)
+    columns = mlx.CROSSBARS_PER_DIE * 256
+    rows = -(-cells // columns)
+    return {"cells": cells, "rows_serial": rows,
+            "energy_J": cells * e_write,
+            "latency_s": rows * t_set_ns * 1e-9,
+            "lifetime_inferences": ENDURANCE_CYCLES}   # 1 write/cell/pass
+
+
+def _die_tiling(c_res: int, m_res: int):
+    """Closed-form spatial tiling of one die for a C_res x M_res weight slice.
+
+    Rows are C-only (256/array); columns hold 256//CELLS_PER_WEIGHT = 128
+    weights of M per array (the other half is the weight-slice dim Y). The
+    fanout menu is macro 8 x core 4 x crossbar 8 = 256 array tiles. Returns
+    per-level (C, M) spatial factors covering ceil(C/256) x ceil(M/128) tiles
+    exactly, or None if the slice does not fit. Exists because the arch's
+    greedy M-first maximize_dims can starve C and silently fall back to
+    temporal weight tiling (= phantom reload) even for shapes that fit."""
+    cT = -(-c_res // 256)
+    mT = -(-m_res // (256 // CELLS_PER_WEIGHT))
+    if cT * mT > 256:
+        return None
+    fan = [8, 4, 8]                                  # macro, core, crossbar
+    def _divs(n):
+        return [d for d in range(1, n + 1) if n % d == 0]
+    for c0 in _divs(fan[0]):
+        for c1 in _divs(fan[1]):
+            for c2 in _divs(fan[2]):
+                if c0 * c1 * c2 != cT:
+                    continue
+                m_room = [fan[0] // c0, fan[1] // c1, fan[2] // c2]
+                for m0 in _divs(m_room[0]):
+                    for m1 in _divs(m_room[1]):
+                        for m2 in _divs(m_room[2]):
+                            if m0 * m1 * m2 == mT:
+                                return [(c0, m0), (c1, m1), (c2, m2)]
+    return None
+
+
+def _temporal_weight_loads(mapping_text: str) -> int:
+    """Product of TEMPORAL factors over the weight dims (C/M/N) anywhere in
+    the mapping = how many distinct weight tiles visit the arrays over time.
+    Cross-check for the rewrite account: must be >= dies_for_op."""
+    import re
+    prod = 1
+    for line in mapping_text.splitlines():
+        ls = line.strip().lstrip("|").strip()
+        m = re.match(r"for ([CMN]) in \[0:(\d+)\)\s*$", ls)
+        if m:
+            prod *= int(m.group(2))
+    return prod
+
+
 def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
-           placement=None,
+           placement=None, overcapacity: str = "reject",
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
            hist_source=DEFAULT_HIST_SOURCE,
            value_mode="uniform", value_source="synthetic",
@@ -152,8 +248,83 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
               + compute (Timeloop cycles x cycle_time, incl. bandwidth stalls)
               + distance propagation (hops x hop_latency, the position-aware term)
     """
+    n_dies_op = dies_for_op(op)
+    rewrite = None
+    if n_dies_op > 1:
+        if overcapacity == "reject":
+            raise ValueError(
+                f"{op.name}: weights need {op_weight_cells(op):,} cells = "
+                f"{n_dies_op} dies (one die holds {DIE_WEIGHT_CELLS:,}). "
+                "Timeloop would silently time-multiplex the arrays with the "
+                "reprogramming billed at zero (FIXLIST O10). Choose "
+                "overcapacity='temporal_rewrite' (charge the rewrite) or "
+                "'spatial_multi_die' (span dies, weights resident).")
+        if overcapacity == "temporal_rewrite":
+            if op.kind != "static":
+                raise NotImplementedError(
+                    "temporal_rewrite covers static ops; over-capacity "
+                    "K/V arrays need their own policy")
+            rewrite = static_rewrite_cost(op, e_write, t_set_ns)
+            print(f"    [O10 temporal_rewrite: {rewrite['cells']:,} cells "
+                  f"reprogrammed EVERY pass -> +{rewrite['energy_J']*1e3:.2f} mJ, "
+                  f"+{rewrite['latency_s']*1e3:.2f} ms; endurance bounds the "
+                  f"array at ~{rewrite['lifetime_inferences']:.0e} inferences]",
+                  flush=True)
+        elif overcapacity == "spatial_multi_die":
+            if mlx.FABRIC.level("die").per_parent < n_dies_op:
+                raise ValueError(
+                    f"{op.name} spans {n_dies_op} dies but the fabric "
+                    f"'{mlx.FABRIC.name}' has "
+                    f"{mlx.FABRIC.level('die').per_parent}; select a multi-die "
+                    "fabric (CIMSIM_FABRIC=models/fabric/mlx300_multidie.yaml)")
+        else:
+            raise ValueError(f"unknown overcapacity policy '{overcapacity}'")
+
     def callfunc(spec):
         mlx.mlx_die_callfunc(spec)                  # hierarchy meshX
+        if n_dies_op > 1 and overcapacity == "spatial_multi_die":
+            _chip = spec.architecture.find("chip_in_system")
+            _chip.spatial.meshX = n_dies_op
+            # Choose the die-split dim by TILING FEASIBILITY (prefer M: input
+            # multicast across dies beats cross-die partial-sum reduction),
+            # then pin the whole per-die C/M tiling closed-form. We must not
+            # leave this to the arch's greedy M-first maximize_dims: it can
+            # starve C and dump the remainder into glb's temporal sink --
+            # the phantom reload this policy exists to eliminate.
+            _plan = None
+            for _dim in ("M", "C"):
+                _sz = getattr(op, _dim)
+                if _sz % n_dies_op:
+                    continue
+                _c = op.C // n_dies_op if _dim == "C" else op.C
+                _m = op.M // n_dies_op if _dim == "M" else op.M
+                _t = _die_tiling(_c, _m)
+                if _t is not None:
+                    _plan = (_dim, _t)
+                    break
+            if _plan is None:
+                raise ValueError(
+                    f"{op.name}: no exact spatial tiling across "
+                    f"{n_dies_op} dies (C={op.C}, M={op.M})")
+            _dim, _tiles = _plan
+            _chip.constraints.spatial.factors.append(
+                f'"{_dim}={n_dies_op}"')
+            for _cname, (_cf, _mf) in zip(
+                    ("macro_in_die", "core_in_macro", "crossbar_in_core"),
+                    _tiles):
+                _cn = spec.architecture.find(_cname).constraints.spatial
+                _cn.pop("maximize_dims", None)       # explicit pins take over
+                _cn.factors.append(f'"C={_cf}"')
+                _cn.factors.append(f'"M={_mf}"')
+            # Residency made a CONSTRAINT: glb's C=-1/M=-1 are the temporal
+            # REMAINDER SINKS -- exactly where the free phantom reload lives.
+            for _name in ("glb", "chip2chip_link"):
+                _fac = spec.architecture.find(_name).constraints.temporal.factors
+                for _i in range(len(_fac) - 1, -1, -1):
+                    if str(_fac[_i]).startswith(("C=", "M=")):
+                        del _fac[_i]
+                _fac.append('"C=1"')      # quoted: parsed as expression
+                _fac.append('"M=1"')
         inst = spec.problem.instance
         inst["P"], inst["C"], inst["M"], inst["N"] = op.P, op.C, op.M, op.N
         inst["Q"] = inst["R"] = inst["S"] = 1       # matmul (no conv window)
@@ -169,6 +340,28 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
                           callfunc=callfunc, place_fn=place_fn, placement=pl)
     res = r["result"]
     write_J = op.write_cells * e_write if op.kind == "dynamic" else 0.0
+    if n_dies_op > 1 and overcapacity == "spatial_multi_die":
+        import os as _os
+        _mp = _os.path.join(res.output_dir, "timeloop-mapper.map.txt")
+        _txt = open(_mp).read() if _os.path.exists(_mp) else ""
+        if _temporal_weight_loads(_txt) != 1:
+            raise ValueError(
+                f"{op.name}: spatial_multi_die mapping still temporally "
+                "re-tiles the weights -- residency constraint did not hold")
+        if "inter_chip_in_system_spatial" not in _txt:
+            raise ValueError(
+                f"{op.name}: mapper did not use the {n_dies_op}-die spatial "
+                "fanout")
+    if rewrite is not None:
+        import os as _os
+        _mp = _os.path.join(res.output_dir, "timeloop-mapper.map.txt")
+        loads = _temporal_weight_loads(open(_mp).read()) if _os.path.exists(_mp) else 0
+        if loads < n_dies_op:
+            raise ValueError(
+                f"{op.name}: mapping shows {loads} temporal weight tiles but "
+                f"capacity requires >= {n_dies_op} -- rewrite account and "
+                "mapping disagree")
+        write_J += rewrite["energy_J"]
 
     # ---- latency (critical path) ----
     compute_lat = res.cycles * res.cycle_seconds                 # Timeloop native
@@ -177,6 +370,8 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
                                      hop_latency_ns or mlx.HOP_LATENCY_NS)
     dist_lat = dist["total_ns"] * 1e-9
     wr_lat = write_latency_s(op, phase, t_set_ns)
+    if rewrite is not None:
+        wr_lat += rewrite["latency_s"]              # serial, before compute
     # T2 static contention: the worst network link's serialization time.
     # Composes with compute by MAX, never sum -- Timeloop's own throttling (T1,
     # storage hubs) and our per-link tier both lower-bound the same phenomenon.
@@ -235,6 +430,9 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         "levels": r["levels"],                        # perceived components (unit_pJ ...)
         "value_mode": value_mode,
         "crossbar_value": crossbar_value,             # per-crossbar energy spread or None
+        "overcapacity": overcapacity if n_dies_op > 1 else None,
+        "dies_for_op": n_dies_op,
+        "rewrite": rewrite,                           # temporal_rewrite account or None
     }
 
 
