@@ -28,6 +28,7 @@ import numpy as np
 
 from scripts import fabric as fabric_mod
 from scripts import interconnect as ic
+from scripts import llm_workload as lw
 from scripts import placement as pm
 import dataclasses
 
@@ -57,18 +58,29 @@ def die_styles(fab, n):
             ("spread", spread)]
 
 
-def die_serial(fab, slots_n, edge_words, wc):
-    """Busiest package wire's serialization for hub->die flows of the given
-    per-edge volumes, dies placed on slots_n."""
+def die_serial(fab, slots_n, edge_words, wc, edge_down=None, edge_up=None):
+    """Busiest package wire's serialization for hub<->die flows of the given
+    per-edge volumes, dies placed on slots_n. Same wire accounting as
+    link_occupancy (O22/O23): inputs down and partial sums up are routed
+    with direction tags on full-duplex schemes, the up component weighted
+    by the fabric's partial-sum width. Without components (older JSON) the
+    combined volume is routed down, at activation width."""
     seq = pm.sequential_fill(fab)
     rest = [s for s in seq.slots["die"] if s not in slots_n]
     pl = dataclasses.replace(seq, slots={**seq.slots,
                                          "die": list(slots_n) + rest}).verify(fab)
     m = ic.build(fab, "die", pl)
+    psum = getattr(fab, "psum_word_bytes", 2.0)
     load = {}
     for i, v in enumerate(edge_words):
-        for r in m.path(ic.HUB, i):
-            load[r] = load.get(r, 0.0) + v
+        dn = v if edge_down is None else edge_down[i]
+        up = 0.0 if edge_up is None else edge_up[i]
+        for vol, (a, b), w in ((dn, (ic.HUB, i), 1.0), (up, (i, ic.HUB), psum)):
+            if vol <= 0:
+                continue
+            for r, tag in m.path_directed(a, b):
+                key = r + (f"/{tag}" if m.duplex and tag else "")
+                load[key] = load.get(key, 0.0) + vol * w
     return (max(load.values()) / wc * CYC if load else 0.0), m, pl
 
 
@@ -91,18 +103,29 @@ def main():
           f"({GRS} GB/s) ===")
     tierM = []
     for label, slots_n in die_styles(fab, n):
-        ser, m, _ = die_serial(fab, slots_n, [vol] * n, wc_grs)
-        lat = max(comp, ser)
+        ser, m, _ = die_serial(fab, slots_n, [vol] * n, wc_grs,
+                               [probe.get("die_edge_down", vol)] * n,
+                               [probe.get("die_edge_up", 0.0)] * n)
+        lat = max(comp, ser)                       # perfect-overlap end (O7)
+        lat_sum = comp + ser                       # zero-overlap end
         e_sur = die_surplus_energy(m, [vol] * n)
-        tierM.append({"label": label, "lat_s": lat, "surplus_J": e_sur})
+        tierM.append({"label": label, "lat_s": lat, "lat_sum_s": lat_sum,
+                      "surplus_J": e_sur})
         print(f"  {label:10} op latency {lat*1e3:8.2f} ms "
-              f"({lat/comp:5.2f}x compute) | surplus energy {e_sur*1e3:.2f} mJ")
+              f"({lat/comp:5.2f}x..{lat_sum/comp:4.2f}x compute) "
+              f"| surplus energy {e_sur*1e3:.2f} mJ")
 
     # ================= tier L: full model =================
     n_layers = full["config"]["n_layers"]
     print(f"\n=== tier L: full {full['config']['name']} "
           f"({n_layers} layers) ===")
-    STATIC = {"qkv_proj", "out_proj", "ffn1", "ffn2"}
+    STAYS = lw.stays_on_chip_under_offload
+    # O24: the 2.7B block's non-matmul operators, closed-form on the digital
+    # unit (same die, same glb energy per word); no network, no die flows
+    c27 = lw.GptConfig(d_model=full["config"]["d_model"], n_heads=full["config"]["n_heads"],
+                       d_ff=full["config"]["d_ff"], n_layers=n_layers,
+                       name=full["config"]["name"])
+    S27 = full["config"].get("S", 512)
     # The two conditions match the anchored sweep: with attention on chip the
     # K/V write (append-only programming, NOT a rewrite -- the rewrite
     # mechanism fires zero times in these runs) is charged; offloaded drops
@@ -111,15 +134,22 @@ def main():
              ("decode, attention offloaded", "decode", False)]
     tierL = {}
     for title, phase, on_chip in CONDS:
-        recs = [r for r in full["phases"][phase]
-                if on_chip or r["name"] in STATIC]
+        recs = [r for r in full["phases"][phase] if on_chip or STAYS(r["name"])]
+        for eo in lw.block_elementwise_ops(c27, S=S27, phase=phase):
+            if not on_chip and not STAYS(eo.name):
+                continue
+            c = lw.elementwise_cost(eo, fab.digital)
+            recs.append({"name": eo.name, "kind": "elementwise",
+                         "compute_s": c["latency_s"], "write_s": 0.0,
+                         "energy_J": c["energy_J"], "ondie_serial_ref_s": 0.0,
+                         "die_flow_words": []})
         wr = (lambda r: r["write_s"]) if on_chip else (lambda r: 0.0)
         base = sum(wr(r) + r["compute_s"] for r in recs) * n_layers
         e_tot = sum(r["energy_J"] for r in recs) * n_layers
         rows = []
         for noc_name, noc_g in NOC:
             for style, _ in die_styles(fab, 2):
-                tot = 0.0
+                tot = tot_sum = 0.0
                 e_sur = 0.0
                 for r in recs:
                     ondie = r["ondie_serial_ref_s"] * REF_WC / (noc_g * WC_PER_GBPS)
@@ -128,18 +158,26 @@ def main():
                         nd = len(r["die_flow_words"])
                         slots_n = dict(die_styles(fab, nd))[style]
                         d2d, m, _ = die_serial(fab, slots_n,
-                                               r["die_flow_words"], wc_grs)
+                                               r["die_flow_words"], wc_grs,
+                                               r.get("die_flow_down"),
+                                               r.get("die_flow_up"))
                         e_sur += die_surplus_energy(m, r["die_flow_words"])
+                    # O7 bracket: max = every network term hides behind
+                    # compute (and behind each other); sum = nothing overlaps
                     tot += wr(r) + max(r["compute_s"], ondie, d2d)
+                    tot_sum += wr(r) + r["compute_s"] + ondie + d2d
                 rows.append({"noc": noc_name, "style": style,
                              "lat_s": tot * n_layers, "mult": tot * n_layers / base,
+                             "lat_sum_s": tot_sum * n_layers,
+                             "mult_sum": tot_sum * n_layers / base,
                              "surplus_J": e_sur * n_layers})
         tierL[title] = {"base_s": base, "energy_J": e_tot, "rows": rows}
         print(f"  {title}: no-network stack {base*1e3:.2f} ms, "
               f"energy {e_tot*1e3:.1f} mJ")
         for r in rows:
             print(f"    NoC {r['noc']:12} die-placement {r['style']:9} "
-                  f"-> {r['lat_s']*1e3:9.2f} ms ({r['mult']:5.2f}x)"
+                  f"-> {r['lat_s']*1e3:9.2f} ms ({r['mult']:5.2f}x"
+                  f"..{r['mult_sum']:4.2f}x)"
                   f"  D2D surplus {r['surplus_J']*1e3:7.2f} mJ")
 
     # ================= figures =================

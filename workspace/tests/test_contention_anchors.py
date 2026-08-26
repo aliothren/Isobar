@@ -157,3 +157,49 @@ def test_partial_occupancy_couples_layout_to_active_slots():
     # corner hub sits at (0,0): node 0 rides nothing, 1 and 3 one segment each
     assert peak({"routing": "xy", "hub": "corner"}) < \
         peak({"routing": "xy", "hub": "center"})
+
+
+# ------------------------------------------- v3: the physical wire accounting
+def _flows_v3():
+    """The real ffn1 fixture's edge volumes, both directions kept (in = inputs
+    down, out = partial sums up), through the same traffic extraction the
+    analysis scripts use -- no synthetic VOL."""
+    import os
+    from scripts import traffic
+    here = os.path.dirname(os.path.abspath(__file__))
+    fx = os.path.join(here, "fixtures")
+    ts = traffic.extract(fabric=F,
+                         mapping_text=open(os.path.join(fx, "ffn1_prefill_map.txt")).read(),
+                         stats_text=open(os.path.join(fx, "ffn1_prefill_stats.txt")).read())
+    ev = ts.edge_volumes()["macro"]
+    return [{"level": "glb<->macro", "level_name": "macro", "node": m,
+             "src": "glb", "dst": f"macro{m}", "volume": ev["in"] + ev["out"],
+             "down": ev["in"], "up": ev["out"], "distance": 0.0}
+            for m in range(8)]
+
+
+def test_v3_single_op_table():
+    """Published single-op multipliers under O22/O23 (full-duplex wires, 16-bit
+    partial sums): star 3.43x, mesh-centre 10.29x, 2x4 13.71x, h-tree 13.71x,
+    mesh-corner 17.14x, bus 27.68x; scheme alone 8.07x, layout alone 1.67x.
+    Doubling the partial-sum width roughly doubles every wire's load, so the
+    ratios of the v1 table survive while the absolute multipliers double."""
+    want = {("star", "{}", "None"): 3.43,
+            ("mesh", "{'routing': 'xy', 'hub': 'center'}", "None"): 10.29,
+            ("mesh", "{'routing': 'xy', 'hub': 'center'}", "(2, 4)"): 13.71,
+            ("h_tree", "{'branching': 4}", "None"): 13.71,
+            ("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None"): 17.14,
+            ("bus", "{'driver': 'center'}", "None"): 27.68}
+    flows = _flows_v3()
+    got = {}
+    for topo, params, mesh, _ in SCHEMES:
+        fab = _with(topo, params, mesh=mesh)
+        ser = cc.link_occupancy(flows, fab, CYC,
+                                placement.sequential_fill(fab))["serialization_s"]
+        got[(topo, str(params), str(mesh))] = max(COMPUTE_S, ser) / COMPUTE_S
+    for k, v in want.items():
+        approx(got[k], v, 5e-3)
+    approx(got[("bus", "{'driver': 'center'}", "None")]
+           / got[("star", "{}", "None")], 8.07, 5e-3)
+    approx(got[("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None")]
+           / got[("mesh", "{'routing': 'xy', 'hub': 'center'}", "None")], 1.67, 5e-3)

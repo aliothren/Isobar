@@ -38,6 +38,10 @@ workspace/analysis/*
 !workspace/analysis/PROGRESS.md
 !workspace/analysis/ANCHORS.md
 !workspace/analysis/*.png
+!workspace/analysis/op_breakdown/
+workspace/analysis/op_breakdown/*
+!workspace/analysis/op_breakdown/*.png
+!workspace/analysis/op_breakdown/op_breakdown.md
 
 .DS_Store
 **/.DS_Store

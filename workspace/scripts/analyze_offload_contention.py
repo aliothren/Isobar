@@ -4,8 +4,10 @@ Everything so far (contention_system, d2d_impact) is scenario A: attention on
 chip, K/V write included. Offloading attention changes the two shields that
 kept the network invisible:
 
-  * prefill: each die's compute per layer SHRINKS (13.11 -> 8.44 ms of stage),
-    so there is less compute to hide transfers behind -- every knee moves UP.
+  * prefill: the pipeline stage SHRINKS (feasible 48-die config, two dies
+    per layer: the slower half-layer drops 23.49 -> 10.38 ms when qk^t/av and
+    the K/V write leave the attention die), so there is less compute to hide
+    transfers behind -- every knee moves UP (2x).
   * decode: the serial K/V write (90% of a decode step) LEAVES the chip with
     the attention -- the shield that made decode "untouchable" is gone, and
     on-die contention reaches decode for the first time.
@@ -26,22 +28,60 @@ import sys
 sys.path.insert(0, "/home/workspace")
 
 OUT = "/home/workspace/analysis"
-STATIC = {"qkv_proj", "out_proj", "ffn1", "ffn2"}
+from scripts import llm_workload as lw
+STAYS = lw.stays_on_chip_under_offload     # scenario B: what remains on chip
 N_LAYERS = 24
 WORDS = 512 * 1024                      # one boundary, prefill (S x d_model)
 WORDS_DEC = 1024                        # decode boundary (d_model)
 CYC = 1.449e-6
 
-# busiest-wire integers per D2D assignment (pinned in test_d2d.py)
-D2D = [("snake", 1), ("sequential rows", 2), ("far pairs (adversarial)", 6),
-       ("bus (shared interposer)", 23)]
 BWS = [64.0, 256.0, 1024.0]
 
 
-def stack_B(per_op):
-    """Scenario-B stack: static ops only, write gone with the attention."""
-    return N_LAYERS * sum(max(o["compute_s"], o["serial_s"])
-                          for o in per_op if o["name"] in STATIC)
+def d2d_busiest():
+    """Busiest-wire integers per D2D assignment on the FEASIBLE 48-unit
+    chain (6x8 package, two dies per layer), computed through the same
+    functions as analyze_d2d.py -- never hard-coded (a stale 24-die copy
+    lived here once). Full-duplex mesh since O22: snake 1, sequential rows
+    1, far pairs 4; the shared bus carries all 47. Pinned in
+    test_feasible48.py."""
+    from scripts import fabric as fabric_mod, placement as pm
+    from scripts import llm_workload as lw
+    import scripts.crossbar_comm as cc
+    from scripts.analyze_d2d import assignments, with_link, UNITS, MULTI
+    base = fabric_mod.from_yaml(MULTI)
+    ucfg = lw.GptConfig(n_layers=UNITS, name="units48")
+    fm = with_link(base, "mesh", {"routing": "xy", "hub": "center"}, 256.0)
+    pl = pm.sequential_fill(fm)
+    words = 512 * ucfg.d_model
+    out = []
+    for label, asg in assignments(fm):
+        d = lw.die_to_die_activation(ucfg, 512, "prefill", fabric=fm,
+                                     assignment=asg)
+        occ = cc.link_occupancy(d["flows"], fm, CYC, pl)
+        out.append((label, int(round(occ["bottleneck"]["volume"] / words))))
+    out.append(("bus (shared interposer)", UNITS - 1))
+    return out
+ATTN_OPS = ("qkv_proj", "qk^t", "av", "out_proj")
+FFN_OPS = ("ffn1", "ffn2")
+
+
+def half_stages(per_op):
+    """Per-die pipeline stages (two dies per layer): delegated to the single
+    source llm_workload.half_layer_stages (O18/O24)."""
+    return lw.half_layer_stages(per_op)
+
+
+def stack_B(per_op, overlap="max"):
+    """Scenario-B stack: static ops only, write gone with the attention.
+
+    overlap="max": perfect compute/network overlap (headline end);
+    overlap="sum": zero overlap -- the O7 bracket's other end."""
+    if overlap == "max":
+        return N_LAYERS * sum(max(o["compute_s"], o["serial_s"])
+                              for o in per_op if STAYS(o["name"]))
+    return N_LAYERS * sum(o["compute_s"] + o["serial_s"]
+                          for o in per_op if STAYS(o["name"]))
 
 
 def main():
@@ -54,42 +94,50 @@ def main():
         d = sysd["phases"][phase]
         sf_B = N_LAYERS * sum(max(o["compute_s"], 0.0)
                               for o in next(iter(d["per_op"].values()))
-                              if o["name"] in STATIC)
+                              if STAYS(o["name"]))
         print(f"=== {phase}, scenario B: stall-free stack "
               f"{sf_B*1e3:.3f} ms (A was {d['stall_free_s']*1e3:.2f} ms) ===")
         rows = {}
         for label, per_op in d["per_op"].items():
             tot = stack_B(per_op)
-            rows[label] = {"latency_s": tot, "mult": tot / sf_B}
+            tot_sum = stack_B(per_op, "sum")
+            rows[label] = {"latency_s": tot, "mult": tot / sf_B,
+                           "latency_sum_s": tot_sum, "mult_sum": tot_sum / sf_B}
             print(f"  {label:22} {tot*1e3:9.3f} ms   {tot/sf_B:5.2f}x"
+                  f" ..{tot_sum/sf_B:5.2f}x"
                   f"   (A was {d['rows'][[r['label'] for r in d['rows']].index(label)]['mult']:.2f}x)")
         out["phases"][phase] = {"stall_free_B_s": sf_B, "on_die": rows}
         print()
 
-    # ---------------- D2D pipelined, scenario B stage
-    pre = out["phases"]["prefill"]["stall_free_B_s"]
-    stage_B = pre / N_LAYERS
-    stage_A = sysd["phases"]["prefill"]["stall_free_s"] / N_LAYERS
+    # ---------------- D2D pipelined, scenario B stage (48-die half-layers)
+    per_star = next(iter(sysd["phases"]["prefill"]["per_op"].values()))
+    stage_A, stage_B = half_stages(per_star)
     print(f"=== D2D pipelined, prefill: stage A {stage_A*1e3:.2f} ms -> "
-          f"B {stage_B*1e3:.2f} ms (less compute to hide behind) ===")
+          f"B {stage_B*1e3:.2f} ms (less compute to hide behind; "
+          f"dividend +{(stage_A/stage_B-1)*100:.0f}%) ===")
     print(f"{'assignment':26}" + "".join(f"{f'@{b:,.0f} w/c':>14}" for b in BWS))
-    d2d_out = {}
+    d2d_out, d2d_out_sum = {}, {}
+    D2D = d2d_busiest()
     for label, busiest in D2D:
-        cells = []
+        cells, cells_sum = [], []
         for bw in BWS:
-            beat = max(stage_B, busiest * WORDS / bw * CYC)
-            cells.append(beat / stage_B)
+            wirebeat = busiest * WORDS / bw * CYC
+            cells.append(max(stage_B, wirebeat) / stage_B)
+            cells_sum.append((stage_B + wirebeat) / stage_B)
         d2d_out[label] = dict(zip((str(int(b)) for b in BWS), cells))
-        print(f"  {label:24}" + "".join(f"{c:>13.2f}x" for c in cells))
+        d2d_out_sum[label] = dict(zip((str(int(b)) for b in BWS), cells_sum))
+        print(f"  {label:24}" + "".join(
+            f"  {c:>6.2f}..{cs:<5.2f}x" for c, cs in zip(cells, cells_sum)))
 
-    # decode D2D under B: stage shrinks ~15x, boundary tiny -- check anyway
-    dec = out["phases"]["decode"]["stall_free_B_s"]
-    stage_dB = dec / N_LAYERS
+    # decode D2D under B: stage tiny, boundary tiny -- check anyway
+    per_star_d = next(iter(sysd["phases"]["decode"]["per_op"].values()))
+    _, stage_dB = half_stages(per_star_d)
     print(f"\n  decode stage B {stage_dB*1e6:.1f} us; sequential boundary beat at "
           f"64 w/c = {2*WORDS_DEC/64*CYC*1e6:.1f} us -> "
           f"{max(stage_dB, 2*WORDS_DEC/64*CYC)/stage_dB:.2f}x "
           "(decode is now touchable too)")
-    out["d2d_prefill_B"] = {"stage_B_s": stage_B, "table": d2d_out}
+    out["d2d_prefill_B"] = {"stage_B_s": stage_B, "table": d2d_out,
+                            "table_sum": d2d_out_sum}
     out["decode_stage_B_s"] = stage_dB
 
     with open(os.path.join(OUT, "offload_contention.json"), "w") as f:
@@ -158,8 +206,10 @@ def make_figure(sysd, out):
                 fontsize=8, color=C_OFF, fontweight="bold")
     ax.set_xticks(x); ax.set_xticklabels(SHORT, fontsize=8.5)
     ax.set_ylabel("one decode token (ms)")
+    worst_dec = max(v["mult"] for v in dec_B.values())
     ax.set_title("Decode: the write block hid the network;\n"
-                 "offload removes it and 3x appears", fontsize=10)
+                 f"offload removes it and {worst_dec:.1f}x appears",
+                 fontsize=10)
     ax.legend(fontsize=8); ax.grid(alpha=0.25, axis="y")
 
     # ---- (3) pipelined throughput at 64 w/c
@@ -170,17 +220,10 @@ def make_figure(sysd, out):
     # sequential 2, far pairs 8, bus 47). Read at a LOW example input
     # (64 w/c ~ 0.044 GB/s) -- measured D2D links sit two orders higher, so
     # this panel illustrates the mechanism, not an expected operating point.
-    perh = pre_A["per_op"]["mesh, glb centre"]
-    attn_h = sum(o["compute_s"] + o["write_s"] for o in perh
-                 if o["name"] in ("qkv_proj", "qk^t", "av", "out_proj"))
-    ffn_h = sum(o["compute_s"] + o["write_s"] for o in perh
-                if o["name"] in ("ffn1", "ffn2"))
-    stage_A = max(attn_h, ffn_h)
-    stage_B = max(attn_h - sum(o["write_s"] + o["compute_s"] for o in perh
-                               if o["name"] in ("qk^t", "av")), ffn_h)
+    stage_A, stage_B = half_stages(pre_A["per_op"]["mesh, glb centre"])
     labels3 = ["ideal\nnetwork", "snake", "sequential", "far pairs\n(worst)",
                "bus"]
-    busiest = [0, 1, 2, 8, 47]
+    busiest = [0] + [b for _, b in d2d_busiest()]
     def thr(stage, b):
         net = b * WORDS / 64.0 * CYC
         return 1.0 / max(stage, net)
@@ -200,9 +243,9 @@ def make_figure(sysd, out):
                 color="#b33f2b" if gain < 1 else "#1c6b60")
     ax.set_xticks(x3); ax.set_xticklabels(labels3, fontsize=8.5)
     ax.set_ylabel("pipelined throughput (requests/s)\n@64 w/c EXAMPLE input (48-die config)")
-    ax.set_title("The offload dividend (+55%) is paid out\n"
-                 "only where the package network is not the bottleneck",
-                 fontsize=10)
+    ax.set_title(f"The offload dividend (+{(stage_A/stage_B-1)*100:.0f}%) "
+                 "is paid out\nonly where the package network is not the "
+                 "bottleneck", fontsize=10)
     ax.legend(fontsize=8, loc="center right"); ax.grid(alpha=0.25, axis="y")
 
     fig.suptitle("Offloading attention removes the two shields that kept the "
@@ -234,15 +277,20 @@ def make_placement_figures(sysd, out):
     from scripts import llm_workload as lw
 
     CYC, WORDS = 1.449e-6, 512 * 1024
-    fabM = fabric_mod.from_yaml("/home/workspace/models/fabric/mlx300_multidie.yaml")
-    cfg = lw.GptConfig()
-    mx = fabM.level("die").mesh[0]
-    snake = [ (L // mx) * mx + (mx - 1 - (L % mx) if (L // mx) % 2 else L % mx)
-              for L in range(cfg.n_layers) ]
-    far = [L // 2 if L % 2 == 0 else 23 - L // 2 for L in range(cfg.n_layers)]
-    ASG = [("snake", snake, 1), ("sequential\nrows", None, 2),
-           ("far pairs\n(worst)", far, 6)]
-    surplus = [lw.die_to_die_activation(cfg, 512, "prefill", fabric=fabM,
+    # feasible 48-die configuration: same chain, fabric and assignments as
+    # analyze_d2d (imported -- single source for the constructions)
+    from scripts.analyze_d2d import assignments as d2d_assignments, UNITS
+    fabM = fabric_mod.from_yaml(
+        "/home/workspace/models/fabric/mlx300_multidie48.yaml")
+    ucfg = lw.GptConfig(n_layers=UNITS, name="units48")
+    named = dict((lbl, asg) for lbl, asg in d2d_assignments(fabM))
+    bus_int = dict(d2d_busiest())
+    ASG = [("snake", named["snake"], bus_int["snake"]),
+           ("sequential\nrows", named["sequential rows"],
+            bus_int["sequential rows"]),
+           ("far pairs\n(worst)", named["far pairs (adversarial)"],
+            bus_int["far pairs (adversarial)"])]
+    surplus = [lw.die_to_die_activation(ucfg, 512, "prefill", fabric=fabM,
                                         assignment=a)["energy_J"]
                for _, a, _ in ASG]
 
@@ -253,8 +301,8 @@ def make_placement_figures(sysd, out):
     dec_A = {r["label"]: r["latency_s"] for r in sysd["phases"]["decode"]["rows"]}
     pre_B = {k: v["latency_s"] for k, v in out["phases"]["prefill"]["on_die"].items()}
     dec_B = {k: v["latency_s"] for k, v in out["phases"]["decode"]["on_die"].items()}
-    stage_A = sysd["phases"]["prefill"]["stall_free_s"] / cfg.n_layers
-    stage_B = out["d2d_prefill_B"]["stage_B_s"]
+    stage_A, stage_B = half_stages(
+        sysd["phases"]["prefill"]["per_op"]["mesh, glb centre"])
 
     CASES = [
         ("onchip", "attention ON chip",

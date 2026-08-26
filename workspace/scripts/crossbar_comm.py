@@ -156,8 +156,13 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
         f_m, f_c, f_x = fanouts[-3:]
         vol_edge = {lv: ev[lv]["in"] + ev[lv]["out"]
                     for lv in (lvl_m.name, lvl_c.name, lvl_x.name)}
+        # the two DIRECTIONS kept apart (O22/O23): inputs go down, outputs
+        # (partial sums) come up
+        vol_dn = {lv: ev[lv]["in"] for lv in (lvl_m.name, lvl_c.name, lvl_x.name)}
+        vol_up = {lv: ev[lv]["out"] for lv in (lvl_m.name, lvl_c.name, lvl_x.name)}
         if len(fanouts) == 4:
             vol_edge["die"] = ev["die"]["in"] + ev["die"]["out"]
+            vol_dn["die"], vol_up["die"] = ev["die"]["in"], ev["die"]["out"]
     elif model == "uniform":
         in_per_xb = cbs._per_tensor_volume(txt, "row_drivers") / nX
         out_per_xb = cbs._per_tensor_volume(txt, "adc") / nX
@@ -165,6 +170,10 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
         vol_edge = {lvl_m.name: (in_per_xb + out_per_xb) * cores_per_macro * xbars_per_core,
                     lvl_c.name: (in_per_xb + out_per_xb) * xbars_per_core,
                     lvl_x.name: in_per_xb + out_per_xb}
+        vol_dn = {lvl_m.name: in_per_xb * cores_per_macro * xbars_per_core,
+                  lvl_c.name: in_per_xb * xbars_per_core, lvl_x.name: in_per_xb}
+        vol_up = {lvl_m.name: out_per_xb * cores_per_macro * xbars_per_core,
+                  lvl_c.name: out_per_xb * xbars_per_core, lvl_x.name: out_per_xb}
         shares = {lvl_m.name: in_per_xb + out_per_xb,
                   lvl_c.name: in_per_xb + out_per_xb,
                   lvl_x.name: in_per_xb + out_per_xb}
@@ -201,6 +210,8 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
             flows.append({"level": die_lv.link.name, "level_name": "die",
                           "node": d, "src": "package", "dst": f"die{d}",
                           "volume": vol_edge["die"] if d_on else 0.0,
+                          "down": vol_dn["die"] if d_on else 0.0,
+                          "up": vol_up["die"] if d_on else 0.0,
                           "distance": ic_die.hops(ic_mod.HUB, d)})
 
     gid = 0
@@ -210,6 +221,8 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
         flows.append({"level": lvl_m.link.name, "level_name": lvl_m.name,
                       "node": m, "src": "glb", "dst": f"macro{m}",
                       "volume": vol_edge[lvl_m.name] if m_on else 0.0,
+                      "down": vol_dn[lvl_m.name] if m_on else 0.0,
+                      "up": vol_up[lvl_m.name] if m_on else 0.0,
                       "distance": d})
         for c in range(cores_per_macro):
             c_on = m_on and c < f_c
@@ -218,6 +231,8 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
                           "node": c, "src": f"macro{m}",
                           "dst": f"core{m}.{c}",
                           "volume": vol_edge[lvl_c.name] if c_on else 0.0,
+                          "down": vol_dn[lvl_c.name] if c_on else 0.0,
+                          "up": vol_up[lvl_c.name] if c_on else 0.0,
                           "distance": dc})
             for x in range(xbars_per_core):
                 x_on = c_on and x < f_x
@@ -226,6 +241,8 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
                               "node": x, "src": f"core{m}.{c}",
                               "dst": f"xb{gid}",
                               "volume": vol_edge[lvl_x.name] if x_on else 0.0,
+                              "down": vol_dn[lvl_x.name] if x_on else 0.0,
+                              "up": vol_up[lvl_x.name] if x_on else 0.0,
                               "distance": dx})
                 if x_on:
                     per_xb[gid] = (shares[lvl_x.name] * dx
@@ -235,8 +252,21 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
     return flows, per_xb, gshape, xb_coord
 
 
-def link_occupancy(flows, fabric, cycle_seconds, placement=None):
+def link_occupancy(flows, fabric, cycle_seconds, placement=None,
+                   duplex=None, psum_bytes=None):
     """T2 static contention: per-RESOURCE occupancy time from the structured flows.
+
+    Direction and width (O22/O23): a flow's DOWN component (inputs, 8-bit
+    activations) and UP component (outputs = partial sums) are routed
+    separately. On a full-duplex scheme (every point-to-point scheme; a bus
+    is a shared medium) the two directions occupy different wires, so the
+    resource key carries a direction tag. The up component is weighted by
+    `psum_bytes` (default: the fabric's `psum_word_bytes`, 2.0 = 16-bit
+    partial sums) because partial sums are wider than activations.
+    `duplex=False` / `psum_bytes=1.0` reproduce the pre-O22/O23 accounting
+    (both directions on one wire, everything at activation width) -- kept
+    for the comparison tables, not as a fallback. Node-to-node flows
+    (`nodes:(a,b)`, the D2D hand-offs) are one-directional activations.
 
     Each flow is routed by its level's SCHEME onto the resources it occupies
     (`Interconnect.path`), and every resource accumulates the traffic of every
@@ -253,13 +283,16 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None):
     tiers compose by MAX, never by sum -- both lower-bound the same
     serialization.
 
-    Returns {"per_link": [{level, resource, volume, seconds, flows}],
-    "serialization_s": float, "bottleneck": entry or None}. All zeros when no
-    bandwidth is set (the shipped default).
+    Returns {"per_link": [{level, resource, direction, volume, seconds}],
+    "serialization_s": float, "bottleneck": entry or None}. `volume` is in
+    activation words after the width weighting. All zeros when no bandwidth
+    is set (the shipped default).
     """
     from scripts import interconnect as ic_mod
     from scripts import placement as placement_mod
     pl = placement or placement_mod.sequential_fill(fabric)
+    psum = (getattr(fabric, "psum_word_bytes", 2.0) if psum_bytes is None
+            else float(psum_bytes))
 
     bw, level_of = {}, {}
     for lv in fabric.levels:
@@ -279,23 +312,37 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None):
             ics[lname] = ic_mod.build(fabric, lname, pl)
         nodes = f.get("nodes")                # node-to-node flow (D2D: die L->L+1)
         node = f.get("node")                  # hub-to-node flow (the on-die tree)
-        if nodes is not None:
-            res = [f"{lname}/{r}" for r in ics[lname].path(*nodes)]
-        elif node is not None:
-            res = [f"{lname}/{r}" for r in ics[lname].path(ic_mod.HUB, node)]
+        icl = ics[lname]
+        split = icl.duplex if duplex is None else bool(duplex)
+        if nodes is not None:                 # one-directional hand-off a->b
+            comps = [(f["volume"], nodes, 1.0)]
+        elif node is not None:                # inputs down, partial sums up
+            down = f.get("down", f["volume"])
+            up = f.get("up", 0.0)
+            comps = [(down, (ic_mod.HUB, node), 1.0),
+                     (up, (node, ic_mod.HUB), psum)]
         else:                                 # flow not tagged: treat as private
-            res = [f"{lname}/flow:{f['src']}->{f['dst']}"]
-        for r in res:
-            load[r] = load.get(r, 0.0) + f["volume"]
-            witness.setdefault(r, (f["level"], f["src"], f["dst"]))
+            key = f"{lname}/flow:{f['src']}->{f['dst']}"
+            load[key] = load.get(key, 0.0) + f["volume"]
+            witness.setdefault(key, (f["level"], f["src"], f["dst"], ""))
+            continue
+        for vol, (a, b), weight in comps:
+            if vol <= 0:
+                continue
+            for r, tag in icl.path_directed(a, b):
+                key = f"{lname}/{r}" + (f"/{tag}" if split and tag else "")
+                load[key] = load.get(key, 0.0) + vol * weight
+                witness.setdefault(key, (f["level"], f["src"], f["dst"],
+                                         tag if split else ""))
 
     per_link = []
     for r, vol in load.items():
         lname = r.split("/", 1)[0]
         link_name = fabric.level(lname).link.name
         lv_bw = bw[link_name]
-        lvl, src, dst = witness[r]
-        per_link.append({"level": lvl, "resource": r, "volume": vol,
+        lvl, src, dst, tag = witness[r]
+        per_link.append({"level": lvl, "resource": r, "direction": tag,
+                         "volume": vol,
                          "seconds": vol / lv_bw * cycle_seconds,
                          "src": src, "dst": dst})
     worst = max(per_link, key=lambda x: x["seconds"], default=None)

@@ -36,7 +36,8 @@ WC_PER_GBPS = 1e9 * CYC          # words/cycle per GB/s (word = 1 byte)
 ANCHORS = [("Simba on-die\n8.75 GB/s (silicon)", 8.75),
            ("ESP\n32 GB/s", 32.0),
            ("FlooNoC\n80.6 GB/s", 80.6)]
-STATIC = {"qkv_proj", "out_proj", "ffn1", "ffn2"}
+from scripts import llm_workload as lw
+STAYS = lw.stays_on_chip_under_offload     # scenario B: what remains on chip
 N_LAYERS = 24
 ORDER = ["star (private links)", "mesh, glb centre", "mesh, glb corner",
          "h-tree (k=4)", "bus (shared medium)"]
@@ -48,15 +49,24 @@ def load():
         return json.load(f)
 
 
-def stack(per_op, wc, prefill_A):
-    """Whole-stack latency at bandwidth `wc` words/cycle."""
+def stack(per_op, wc, prefill_A, overlap="max", serial_of=None):
+    """Whole-stack latency at bandwidth `wc` words/cycle.
+
+    overlap="max": perfect compute/network overlap (the headline end);
+    overlap="sum": zero overlap. The O7 bracket -- truth in between.
+    serial_of: optional {op: serial_s at REF_WC} overriding the per-op
+    serializations (used to re-read the anchors under another wire
+    accounting, O22/O23)."""
     tot = 0.0
     for o in per_op:
-        if not prefill_A and o["name"] not in STATIC:
+        if not prefill_A and not STAYS(o["name"]):
             continue
-        ser = o["serial_s"] * REF_WC / wc
+        ser0 = o["serial_s"] if serial_of is None else serial_of[o["name"]]
+        ser = ser0 * REF_WC / wc
         wr = o["write_s"] if prefill_A else 0.0
-        tot += wr + max(o["compute_s"], ser)
+        core = max(o["compute_s"], ser) if overlap == "max" \
+            else o["compute_s"] + ser
+        tot += wr + core
     return tot * N_LAYERS
 
 
@@ -72,15 +82,36 @@ def main():
         hdr = f"{'scheme / hub position':24}" + "".join(
             f"{a.splitlines()[0]:>18}" for a, _ in ANCHORS)
         print(hdr)
-        rows = {}
+        rows, rows_sum = {}, {}
         for label in ORDER:
-            cells = []
+            cells, cells_sum = [], []
             for _, gbps in ANCHORS:
-                tot = stack(per[label], gbps * WC_PER_GBPS, is_A)
-                cells.append(tot / base)
+                wc = gbps * WC_PER_GBPS
+                cells.append(stack(per[label], wc, is_A) / base)
+                cells_sum.append(stack(per[label], wc, is_A, "sum") / base)
             rows[label] = cells
-            print(f"  {label:22}" + "".join(f"{c:>17.2f}x" for c in cells))
-        results[title] = {"base_s": base, "mult": rows}
+            rows_sum[label] = cells_sum
+            print(f"  {label:22}" + "".join(
+                f"  {c:>7.2f}..{cs:<5.2f}x" for c, cs in zip(cells, cells_sum)))
+        results[title] = {"base_s": base, "mult": rows, "mult_sum": rows_sum}
+        # the same table under every wire accounting (O22/O23), if the
+        # system JSON carries them -- the published comparison table
+        acc = d["phases"][phase].get("accounting_variants", {})
+        if acc:
+            results[title]["by_accounting"] = {}
+            print("  -- by wire accounting (perfect-overlap end):")
+            for aname, arows in acc.items():
+                tab = {}
+                for label in ORDER:
+                    ser = arows[label]["per_op_serial_s"]
+                    tab[label] = [stack(per[label], g * WC_PER_GBPS, is_A,
+                                        serial_of=ser) / base
+                                  for _, g in ANCHORS]
+                results[title]["by_accounting"][aname] = tab
+                print(f"     {aname}")
+                for label in ORDER:
+                    print(f"       {label:22}" + "".join(
+                        f"{c:>9.2f}x" for c in tab[label]))
         print()
 
     # ---------------- figure 1: anchored readouts, grouped bars
@@ -89,10 +120,16 @@ def main():
     for ax, (title, phase, is_A) in zip(axes, conds):
         rows = results[title]["mult"]
         x = np.arange(len(ORDER))
+        rows_sum = results[title]["mult_sum"]
         for k, ((aname, _), c) in enumerate(zip(ANCHORS, colors)):
             vals = [rows[l][k] for l in ORDER]
+            highs = [rows_sum[l][k] for l in ORDER]
             ax.bar(x + (k - 1) * 0.26, vals, 0.24, color=c,
-                   label=aname.replace("\n", " "))
+                   label=aname.replace("\n", " "),
+                   yerr=[[0.0] * len(vals),
+                         [h - v for h, v in zip(highs, vals)]],
+                   error_kw={"elinewidth": 1.0, "ecolor": "0.35",
+                             "capsize": 2.0})
             for i, v in enumerate(vals):
                 if v > 1.004:
                     ax.text(i + (k - 1) * 0.26, v + 0.03, f"{v:.2f}",
@@ -104,7 +141,8 @@ def main():
         ax.grid(alpha=0.25, axis="y")
         ax.legend(fontsize=7.5)
     fig.suptitle("The contention results at PUBLISHED link bandwidths "
-                 "(anchors sourced in ANCHORS.md)", fontsize=12)
+                 "(anchors sourced in ANCHORS.md; bar = perfect-overlap end, "
+                 "whisker = zero-overlap end of the O7 bracket)", fontsize=12)
     p1 = os.path.join(OUT, "anchored_sweep.png")
     fig.tight_layout(rect=[0, 0, 1, 0.9]); fig.savefig(p1, dpi=130)
     plt.close(fig)
@@ -119,7 +157,10 @@ def main():
         base = results[title]["base_s"]
         for label, short in zip(ORDER, [s.replace("\n", " ") for s in SHORT]):
             ys = [stack(per[label], wc, is_A) / base for wc in bw_wc]
-            ax.plot(bw_gbps, ys, "o-", ms=3, lw=1.5, label=short)
+            ys_sum = [stack(per[label], wc, is_A, "sum") / base for wc in bw_wc]
+            line, = ax.plot(bw_gbps, ys, "o-", ms=3, lw=1.5, label=short)
+            ax.fill_between(bw_gbps, ys, ys_sum, color=line.get_color(),
+                            alpha=0.12, lw=0)
         lo, hi = ANCHORS[0][1], ANCHORS[-1][1]
         ax.axvspan(lo, hi, color="#2a9d8f", alpha=0.12)
         for aname, g in ANCHORS:
@@ -141,7 +182,9 @@ def main():
     with open(os.path.join(OUT, "anchored_sweep.json"), "w") as f:
         json.dump({"anchors_gbps": {a: g for a, g in ANCHORS},
                    "wc_per_gbps": WC_PER_GBPS,
-                   "results": {t: {"base_s": r["base_s"], "mult": r["mult"]}
+                   "results": {t: {"base_s": r["base_s"], "mult": r["mult"],
+                                   "mult_sum": r["mult_sum"],
+                                   "by_accounting": r.get("by_accounting", {})}
                                for t, r in results.items()}}, f, indent=1)
     print("JSON -> anchored_sweep.json")
 

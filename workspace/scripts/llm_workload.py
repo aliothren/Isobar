@@ -83,6 +83,7 @@ class GptConfig:
     d_ff: int = 4096
     n_layers: int = 24
     name: str = "gpt2-medium"
+    vocab: int = 50257          # embedding / LM head (GPT-2 BPE)
 
 
 @dataclass
@@ -125,6 +126,120 @@ def block_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
         Op("ffn1",     "static",  P=Pq, C=cfg.d_model, M=cfg.d_ff),
         Op("ffn2",     "static",  P=Pq, C=cfg.d_ff,    M=cfg.d_model),
     ]
+
+
+# ---------------------------------------------------------------------------
+# O24: the non-matmul operators. They cannot run on the crossbars (no weight
+# to multiply by); on every CIM design in the literature they run in a
+# digital vector unit on the same die, next to the buffer: read the
+# activations from the glb, compute, write back. Their cost is closed-form:
+#   energy  = glb passes x elements x glb pJ/word  +  arithmetic x digital pJ
+#   latency = arithmetic ops / (lanes x clock)          (serial with the matmuls)
+# The digital unit is a platform input (fabric.digital, DR-8); glb pJ/word is
+# the CiMLoop-calibrated access energy of the same die.
+GLB_PJ_PER_WORD_REF = 15.47      # ffn1 prefill fixture: 892 uJ / 57.67 M scalar accesses
+ATTENTION_ELEMENTWISE = ("softmax",)      # leaves the chip with attention (scenario B)
+
+
+@dataclass
+class ElementwiseOp:
+    name: str
+    elements: int            # per layer (or per model for the model-end ops)
+    glb_passes: int          # glb accesses per element (reads + writes)
+    adds: float              # arithmetic per element, at the intermediate width
+    muls: float
+    luts: float
+    after: str               # the matmul whose output it consumes (ledger adjacency)
+    kind: str = "elementwise"
+
+    @property
+    def arith_ops(self) -> float:
+        return self.elements * (self.adds + self.muls + self.luts)
+
+
+def block_elementwise_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
+    """The non-matmul operators of ONE transformer block at sequence length S
+    (prefill: S query rows; decode: 1 row attending over S keys)."""
+    Pq = S if phase == "prefill" else 1
+    d, ff, H = cfg.d_model, cfg.d_ff, cfg.n_heads
+    return [
+        # softmax over each head's Pq x S score matrix: max pass, exp+sum pass,
+        # normalise pass -> 3 glb passes; per element 1 LUT (exp), 2 adds, 1 mul
+        ElementwiseOp("softmax", H * Pq * S, 3, adds=2, muls=1, luts=1, after="qk^t"),
+        # GELU on the FFN hidden activations: read + write; tanh approximation
+        # ~ 1 LUT + 3 mul + 2 add
+        ElementwiseOp("gelu", Pq * ff, 2, adds=2, muls=3, luts=1, after="ffn1"),
+        # two LayerNorms per block (pre-attention, pre-FFN): mean pass, variance
+        # pass, normalise pass; per element ~ 3 adds, 2 muls, and an rsqrt LUT
+        # amortised over the row
+        ElementwiseOp("layernorm", 2 * Pq * d, 3, adds=3, muls=2, luts=1.0 / d, after="qkv_proj"),
+        # two residual adds: read both operands, write the sum -> 3 passes, 1 add
+        ElementwiseOp("residual", 2 * Pq * d, 3, adds=1, muls=0, luts=0, after="out_proj"),
+    ]
+
+
+def elementwise_cost(op: ElementwiseOp, digital, glb_pj_per_word: float = GLB_PJ_PER_WORD_REF):
+    """Energy and latency of one elementwise operator on the digital unit."""
+    n = op.elements
+    glb_J = op.glb_passes * n * glb_pj_per_word * 1e-12
+    arith_J = n * (op.adds * digital.pj_add + op.muls * digital.pj_mul
+                   + op.luts * digital.pj_lut) * 1e-12
+    latency_s = op.arith_ops / digital.ops_per_second()
+    return {"name": op.name, "kind": "elementwise", "elements": n,
+            "glb_J": glb_J, "arith_J": arith_J, "energy_J": glb_J + arith_J,
+            "latency_s": latency_s, "glb_accesses": op.glb_passes * n,
+            "arith_ops": op.arith_ops}
+
+
+def half_layer_stages(per_op):
+    """Per-die pipeline stages of the feasible 48-die configuration (two dies
+    per layer) from a per-op record list ({name, compute_s, write_s}).
+    Scenario A: the attention die carries qkv / qk^t / av / out_proj, the K/V
+    write, the softmax, and half of the block's LayerNorm + residual work;
+    the FFN die carries ffn1 / ffn2, the GELU, and the other half. Scenario
+    B: qk^t / av / softmax and the write leave with the attention. The
+    stage is the slower half. The single source for every script (O18/O24)."""
+    t = {o["name"]: o["compute_s"] + o.get("write_s", 0.0) for o in per_op}
+    g = lambda k: t.get(k, 0.0)
+    half = 0.5 * (g("layernorm") + g("residual"))
+    attn_A = g("qkv_proj") + g("qk^t") + g("av") + g("out_proj") + g("softmax") + half
+    attn_B = g("qkv_proj") + g("out_proj") + half
+    ffn = g("ffn1") + g("ffn2") + g("gelu") + half
+    return max(attn_A, ffn), max(attn_B, ffn)
+
+
+def stays_on_chip_under_offload(name: str) -> bool:
+    """Scenario B (attention offloaded): the attention matmuls (qk^t, av) and
+    the softmax between them leave the chip; everything else stays."""
+    return name not in ("qk^t", "av") + ATTENTION_ELEMENTWISE
+
+
+def lm_head_op(cfg: GptConfig, S: int = 512, phase: str = "prefill") -> Op:
+    """The LM head IS a matmul (d_model x vocab, ~51.5 M weights -> spans dies
+    under spatial_multi_die); inference evaluates it for the LAST token only
+    (P = 1) in both phases. vocab is padded to the next power of two
+    (50,257 -> 65,536): the residency tiler places whole dies on a
+    power-of-two fanout grid, so the padding is the same utilisation loss
+    the planner charges every spanning operator (stated; 77% of the
+    columns carry real vocabulary)."""
+    M = 1 << (cfg.vocab - 1).bit_length()
+    return Op("lm_head", "static", P=1, C=cfg.d_model, M=M)
+
+
+def embedding_cost(cfg: GptConfig, S: int, phase: str, fabric=None,
+                   e_dram=None, cycle_seconds: float = 1.449e-6):
+    """Embedding lookup: S x d_model words read from off-chip (decode: 1 x
+    d_model), priced at the DRAM per-word energy; TIMED only if the fabric
+    sets an off-chip port bandwidth (otherwise reported as not timed)."""
+    from scripts import fabric as fabric_mod
+    fab = fabric or fabric_mod.default()
+    e = E_DRAM_PER_WORD_J if e_dram is None else e_dram
+    words = (S if phase == "prefill" else 1) * cfg.d_model
+    bw = fab.offchip_bandwidth_words_per_cycle
+    return {"name": "embedding", "kind": "offchip_read", "words": words,
+            "energy_J": words * e,
+            "latency_s": (words / bw * cycle_seconds) if bw else None,
+            "timed": bool(bw)}
 
 
 _BASE_LAYER = None
@@ -265,9 +380,43 @@ def _temporal_weight_loads(mapping_text: str) -> int:
     return prod
 
 
+# ---------------------------------------------------------------------------
+# O12: co-residency array shares (the feasible 48-die seating, C13).
+#
+# Two ops sharing a die each own a PARTITION of its 256 arrays; simulating
+# each with the full die makes every 355M base optimistic. The share plans
+# below pin each op's per-level spatial factors so the mapper works inside
+# the op's own arrays. Derived from the seating geometry (power-of-two
+# allocation; per-array limits: 256 rows of C, 128 weights of M):
+#
+#   FFN die (exact fill): ffn1 128 arrays | ffn2 128 arrays
+#   attention die (exact fill): qkv 128 | out_proj 32 | qk^t 64 | av 32
+#
+# Format: {level: (C_f, M_f, N_f)} for macro/core/crossbar. Static ops also
+# get the glb temporal ban on C/M (residency); dynamic ops additionally on
+# N -- a temporal head loop would re-tile the resident K/V arrays.
+SHARE_355M_48DIE = {
+    "qkv_proj": {"macro": (1, 8, 1), "core": (1, 4, 1), "crossbar": (4, 1, 1)},
+    "out_proj": {"macro": (2, 4, 1), "core": (2, 2, 1), "crossbar": (1, 1, 1)},
+    "ffn1":     {"macro": (1, 8, 1), "core": (1, 4, 1), "crossbar": (4, 1, 1)},
+    "ffn2":     {"macro": (8, 1, 1), "core": (2, 2, 1), "crossbar": (1, 4, 1)},
+    "qk^t":     {"macro": (1, 1, 8), "core": (1, 2, 2), "crossbar": (1, 2, 1)},
+    "av":       {"macro": (1, 1, 8), "core": (2, 1, 2), "crossbar": (1, 1, 1)},
+}
+
+
+def share_arrays(plan):
+    out = 1
+    for lv in ("macro", "core", "crossbar"):
+        c, m, n = plan[lv]
+        out *= c * m * n
+    return out
+
+
 def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
            placement=None, overcapacity: str = "reject",
+           share_plan=None,
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
            hist_source=DEFAULT_HIST_SOURCE,
            value_mode="uniform", value_source="synthetic",
@@ -326,6 +475,33 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
 
     def callfunc(spec):
         mlx.mlx_die_callfunc(spec)                  # hierarchy meshX
+        if share_plan is not None:
+            # O12: confine the op to its co-residency array share by pinning
+            # the per-level spatial factors; ban the glb temporal sinks for
+            # every resident dim (C/M always; N too -- a temporal head loop
+            # re-tiles resident K/V arrays).
+            for _cname, _lv in (("macro_in_die", "macro"),
+                                ("core_in_macro", "core"),
+                                ("crossbar_in_core", "crossbar")):
+                _cf, _mf, _nf = share_plan[_lv]
+                _cn = spec.architecture.find(_cname).constraints.spatial
+                _cn.pop("maximize_dims", None)
+                _cn.factors.append(f'"C={_cf}"')
+                _cn.factors.append(f'"M={_mf}"')
+                _cn.factors.append(f'"N={_nf}"')
+                # P/Q spatial would REPLICATE weights into arrays the
+                # co-resident neighbour owns -- pin them off, so the product
+                # of pinned factors IS the op's array share.
+                _cn.factors.append('"P=1"')
+                _cn.factors.append('"Q=1"')
+            for _name in ("glb", "chip2chip_link"):
+                _fac = spec.architecture.find(_name).constraints.temporal.factors
+                for _i in range(len(_fac) - 1, -1, -1):
+                    if str(_fac[_i]).startswith(("C=", "M=", "N=")):
+                        del _fac[_i]
+                _fac.append('"C=1"')
+                _fac.append('"M=1"')
+                _fac.append('"N=1"')
         if spatial_plan is not None:
             # Pin the whole per-die C/M tiling closed-form (chosen by the
             # planner above -- M-split preferred: input multicast across dies
@@ -370,6 +546,14 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
                           callfunc=callfunc, place_fn=place_fn, placement=pl)
     res = r["result"]
     write_J = op.write_cells * e_write if op.kind == "dynamic" else 0.0
+    if share_plan is not None:
+        import os as _os
+        _mp = _os.path.join(res.output_dir, "timeloop-mapper.map.txt")
+        _txt = open(_mp).read() if _os.path.exists(_mp) else ""
+        if _temporal_weight_loads(_txt) != 1:
+            raise ValueError(
+                f"{op.name}: share-constrained mapping temporally re-tiles "
+                "resident arrays -- share plan and mapper disagree")
     if spatial_plan is not None:
         import os as _os
         _mp = _os.path.join(res.output_dir, "timeloop-mapper.map.txt")
@@ -403,14 +587,18 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
     if rewrite is not None:
         wr_lat += rewrite["latency_s"]              # serial, before compute
     # T2 static contention: the worst network link's serialization time.
-    # Composes with compute by MAX, never sum -- Timeloop's own throttling (T1,
-    # storage hubs) and our per-link tier both lower-bound the same phenomenon.
+    # Between the two TIERS the composition is MAX, never sum -- Timeloop's
+    # own throttling (T1, storage hubs) and our per-link tier both lower-bound
+    # the same serialization. Between compute and network the truth lies in
+    # [max, sum]: max = perfect overlap (double-buffered), sum = zero overlap.
+    # Both ends are returned (O7 bracket); the max end is the headline.
     # All-zero unless a fabric link carries a bandwidth (default: none do).
     flows_q, _, _, _ = cc.build_flows(res.output_dir, verbose=False,
                                       fabric=mlx.FABRIC, placement=pl)
     occ = cc.link_occupancy(flows_q, mlx.FABRIC, res.cycle_seconds)
     contention_lat = occ["serialization_s"]
     total_lat = wr_lat + max(compute_lat, contention_lat) + dist_lat
+    total_lat_sum = wr_lat + compute_lat + contention_lat + dist_lat
 
     # value-dependent energy MODE. "uniform" (default) = one histogram for the whole
     # op, every crossbar identical (exact, cheap). "per_crossbar" = each crossbar's
@@ -456,6 +644,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         "dist_latency_s": dist_lat,
         "write_latency_s": wr_lat,
         "total_latency_s": total_lat,
+        "total_latency_sum_s": total_lat_sum,
         "comm_files": comm_files,                     # (csv, json) of per-pair flows
         "levels": r["levels"],                        # perceived components (unit_pJ ...)
         "value_mode": value_mode,
@@ -577,7 +766,8 @@ def die_to_die_activation(cfg: GptConfig, S: int, phase: str, chip2chip_pJ=None,
 
 def die_pipeline_interval(cfg: GptConfig, S: int, phase: str, stage_s: float,
                           fabric=None, placement=None, assignment=None,
-                          cycle_seconds=None):
+                          cycle_seconds=None,
+                          duplex=None, psum_bytes=None):
     """Steady-state PIPELINED operation across the die grid: each die holds one
     layer, different microbatches (prefill requests / independent decode
     streams) occupy different dies simultaneously, and every layer boundary
@@ -591,11 +781,14 @@ def die_pipeline_interval(cfg: GptConfig, S: int, phase: str, stage_s: float,
         interval = max(stage_s, busiest_wire_volume / bandwidth * cycle)
         throughput = 1 / interval
 
-    Assumptions (stated, all optimistic): perfect microbatch pipelining, no
-    bubbles, transfer/compute overlap via double buffering, weights resident.
-    Returns {"interval_s", "net_s", "network_bound", "flows"}. With no die
-    bandwidth set net_s is 0 and the interval is the compute stage -- the same
-    off-by-default discipline as every other contention term.
+    Assumptions (stated): perfect microbatch pipelining, no bubbles, weights
+    resident. interval_s assumes transfer/compute overlap via double
+    buffering (perfect-overlap end); interval_sum_s assumes zero overlap
+    (the O7 bracket's other end) -- the true beat lies between them.
+    Returns {"interval_s", "interval_sum_s", "net_s", "network_bound",
+    "flows"}. With no die bandwidth set net_s is 0 and both ends equal the
+    compute stage -- the same off-by-default discipline as every other
+    contention term.
     """
     from scripts import fabric as fabric_mod
     from scripts import placement as placement_mod
@@ -605,9 +798,11 @@ def die_pipeline_interval(cfg: GptConfig, S: int, phase: str, stage_s: float,
     d = die_to_die_activation(cfg, S, phase, fabric=fab, placement=pl,
                               assignment=assignment)
     cyc = cycle_seconds if cycle_seconds is not None else 1.449e-6
-    occ = cc.link_occupancy(d["flows"], fab, cyc, pl)
+    occ = cc.link_occupancy(d["flows"], fab, cyc, pl,
+                            duplex=duplex, psum_bytes=psum_bytes)
     net = occ["serialization_s"]
-    return {"interval_s": max(stage_s, net), "net_s": net,
+    return {"interval_s": max(stage_s, net), "interval_sum_s": stage_s + net,
+            "net_s": net,
             "network_bound": net > stage_s, "flows": d["flows"],
             "bottleneck": occ["bottleneck"]}
 

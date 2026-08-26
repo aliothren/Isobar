@@ -65,7 +65,9 @@ def main():
                                             fabric=fab, placement=pl)
             occ = cc.link_occupancy(flows, fab_bw, res.cycle_seconds, pl_bw)
             die_flows = [{"nodes": None, "node": f.get("node"),
-                          "volume": f["volume"]}
+                          "volume": f["volume"],
+                          "down": f.get("down", f["volume"]),
+                          "up": f.get("up", 0.0)}
                          for f in flows
                          if f["level_name"] == "die" and f["volume"] > 0]
             recs.append({
@@ -77,6 +79,8 @@ def main():
                 "cycle_s": res.cycle_seconds,
                 "ondie_serial_ref_s": occ["serialization_s"],
                 "die_flow_words": [f["volume"] for f in die_flows],
+                "die_flow_down": [f["down"] for f in die_flows],
+                "die_flow_up": [f["up"] for f in die_flows],
             })
             print(f"    E {r['total_J']*1e3:.3f} mJ | compute "
                   f"{r['compute_latency_s']*1e3:.3f} ms | on-die serial@ref "

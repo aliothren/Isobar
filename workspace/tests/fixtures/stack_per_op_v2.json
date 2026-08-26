@@ -1,0 +1,577 @@
+{
+ "_provenance": "frozen from analysis/contention_system.json under the O12 co-residency shares (48-die seating, SHARE_355M_48DIE pins); serializations at 16,384 words/cycle, scale as 1/bandwidth. The exclusive-die reference basis remains stack_per_op_v1.json.",
+ "basis": "co-residency shares (48-die seating)",
+ "ref_words_per_cycle": 16384.0,
+ "phases": {
+  "prefill": {
+   "stall_free_s": 0.813055104,
+   "per_op": {
+    "star (private links)": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0014833371428571427,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.002306125714285714,
+      "latency_s": 0.005737096,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.0009270857142857141,
+      "latency_s": 0.007372936,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0008807314285714285,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.001761462857142857,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.002549485714285714,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb centre": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.004450011428571429,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.006918377142857143,
+      "latency_s": 0.0074637931428571435,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.0027812571428571424,
+      "latency_s": 0.007372936,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0026421942857142856,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.005284388571428571,
+      "latency_s": 0.005284524571428572,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.007648457142857142,
+      "latency_s": 0.007648593142857142,
+      "network_bound": true
+     }
+    ],
+    "mesh, glb corner": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.007416685714285713,
+      "latency_s": 0.007416821714285714,
+      "network_bound": true
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.01153062857142857,
+      "latency_s": 0.01207604457142857,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.004635428571428571,
+      "latency_s": 0.007372936,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.004403657142857143,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.008807314285714286,
+      "latency_s": 0.008807450285714285,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.012747428571428571,
+      "latency_s": 0.01274756457142857,
+      "network_bound": true
+     }
+    ],
+    "h-tree (k=4)": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.005933348571428571,
+      "latency_s": 0.005933484571428571,
+      "network_bound": true
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.009224502857142856,
+      "latency_s": 0.009769918857142856,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.0037083428571428566,
+      "latency_s": 0.007372936,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.003522925714285714,
+      "latency_s": 0.005191816,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.007045851428571428,
+      "latency_s": 0.007045987428571428,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.010197942857142856,
+      "latency_s": 0.010198078857142856,
+      "network_bound": true
+     }
+    ],
+    "bus (shared medium)": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.011866697142857142,
+      "latency_s": 0.011866833142857141,
+      "network_bound": true
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.01844900571428571,
+      "latency_s": 0.01899442171428571,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.007416685714285713,
+      "latency_s": 0.009597941714285713,
+      "network_bound": true
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.007045851428571428,
+      "latency_s": 0.007045987428571428,
+      "network_bound": true
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.014091702857142856,
+      "latency_s": 0.014091838857142856,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.020395885714285713,
+      "latency_s": 0.020396021714285714,
+      "network_bound": true
+     }
+    ]
+   }
+  },
+  "decode": {
+   "stall_free_s": 0.014770944000000001,
+   "per_op": {
+    "star (private links)": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.897142857142857e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 4.504151785714285e-06,
+      "latency_s": 0.0005555559999999999,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 1.8107142857142854e-06,
+      "latency_s": 1.8796e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.7201785714285713e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.4403571428571426e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 4.979464285714285e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb centre": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 8.691428571428571e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 1.3512455357142857e-05,
+      "latency_s": 0.0005589284553571428,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 5.432142857142856e-06,
+      "latency_s": 1.8796e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 5.160535714285714e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.0321071428571428e-05,
+      "latency_s": 1.0457071428571428e-05,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.4938392857142855e-05,
+      "latency_s": 1.5074392857142855e-05,
+      "network_bound": true
+     }
+    ],
+    "mesh, glb corner": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.4485714285714284e-05,
+      "latency_s": 1.4621714285714284e-05,
+      "network_bound": true
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 2.2520758928571427e-05,
+      "latency_s": 0.0005679367589285714,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 9.053571428571427e-06,
+      "latency_s": 1.8796e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 8.600892857142857e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.7201785714285714e-05,
+      "latency_s": 1.7337785714285714e-05,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.4897321428571428e-05,
+      "latency_s": 2.5033321428571428e-05,
+      "network_bound": true
+     }
+    ],
+    "h-tree (k=4)": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.1588571428571427e-05,
+      "latency_s": 1.1724571428571428e-05,
+      "network_bound": true
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 1.801660714285714e-05,
+      "latency_s": 0.0005634326071428571,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 7.242857142857142e-06,
+      "latency_s": 1.8796e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 6.880714285714285e-06,
+      "latency_s": 1.0276e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.376142857142857e-05,
+      "latency_s": 1.389742857142857e-05,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.991785714285714e-05,
+      "latency_s": 2.005385714285714e-05,
+      "network_bound": true
+     }
+    ],
+    "bus (shared medium)": [
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.3177142857142855e-05,
+      "latency_s": 2.3313142857142855e-05,
+      "network_bound": true
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 3.603321428571428e-05,
+      "latency_s": 0.0005814492142857142,
+      "network_bound": true
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 1.4485714285714284e-05,
+      "latency_s": 2.3141714285714283e-05,
+      "network_bound": true
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.376142857142857e-05,
+      "latency_s": 1.389742857142857e-05,
+      "network_bound": true
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.752285714285714e-05,
+      "latency_s": 2.765885714285714e-05,
+      "network_bound": true
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.983571428571428e-05,
+      "latency_s": 3.997171428571428e-05,
+      "network_bound": true
+     }
+    ]
+   }
+  }
+ }
+}

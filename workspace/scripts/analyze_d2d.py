@@ -52,7 +52,7 @@ MULTI = "/home/workspace/models/fabric/mlx300_multidie48.yaml"
 UNITS = 48
 CYC = 1.449e-6
 S = 512
-BW_SWEEP = [float(2 ** k) for k in range(0, 15)]
+BW_SWEEP = [float(2 ** k) for k in range(0, 19)]   # top covers the zero-overlap knees
 BW_POINT = 256.0
 CFG = lw.GptConfig()
 WORDS = S * CFG.d_model
@@ -95,11 +95,7 @@ def main():
     # per-unit pipeline stage = the slower HALF of a layer (attention half:
     # qkv + qk^t + av + out_proj incl. the K/V write; ffn half: ffn1 + ffn2)
     perh = next(iter(sysdata["phases"]["prefill"]["per_op"].values()))
-    attn_h = sum(o["compute_s"] + o["write_s"] for o in perh
-                 if o["name"] in ("qkv_proj", "qk^t", "av", "out_proj"))
-    ffn_h = sum(o["compute_s"] + o["write_s"] for o in perh
-                if o["name"] in ("ffn1", "ffn2"))
-    stage = max(attn_h, ffn_h)
+    stage, _ = lw.half_layer_stages(perh)        # single source (O18/O24)
     base = fabric_mod.from_yaml(MULTI)
     print(f"{base.level('die').per_parent} dies on {base.level('die').mesh}; "
           f"prefill stall-free {sf*1e3:.2f} ms, one stage {stage*1e3:.2f} ms\n")
@@ -123,30 +119,34 @@ def main():
               f"{busiest:3.0f} boundaries | surplus E {d['energy_J']*1e6:8.2f} uJ")
 
     # ---------------- two modes over bandwidth
-    def single_pass_mult(fab, asg):
+    def single_pass_mult(fab, asg, overlap="max"):
         d = lw.die_to_die_activation(UCFG, S, "prefill", fabric=fab,
                                      assignment=asg)
         occ = cc.link_occupancy(d["flows"], fab, CYC,
                                 placement_mod.sequential_fill(fab))
         wr = sysdata["phases"]["prefill"]["write_s"]
-        return (wr + max(comp, occ["serialization_s"]) + (sf - wr - comp)) / sf
+        core = max(comp, occ["serialization_s"]) if overlap == "max" \
+            else comp + occ["serialization_s"]
+        return (wr + core + (sf - wr - comp)) / sf
 
-    def pipe_mult(fab, asg):
+    def pipe_mult(fab, asg, overlap="max"):
         d = lw.die_pipeline_interval(UCFG, S, "prefill", stage, fabric=fab,
                                      assignment=asg, cycle_seconds=CYC)
-        return d["interval_s"] / stage
+        key = "interval_s" if overlap == "max" else "interval_sum_s"
+        return d[key] / stage
 
     VARIANTS = [(lbl, "mesh", {"routing": "xy", "hub": "center"}, asg)
                 for lbl, asg in assignments(base)]
     VARIANTS.append(("bus (shared interposer)", "bus", {"driver": "center"},
                      list(range(UNITS))))
 
-    single, pipe = {}, {}
+    single, pipe, single_sum, pipe_sum = {}, {}, {}, {}
     for lbl, topo, params, asg in VARIANTS:
-        single[lbl] = [single_pass_mult(with_link(base, topo, params, bw), asg)
-                       for bw in BW_SWEEP]
-        pipe[lbl] = [pipe_mult(with_link(base, topo, params, bw), asg)
-                     for bw in BW_SWEEP]
+        fabs = [with_link(base, topo, params, bw) for bw in BW_SWEEP]
+        single[lbl] = [single_pass_mult(f, asg) for f in fabs]
+        pipe[lbl] = [pipe_mult(f, asg) for f in fabs]
+        single_sum[lbl] = [single_pass_mult(f, asg, "sum") for f in fabs]
+        pipe_sum[lbl] = [pipe_mult(f, asg, "sum") for f in fabs]
 
     print(f"\n=== the two operating modes at the example point "
           f"({BW_POINT:,.0f} w/c) and at 64 w/c ===")
@@ -157,15 +157,25 @@ def main():
     for lbl, _, _, _ in VARIANTS:
         print(f"  {lbl:24}{single[lbl][i256]:>13.2f}x{pipe[lbl][i256]:>11.2f}x"
               f"{single[lbl][i64]:>13.2f}x{pipe[lbl][i64]:>11.2f}x")
+    print("    (zero-overlap end of the O7 bracket:)")
+    for lbl, _, _, _ in VARIANTS:
+        print(f"  {lbl:24}{single_sum[lbl][i256]:>13.2f}x"
+              f"{pipe_sum[lbl][i256]:>11.2f}x{single_sum[lbl][i64]:>13.2f}x"
+              f"{pipe_sum[lbl][i64]:>11.2f}x")
 
-    # knees (pipelined): bandwidth below which throughput degrades / halves
+    # knees (pipelined): bandwidth below which throughput degrades / halves,
+    # at both ends of the O7 bracket (max end = headline)
     print("\n  pipelined knees (throughput leaves the compute-bound plateau):")
     knees = {}
     for lbl, ys in pipe.items():
         k1 = max((bw for bw, y in zip(BW_SWEEP, ys) if y >= 1.01), default=None)
         k2 = max((bw for bw, y in zip(BW_SWEEP, ys) if y >= 2.0), default=None)
-        knees[lbl] = {"degrades_below": k1, "halves_below": k2}
+        ks = pipe_sum[lbl]
+        k1s = max((bw for bw, y in zip(BW_SWEEP, ks) if y >= 1.01), default=None)
+        knees[lbl] = {"degrades_below": k1, "halves_below": k2,
+                      "degrades_below_sum": k1s}
         print(f"    {lbl:24} degrades below {k1 and f'{k1:,.0f}' or '-':>7} w/c"
+              f" (zero-overlap {k1s and f'{k1s:,.0f}' or 'always'})"
               f" | halves below {k2 and f'{k2:,.0f}' or '-':>7} w/c")
 
     # ---------------- figure 1: bandwidth-free quantities
@@ -202,14 +212,16 @@ def main():
               "bus (shared interposer)": ("#7b2d8b", "--")}
     for ax, data, title, ylab in (
             (axes[0], single, "SINGLE PASS: one request in flight\n"
-             "transfer hides behind the whole stack's compute -> flat at 1.0",
+             "transfer hides behind the stack's compute (band: O7 bracket)",
              "stack latency / stall-free"),
             (axes[1], pipe, "PIPELINED: the real serving mode\n"
              "transfer races ONE stage -> the assignment is a throughput lever",
              "beat interval / compute-bound beat")):
+        sums = single_sum if data is single else pipe_sum
         for lbl, ys in data.items():
             c, ls = styles[lbl]
             ax.plot(BW_SWEEP, ys, "o" + ls, color=c, ms=3.5, lw=1.7, label=lbl)
+            ax.fill_between(BW_SWEEP, ys, sums[lbl], color=c, alpha=0.12, lw=0)
         ax.axvline(BW_POINT, color="0.5", ls=":", lw=1.2)
         ax.text(BW_POINT * 1.15, ax.get_ylim()[1], "", fontsize=8)
         ax.set_xscale("log", base=2); ax.set_yscale("log")
@@ -236,7 +248,13 @@ def main():
         d = lw.die_to_die_activation(UCFG, S, "prefill", fabric=fabM,
                                      assignment=asg)
         occ = cc.link_occupancy(d["flows"], fabM, CYC, pl)
-        loads = {e["resource"]: e["volume"] for e in occ["per_link"]}
+        # per-direction wires (O22); the map draws each segment once with
+        # the busier direction's load, the title quotes the busiest wire
+        loads = {}
+        for e in occ["per_link"]:
+            seg = e["resource"].rsplit("/", 1)[0] if e["direction"] \
+                else e["resource"]
+            loads[seg] = max(loads.get(seg, 0.0), e["volume"])
         peak = max(loads.values())
         for res, v in loads.items():
             a, b = res.split("seg", 1)[1].split(")-(")
@@ -277,6 +295,7 @@ def main():
                    "assignments": [{k: v for k, v in r.items() if k != "asg"}
                                    for r in rows],
                    "single_pass": single, "pipelined": pipe,
+                   "single_pass_sum": single_sum, "pipelined_sum": pipe_sum,
                    "pipelined_knees": knees}, f, indent=1)
     print("JSON -> d2d_impact.json")
 

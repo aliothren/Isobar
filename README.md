@@ -85,6 +85,20 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   device×workload per-crossbar-value case studies (charts to `analysis/`; every
   figure in the writeup has one of these as its committed source, and
   `make_figures.py` drives them all).
+- **`analyze_contention_system.py`** / **`analyze_anchored_sweep.py`** /
+  **`analyze_d2d.py`** / **`analyze_offload_contention.py`** /
+  **`analyze_scale_tiers.py`** — the system-level contention study (whole-stack
+  multipliers vs link bandwidth, both overlap ends, four wire accountings),
+  its readout at published NoC bandwidths, the die-to-die single-pass /
+  pipelined modes on the 48-die configuration, the attention-offloaded
+  condition, and the 355M → 2.7B scale tiers.
+- **`analyze_digital_sensitivity.py`** — how much of the model's time the
+  digital vector unit (softmax / GELU / LayerNorm / residual) takes, swept over
+  lanes × clock.
+- **`op_breakdown.py`** — the per-operator cost ledger: one entry point, every
+  cost item on its own row (all CiMLoop components, re-pricing, writes,
+  die-to-die, digital unit), operator-type shares of the whole model under both
+  conditions; outputs under `analysis/op_breakdown/`.
 - **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output dir.
 
 - **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
@@ -131,13 +145,17 @@ Whole-model / whole-DNN studies (charts + CSV to `analysis/`):
 ```bash
 python3 scripts/analyze_system_gpt2.py 512 prefill   # GPT-2 system-level (or: 512 decode)
 python3 scripts/analyze_position_aware.py resnet18    # placement × pattern comparison
+python3 scripts/analyze_contention_system.py 512 --shares   # contention at the system denominator
+python3 scripts/analyze_anchored_sweep.py && python3 scripts/analyze_d2d.py \
+  && python3 scripts/analyze_offload_contention.py && python3 scripts/analyze_scale_tiers.py
+CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml python3 scripts/op_breakdown.py   # per-operator ledger
 ```
 
 ### Tests
 
 ```bash
-python3 tests/run_tests.py            # fast guardrail suite, a few seconds
-python3 tests/run_tests.py --slow     # plus one real mapper run, ~2 min
+python3 tests/run_tests.py            # fast guardrail suite (165 tests, ~4 min)
+python3 tests/run_tests.py --slow     # plus one real mapper run
 ```
 
 The suite checks that the code matches the documented model (stats parsing

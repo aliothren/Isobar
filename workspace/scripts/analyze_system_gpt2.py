@@ -36,6 +36,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from scripts import fabric as fabric_mod
 from scripts import llm_workload as lw
 from scripts import crossbar_stats as cbs
 from scripts import placement_aware as pa
@@ -55,6 +56,12 @@ print(f"  S={S}  phase={PHASE}  | one block (6 ops) searched, scaled x{NL}\n")
 records = []          # per distinct op
 mapping_dump = []     # the searched mappings
 CHIP2CHIP_PJ = [None] # per-word die-to-die energy, filled from the chip2chip model
+# O24: the non-matmul operators, closed-form on the digital unit (energy =
+# glb passes + arithmetic; latency = digital time, serial). They enter the
+# overlay scenarios A/B like the other overlays; C stays "CiMLoop only".
+ELW = [lw.elementwise_cost(eo, fabric_mod.default().digital)
+       for eo in lw.block_elementwise_ops(cfg, S=S, phase=PHASE)]
+EMB = lw.embedding_cost(cfg, S, PHASE, fabric=fabric_mod.default())   # once per model
 for op in ops:
     print(f"  searching mapping: {op.name:<9} ({op.kind}) "
           f"P={op.P} C={op.C} M={op.M} N={op.N}", flush=True)
@@ -100,17 +107,32 @@ ST = ("static",)
 # CIMSIM_FABRIC=models/fabric/mlx300_multidie.yaml to price the real die grid.
 d2d = lw.die_to_die_activation(cfg, S, PHASE, chip2chip_pJ=CHIP2CHIP_PJ[0])
 
+def elw_total(key, offloaded):
+    return NL * sum(c[key] for c in ELW
+                    if not offloaded or lw.stays_on_chip_under_offload(c["name"]))
+
 scen = {
     # energy (J)
     "C_E": total(records, "raw_E", ALL),
     "A_E": total(records, "raw_E", ALL) + total(records, "dist_extra_E", ALL)
-           + total(records, "write_E", ALL),
-    "B_E": total(records, "raw_E", ST) + total(records, "dist_extra_E", ST),
+           + total(records, "write_E", ALL) + elw_total("energy_J", False)
+           + EMB["energy_J"],
+    "B_E": total(records, "raw_E", ST) + total(records, "dist_extra_E", ST)
+           + elw_total("energy_J", True) + EMB["energy_J"],
     # latency (s)
     "C_L": total(records, "raw_L", ALL),
     "A_L": total(records, "raw_L", ALL) + total(records, "dist_L", ALL)
-           + total(records, "write_L", ALL),
-    "B_L": total(records, "raw_L", ST) + total(records, "dist_L", ST),
+           + total(records, "write_L", ALL) + elw_total("latency_s", False),
+    "B_L": total(records, "raw_L", ST) + total(records, "dist_L", ST)
+           + elw_total("latency_s", True),
+    # the O24 terms on their own (the embedding read is priced, not timed,
+    # unless the fabric sets an off-chip bandwidth)
+    "elementwise_E_A": elw_total("energy_J", False),
+    "elementwise_E_B": elw_total("energy_J", True),
+    "elementwise_L_A": elw_total("latency_s", False),
+    "elementwise_L_B": elw_total("latency_s", True),
+    "embedding_E": EMB["energy_J"],
+    "embedding_L": EMB["latency_s"],
 }
 
 # ---------------------------------------------------------------- comm stats
@@ -166,7 +188,7 @@ tj = os.path.join(OUT, f"gpt2_system_totals_{PHASE}.json")
 with open(tj, "w") as f:
     json.dump({
         "S": S, "phase": PHASE, "n_layers": NL,
-        "scenarios": {k: float(v) for k, v in scen.items()},
+        "scenarios": {k: (None if v is None else float(v)) for k, v in scen.items()},
         "per_op": [{
             "name": r["op"].name, "kind": r["op"].kind,
             "raw_E": float(r["raw_E"]), "dist_extra_E": float(r["dist_extra_E"]),

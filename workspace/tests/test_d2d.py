@@ -115,8 +115,19 @@ def test_die_flows_feed_link_occupancy():
     # hand-check: row-major chain 0->1->...->23 on XY mesh -- consecutive flows
     # never share a segment EXCEPT the wrap flows crossing a row; every in-row
     # segment carries exactly one boundary flow, wraps ride x-segments back.
+    # Since O22 the mesh is full-duplex: the wrap's x-walk goes the OTHER way
+    # on its own wires, so segment (0,0)-(1,0) splits into "+" (flow 0->1)
+    # and "-" (the wrap 5->6 walking back), one boundary each.
     loads = {e["resource"]: e["volume"] for e in occ["per_link"]}
     words = 512.0 * CFG.d_model
+    assert loads["die/mesh:seg(0, 0)-(1, 0)/+"] == words
+    assert loads["die/mesh:seg(0, 0)-(1, 0)/-"] == words
+    assert occ["bottleneck"]["volume"] == words        # busiest wire = 1
+    # the pre-O22 accounting (both directions on one wire) is still
+    # reproducible on request, and there the two collide:
+    occ = cc.link_occupancy(d["flows"], fab, 1.449e-6,
+                            placement.sequential_fill(fab), duplex=False)
+    loads = {e["resource"]: e["volume"] for e in occ["per_link"]}
     # segment (0,0)-(1,0) carries flow 0->1 AND the wrap 5->6's x-walk back
     assert loads["die/mesh:seg(0, 0)-(1, 0)"] == 2 * words
 
@@ -170,20 +181,29 @@ def test_pipeline_interval_identities():
     for bw in (256.0, 64.0):
         d = lw.die_pipeline_interval(CFG, 512, "prefill", stage,
                                      fabric=_bw(fab, bw))
-        approx(d["net_s"], 2 * words / bw * cyc, 1e-9)  # busiest wire = 2 boundaries
+        approx(d["net_s"], 1 * words / bw * cyc, 1e-9)  # full-duplex: busiest = 1
         assert d["interval_s"] == max(stage, d["net_s"])
+        d = lw.die_pipeline_interval(CFG, 512, "prefill", stage,
+                                     fabric=_bw(fab, bw), duplex=False)
+        approx(d["net_s"], 2 * words / bw * cyc, 1e-9)  # shared wire: the wrap collides
 
 
 def test_pipeline_assignment_ratio_is_the_load_ratio():
     """Below the knee the seq/snake interval ratio equals the busiest-wire
-    load ratio (2/1) EXACTLY -- the placement effect, undiluted."""
+    load ratio EXACTLY -- the placement effect, undiluted. On the shared-
+    direction accounting that ratio is 2/1 (the row wrap collides with the
+    in-row flows); on full-duplex wires (O22 default) the wrap rides the
+    opposite direction and the ratio is 1/1 -- sequential rows become as
+    good as snake."""
     fab = _bw(_multi(), 8.0)                       # deep in the network regime
     stage = 13.11e-3
-    seq = lw.die_pipeline_interval(CFG, 512, "prefill", stage, fabric=fab)
-    snk = lw.die_pipeline_interval(CFG, 512, "prefill", stage, fabric=fab,
-                                   assignment=_snake(fab))
-    assert seq["network_bound"] and snk["network_bound"]
-    approx(seq["interval_s"] / snk["interval_s"], 2.0, 1e-12)
+    for dup, ratio in ((False, 2.0), (None, 1.0)):
+        seq = lw.die_pipeline_interval(CFG, 512, "prefill", stage, fabric=fab,
+                                       duplex=dup)
+        snk = lw.die_pipeline_interval(CFG, 512, "prefill", stage, fabric=fab,
+                                       assignment=_snake(fab), duplex=dup)
+        assert seq["network_bound"] and snk["network_bound"]
+        approx(seq["interval_s"] / snk["interval_s"], ratio, 1e-12)
 
 
 def test_pipeline_bus_serializes_all_boundaries():

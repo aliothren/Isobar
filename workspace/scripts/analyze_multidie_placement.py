@@ -106,8 +106,12 @@ def main():
     import json
     with open(os.path.join("/home/workspace/analysis",
                            "multidie_placement.json"), "w") as f:
+        act0 = next(f for f in flows
+                    if f["level_name"] == "die" and f["volume"] > 0)
         json.dump({"op": {"C": 2048, "M": 16384, "dies": lw.dies_for_op(big)},
                    "compute_s": comp, "die_edge_words": dvol,
+                   "die_edge_down": act0.get("down", dvol),
+                   "die_edge_up": act0.get("up", 0.0),
                    "cycle_s": res.cycle_seconds,
                    "placements": [{k: v for k, v in r.items()} for r in rows]},
                   f, indent=1)

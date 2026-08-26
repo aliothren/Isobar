@@ -79,6 +79,22 @@ fabric:
              calibration: DR-1}
 
   # the CiMLoop configs this fabric must stay consistent with
+  # ---- the digital vector unit (O24, platform input DR-8). Generic example
+  # configuration: lanes x clock sized to the die's array output rate
+  # (~22.6 G results/s -> 64 lanes @ 1 GHz keep pace with 3-op softmax);
+  # per-op energies from the Horowitz ISSCC 2014 table at 16-bit (ANCHORS.md).
+  # Overwrite with the real chip's values; every field is optional.
+  digital:
+    lanes: 64
+    clock_hz: 1.0e9
+    pj_add: 0.05
+    pj_mul: 0.6
+    pj_lut: 1.0
+    intermediate_bits: 16
+    calibration: "DR-8: generic example values (Horowitz ISSCC 2014; sized to array output rate)"
+  # off-chip port bandwidth (words/cycle at the 1.449 us device cycle) used
+  # only to TIME the model's embedding read; unset = priced, not timed.
+  # offchip_bandwidth_words_per_cycle: 16384
   cimloop:
     system: ws_chip2chip_link
     chip: mlx_die

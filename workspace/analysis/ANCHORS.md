@@ -49,8 +49,30 @@ router design, die size) is imported. This is a one-variable sensitivity
 substitution answering "if our die NoC's links delivered what fabricated
 NoCs deliver, what happens" — not a simulation of those chips.
 
+Note (O22/O23): the model's per-wire loads are likewise per direction (full-duplex point-to-point schemes; a bus is one shared medium) and count partial sums at 16 bits up the tree, so anchor bandwidths and modeled loads are compared like for like.
+
 Caveats: per-link, one direction, headline rates (no protocol overhead
 deducted); our model treats a link as undirected (up+down share it), which
 is conservative by up to 2× against duplex hardware. Process nodes differ
 (12–16 nm vs our 130 nm device model) — the anchors bound what NoCs of
 shipping accelerators deliver, they do not calibrate our wires.
+
+## Digital vector unit (O24, platform input DR-8) -- generic example values
+
+The non-matmul operators (softmax, GELU, LayerNorm, residual adds) run in a
+digital vector unit next to the glb on every CIM design in the literature
+(ISAAC/PRIME/PUMA-class tiles carry LUT activation units or a small
+programmable vector unit; TPU v1 and Simba have fixed activation /
+post-processing stages; transformer CIM chips such as TranCIM carry
+dedicated softmax / LayerNorm engines). Until the company supplies its own:
+
+| parameter | example default | source / rule |
+|---|---|---|
+| per-op energy, 16-bit add | 0.05 pJ | Horowitz, "Computing's energy problem", ISSCC 2014, 45 nm table (8-bit add 0.03, 16-bit 0.05, 32-bit 0.1 pJ) |
+| per-op energy, 16-bit multiply | 0.6 pJ | same table (8-bit mult 0.2 pJ; 32-bit 3.1 pJ) -- interpolated example |
+| table lookup (exp / tanh / rsqrt) | 1.0 pJ | small-SRAM read order of magnitude (same table: 8 KB SRAM 10 pJ per 64-bit word) -- example |
+| lanes x clock | 64 x 1 GHz | sized to the die's array output rate: 256 arrays x 128 outputs per 1.449 us = 22.6 G results/s; 3-op softmax needs ~70 G ops/s |
+| glb access energy | 15.47 pJ/word | CiMLoop-calibrated, ffn1 prefill fixture (892 uJ / 57.67 M scalar accesses) -- not an example |
+
+`analyze_digital_sensitivity.py` sweeps lanes x clock so the real chip's
+values can be read off the curve.

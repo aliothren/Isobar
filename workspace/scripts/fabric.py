@@ -58,10 +58,43 @@ class Level:
 
 
 @dataclass(frozen=True)
+class DigitalUnit:
+    """The die's digital vector unit (O24): where the non-matmul operators
+    (softmax, GELU, LayerNorm, residual adds) run, next to the glb. Every
+    field is a PLATFORM INPUT (DR-8); the shipped values are a generic
+    configuration: lanes x clock sized to the die's array output rate
+    (256 arrays x 128 outputs per 1.449 us = 22.6 G results/s -> 32-64 lanes
+    at 1 GHz keep pace), per-op energies from the Horowitz ISSCC 2014 45 nm
+    table at the 16-bit intermediate width (see ANCHORS.md)."""
+    lanes: int = 64                     # elements processed per digital cycle
+    clock_hz: float = 1.0e9             # the digital clock (NOT the array cycle)
+    pj_add: float = 0.05                # 16-bit integer add
+    pj_mul: float = 0.6                 # 16-bit multiply (example; 8-bit is 0.2)
+    pj_lut: float = 1.0                 # one table lookup (exp / tanh / rsqrt)
+    intermediate_bits: int = 16         # softmax / LayerNorm intermediates
+    calibration: str = "DR-8: generic example values (ANCHORS.md)"
+
+    def ops_per_second(self) -> float:
+        return self.lanes * self.clock_hz
+
+
+@dataclass(frozen=True)
 class Fabric:
     name: str
     levels: List[Level] = field(default_factory=list)
     cimloop: dict = field(default_factory=dict)
+    # the digital vector unit (O24); None = the platform default configuration
+    digital: DigitalUnit = field(default_factory=DigitalUnit)
+    # off-chip port bandwidth for the model's embedding read (words/cycle at
+    # the device cycle); None = not set -> the read is priced but not timed
+    offchip_bandwidth_words_per_cycle: Optional[float] = None
+    # Width of a PARTIAL SUM crossing a link, in units of the 8-bit activation
+    # word (O23). Outputs travelling UP the tree are partial sums until the
+    # reduction completes at the top: W4 x A8 accumulated over K rows is
+    # 12 + log2(K) bits, and cross-unit digital accumulation is commonly kept
+    # at 16 bits -> 2 words per element by default. Platform input (DR-7):
+    # the real chip's ADC / accumulator width decides.
+    psum_word_bytes: float = 2.0
 
     # ------------------------------------------------------------- access
     def level(self, name: str) -> Level:
@@ -210,8 +243,22 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
             slot_pitch_um=(None if lv.get("slot_pitch_um") is None
                            else float(lv.get("slot_pitch_um"))),
         ))
+    dg = raw.get("digital") or {}
+    digital = DigitalUnit(
+        lanes=int(dg.get("lanes", DigitalUnit.lanes)),
+        clock_hz=float(dg.get("clock_hz", DigitalUnit.clock_hz)),
+        pj_add=float(dg.get("pj_add", DigitalUnit.pj_add)),
+        pj_mul=float(dg.get("pj_mul", DigitalUnit.pj_mul)),
+        pj_lut=float(dg.get("pj_lut", DigitalUnit.pj_lut)),
+        intermediate_bits=int(dg.get("intermediate_bits", DigitalUnit.intermediate_bits)),
+        calibration=str(dg.get("calibration", DigitalUnit.calibration)))
+    ob = raw.get("offchip_bandwidth_words_per_cycle")
     return Fabric(name=raw["name"], levels=levels,
-                  cimloop=raw.get("cimloop", {})).validate()
+                  cimloop=raw.get("cimloop", {}),
+                  psum_word_bytes=float(raw.get("psum_word_bytes", 2.0)),
+                  digital=digital,
+                  offchip_bandwidth_words_per_cycle=(None if ob is None else float(ob))
+                  ).validate()
 
 
 _CACHE = {}

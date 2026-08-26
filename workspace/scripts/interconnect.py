@@ -44,6 +44,12 @@ class Interconnect:
     NAME: str = "base"
     #: param name -> (required?, description). Anything else is rejected.
     PARAMS: Dict[str, Tuple[bool, str]] = {}
+    #: Physical default: point-to-point links are FULL-DUPLEX -- one wire set
+    #: per direction, so up- and down-traffic never share bandwidth (every
+    #: published anchor in ANCHORS.md is quoted per link, ONE direction). A
+    #: shared medium (bus) is half-duplex. Overridable per link via the
+    #: common param `duplex` (O22).
+    DUPLEX: bool = True
 
     def __init__(self, slots: Sequence[Slot], params: Optional[dict] = None):
         self.slots = [tuple(map(float, s)) for s in slots]
@@ -70,6 +76,29 @@ class Interconnect:
 
     def path(self, a: int, b: int) -> List[str]:
         raise NotImplementedError
+
+    @property
+    def duplex(self) -> bool:
+        return bool(self.params.get("duplex", self.DUPLEX))
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        """path() with a DIRECTION tag per resource, so a full-duplex link
+        can keep the two directions apart. Tree-like default: every
+        resource of a hub->node route is "dn"; the node->hub route RETRACES
+        it with the tags flipped ("up") -- the reduction tree mirrors the
+        distribution tree, so both directions of one op meet on the same
+        wires (this is what keeps the pre-O22 accounting exactly
+        reproducible with duplex=False; routing-algorithm asymmetries such
+        as XY-vs-YX replies belong to O19). A node-to-node route climbs
+        a's side ("up") and descends b's side ("dn"). Schemes with oriented
+        segments (mesh) override. Empty tag = no direction (shared medium)."""
+        if a == HUB:
+            return [(r, "dn") for r in self.path(a, b)]
+        if b == HUB:
+            return reverse_directed(self.path_directed(HUB, a))
+        up = set(self.path(a, HUB))
+        return ([(r, "up") for r in self.path(a, HUB)]
+                + [(r, "dn") for r in self.path(HUB, b) if r not in up])
 
     def resources(self) -> List[str]:
         seen = []
@@ -193,11 +222,20 @@ class Mesh(Interconnect):
         return pts
 
     def path(self, a: int, b: int) -> List[str]:
+        return [r for r, _ in self.path_directed(a, b)]
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        """Segments are canonical (lo-hi); the tag records which way this
+        route traverses each: "+" = lo->hi, "-" = hi->lo. Opposite-direction
+        traffic on a full-duplex segment occupies different wires. A
+        node->hub route retraces the hub->node route (see the base class)."""
+        if b == HUB and a != HUB:
+            return reverse_directed(self.path_directed(HUB, a))
         pts = self._route(self.coord(a), self.coord(b))
         out = []
         for p, q in zip(pts, pts[1:]):
             lo, hi = sorted((p, q))
-            out.append(f"{self.NAME}:seg{lo}-{hi}")
+            out.append((f"{self.NAME}:seg{lo}-{hi}", "+" if p == lo else "-"))
         return out
 
     def resources(self) -> List[str]:
@@ -337,15 +375,34 @@ class Bus(Interconnect):
     def hub_coord(self) -> Slot:
         return self._drv
 
+    DUPLEX = False                              # one shared medium
+
     def hops(self, a: int, b: int) -> float:
         return _manh(self.coord(a), self.coord(b))
 
     def path(self, a: int, b: int) -> List[str]:
         return [f"{self.NAME}:medium"]
 
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        return [(f"{self.NAME}:medium", "")]
+
 
 # --------------------------------------------------------------------------- #
+_FLIP = {"dn": "up", "up": "dn", "+": "-", "-": "+", "": ""}
+
+
+def reverse_directed(pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    """The same route walked backwards: reversed order, direction tags
+    flipped."""
+    return [(r, _FLIP[t]) for r, t in reversed(pairs)]
+
+
 _REGISTRY: Dict[str, type] = {}
+#: accepted by every scheme
+COMMON_PARAMS: Dict[str, Tuple[bool, str]] = {
+    "duplex": (False, "full-duplex (per-direction wires) or shared; default "
+                      "= the scheme's physical norm (bus: shared)"),
+}
 
 
 def register(cls: type) -> type:
@@ -363,7 +420,7 @@ def validate_params(topology: str, params: dict, where: str = "") -> None:
     if cls is None:
         raise ValueError(f"{where}: unknown topology '{topology}'; "
                          f"available: {schemes()}")
-    spec = cls.PARAMS
+    spec = {**COMMON_PARAMS, **cls.PARAMS}
     unknown = set(params) - set(spec)
     if unknown:
         raise ValueError(f"{where}: topology '{topology}' does not take "
