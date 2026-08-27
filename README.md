@@ -95,6 +95,10 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
 - **`analyze_digital_sensitivity.py`** — how much of the model's time the
   digital vector unit (softmax / GELU / LayerNorm / residual) takes, swept over
   lanes × clock.
+- **`analyze_offload_unit_sensitivity.py`** — the external attention unit as
+  an interface (O9): prefill dividend vs unit rate × unit count, decode
+  ms and mJ per token vs context × K/V memory bandwidth; outputs
+  `analysis/offload_unit_sensitivity.{png,json}`.
 - **`op_breakdown.py`** — the per-operator cost ledger: one entry point, every
   cost item on its own row (all CiMLoop components, re-pricing, writes,
   die-to-die, digital unit), operator-type shares of the whole model under both
@@ -149,12 +153,13 @@ python3 scripts/analyze_contention_system.py 512 --shares   # contention at the 
 python3 scripts/analyze_anchored_sweep.py && python3 scripts/analyze_d2d.py \
   && python3 scripts/analyze_offload_contention.py && python3 scripts/analyze_scale_tiers.py
 CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml python3 scripts/op_breakdown.py   # per-operator ledger
+python3 scripts/analyze_offload_unit_sensitivity.py   # external attention unit interface sweep
 ```
 
 ### Tests
 
 ```bash
-python3 tests/run_tests.py            # fast guardrail suite (165 tests, ~4 min)
+python3 tests/run_tests.py            # fast guardrail suite (172 tests, ~4 min)
 python3 tests/run_tests.py --slow     # plus one real mapper run
 ```
 

@@ -46,13 +46,14 @@ import sys
 sys.path.insert(0, "/home/workspace")
 
 UNMODELED = "未建模故未统计"
-OFFLOADED = "已卸载至片外单元,片上不统计(接收侧未建模,O9)"
+OFFLOADED = "已卸载至片外单元(见\"attention 在片外单元\"行)"
 CYC_DEFAULT = 1.449e-6
 ATTN_OPS = ("qk^t", "av")                 # leave the chip under offload (with their K/V write)
-CONDITIONS = {"on_chip": "attention 在片上", "offloaded": "attention 卸载(片上侧)"}
+CONDITIONS = {"on_chip": "attention 在片上", "offloaded": "attention 卸载(端到端:片上 + 片外单元)"}
 # the model's operator TYPES the platform does not simulate (whole-model view)
 MODEL_UNMODELED_TYPES = []          # O24 filled the non-matmul rows (C19)
-TYPE_LABEL = {"qkv_proj": "Q/K/V 投影(qkv_proj)", "qk^t": "注意力分数 QKᵀ(qk^t,含 K 写)",
+TYPE_LABEL = {"attention_unit": "attention 在片外单元(QKᵀ + softmax + AV,K/V 在单元存储)",
+              "qkv_proj": "Q/K/V 投影(qkv_proj)", "qk^t": "注意力分数 QKᵀ(qk^t,含 K 写)",
               "av": "注意力加权 AV(av,含 V 写)", "out_proj": "输出投影(out_proj)",
               "ffn1": "FFN 第一层(ffn1)", "ffn2": "FFN 第二层(ffn2)",
               "softmax": "softmax(数字单元)", "gelu": "GELU(FFN 激活,数字单元)",
@@ -90,13 +91,13 @@ SCHEMES = {
 }
 
 ENERGY_UNMODELED = [
-    ("attention 卸载后的接收单元与 die↔单元链路", "FIXLIST O9: 场景 B 只计片上侧"),
+    ("片外单元的内部结构(缓冲、控制、量化)", "O9 按黑盒接口计:速率、平均开销、K/V 存储、链路"),
     ("core/crossbar 级链路的距离能量", "FIXLIST O1: 部件存在但无能量模型(DR-1 输入未填),下表对应行为 0"),
     ("长上下文 K/V 超容量(>~8k token)的跨 die 分片", "FIXLIST O14"),
 ]
 LATENCY_UNMODELED = [
     ("网络排队(等峰负载向量不可区分)", "只取最忙一根线的占用;O7 区间已给两端"),
-    ("attention 卸载后的接收单元与 die↔单元链路", "FIXLIST O9"),
+    ("片外单元内部的计算/访存重叠", "O9 假设单元内计算与 K/V 访问串行"),
     ("流水气泡 / 不平衡", "流水口径假设完美 microbatch 流水"),
 ]
 
@@ -259,6 +260,41 @@ def ledger_for_elementwise(eo, cost, digital):
             "latency_items": l_items, "network_bound": False, "bottleneck_wire": None}
 
 
+def ledger_for_attention_unit(cost, unit):
+    """Ledger entry of the offloaded attention on the external unit (O9),
+    per layer: link streams, unit compute, K/V memory, per-call overhead."""
+    e_items = [
+        {"group": "片外单元", "item": f"单元计算({cost['macs']:,} 次乘加 + softmax {cost['softmax_ops']:,} 次算术)× {unit.pj_per_mac:g} pJ",
+         "en": "unit compute", "value": cost["compute_J"], "unit": "J", "note": unit.calibration},
+        {"group": "片外单元", "item": f"K/V 存储读写({cost['kv_write_words']:,} 写 + {cost['kv_read_words']:,} 读)",
+         "en": "unit K/V memory", "value": cost["kv_J"], "unit": "J", "note": ""},
+        {"group": "链路", "item": "die↔单元链路(Q 出、K/V 出、attention 输出回)",
+         "en": "die-unit link", "value": cost["link_J"], "unit": "J",
+         "note": f"按 die 摆放下到接入点的平均 {cost['link_hops']:g} 跳全程计价(这些词不在 CiMLoop 账里)"},
+    ]
+    l_items = [
+        {"group": "链路", "item": "Q + K/V 送出(die → 单元)", "en": "link out",
+         "value": cost["link_out_s"], "unit": "s", "note": ""},
+        {"group": "片外单元", "item": "单元计算(含每次调用固定开销)", "en": "unit compute",
+         "value": cost["compute_s"], "unit": "s", "note": ""},
+        {"group": "片外单元", "item": "K/V 存储读写(读全部已存上下文)", "en": "unit K/V memory",
+         "value": cost["kv_s"], "unit": "s", "note": "与计算串行(假设)"},
+        {"group": "链路", "item": "attention 输出送回(单元 → die)", "en": "link back",
+         "value": cost["link_back_s"], "unit": "s", "note": ""},
+    ]
+    for name, why in LATENCY_UNMODELED:
+        l_items.append({"group": "未建模", "item": name, "en": name, "value": UNMODELED,
+                        "unit": "", "note": why})
+    return {"op": "attention_unit", "kind": "offloaded_unit",
+            "shape": {"macs": cost["macs"], "kv_read_words": cost["kv_read_words"]},
+            "energy_total_J": cost["energy_J"], "energy_residual_J": 0.0,
+            "energy_items": e_items,
+            "latency_total_s": {"perfect_overlap_s": cost["chain_s"],
+                                "zero_overlap_s": cost["chain_s"]},
+            "latency_items": l_items, "network_bound": False, "bottleneck_wire": None,
+            "offload_only": True}
+
+
 def ledger_for_embedding(emb):
     lat = emb["latency_s"]
     e_items = [{"group": "片外", "item": f"片外读 {emb['words']:,} 词 × DRAM 每词能量",
@@ -328,6 +364,7 @@ def type_table(ops, n_layers, condition):
     from scripts import llm_workload as lw
     leaves = lambda name: condition == "offloaded" and not lw.stays_on_chip_under_offload(name)
     mult = lambda o: 1 if o["op"] in PER_MODEL_OPS else n_layers
+    ops = [o for o in ops if not (o.get("offload_only") and condition == "on_chip")]
     counted = [o for o in ops if not leaves(o["op"])]
     E = sum(o["energy_total_J"] * mult(o) for o in counted)
     L1 = sum(o["latency_total_s"]["perfect_overlap_s"] * mult(o) for o in counted)
@@ -344,7 +381,7 @@ def type_table(ops, n_layers, condition):
             rows.append({"type": TYPE_LABEL.get(o["op"], o["op"]), "op": o["op"],
                          "energy_J": OFFLOADED, "energy_share": "",
                          "latency_s": OFFLOADED, "latency_share": "",
-                         "latency_zero_overlap_s": OFFLOADED, "note": OFFLOADED})
+                         "latency_zero_overlap_s": OFFLOADED, "note": ""})
             continue
         e = o["energy_total_J"] * mult(o)
         l1 = o["latency_total_s"]["perfect_overlap_s"] * mult(o)
@@ -582,6 +619,8 @@ def main(argv=None):
                                   "O7 bracket both ends"),
               "fabric": base.name, "unmodeled_marker": UNMODELED, "phases": {}}
     result["digital_unit"] = dataclasses.asdict(base.digital)
+    result["attention_unit"] = dataclasses.asdict(base.attention_unit)
+    result["attention_unit"]["link_hops_used"] = lw.unit_link_hops(base)
     for phase in args.phases.split(","):
         d2d = _d2d_per_boundary(base, cfg, args.S, phase)
         ops = []
@@ -602,6 +641,11 @@ def main(argv=None):
                                               base.digital))
         # the model's two ends, once per model: embedding read, LM head matmul
         ops.append(ledger_for_embedding(lw.embedding_cost(cfg, args.S, phase, fabric=base)))
+        # O9: under offload the attention runs on the external unit
+        ops.append(ledger_for_attention_unit(
+            lw.attention_unit_cost(cfg, args.S, phase, base.attention_unit,
+                                   hops=lw.unit_link_hops(base)),
+            base.attention_unit))
         if not args.no_lm_head:
             lm = lw.lm_head_op(cfg, args.S, phase)
             need = lw.dies_for_op(lm)

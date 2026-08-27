@@ -76,3 +76,25 @@ dedicated softmax / LayerNorm engines). Until the company supplies its own:
 
 `analyze_digital_sensitivity.py` sweeps lanes x clock so the real chip's
 values can be read off the curve.
+
+## External attention unit (O9, platform input DR-9) -- generic public figures
+
+Under offload the attention (QK^T, softmax, AV, and the K/V) leaves the die
+for an abstract NPU-class digital unit at the package attach point with its
+own K/V memory. No internal structure is modeled; the interface is:
+
+| parameter | default | source / rule |
+|---|---|---|
+| internal compute rate | 2 T MAC/s (4 TOPS INT8) | edge-NPU class: Google Edge TPU public figure, 4 TOPS INT8 at 2 W |
+| internal average cost | 1.0 pJ per MAC, all-in | the same public figure, 2 TOPS/W (arithmetic alone would be ~0.25 pJ per 8-bit MAC, Horowitz ISSCC 2014) |
+| per-call overhead | 0 | parameter present, no public default |
+| K/V memory bandwidth | 25.6 GB/s | LPDDR4-class, two 32-bit channels at 3200 MT/s |
+| K/V memory energy | 50 pJ per 8-bit word read or write | LPDDR4 published range ~4-8 pJ/bit (the code's existing off-chip constant) |
+| K/V capacity | 2 GB | one LPDDR4 package; ~40k tokens of context for GPT-2 medium |
+| die<->unit link | 12.5 GB/s per direction, 10 pJ per word per hop; energy priced at the die placement's mean hop count from the attention dies to the attach point (3.5 under the 48-die snake seating, routed grid, hub at the centre) | the same class as the die-to-die links (Simba GRS, above); the die side always carries the die placement -- the interface's reference hop count (1) is only the fallback for a direct call without a placement |
+| units | 1, serving all layers | the layer count it serves sets the pipelined stage: 24 layers' attention per beat |
+
+`analyze_offload_unit_sensitivity.py` sweeps rate x K/V bandwidth x units so
+the real unit can be read off the curves; the die-side numbers (unit
+infinitely fast, link infinitely wide) remain published beside the
+end-to-end ones.

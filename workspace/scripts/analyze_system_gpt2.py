@@ -62,6 +62,9 @@ CHIP2CHIP_PJ = [None] # per-word die-to-die energy, filled from the chip2chip mo
 ELW = [lw.elementwise_cost(eo, fabric_mod.default().digital)
        for eo in lw.block_elementwise_ops(cfg, S=S, phase=PHASE)]
 EMB = lw.embedding_cost(cfg, S, PHASE, fabric=fabric_mod.default())   # once per model
+# O9: scenario B end-to-end -- the external attention unit's per-layer chain
+UNIT = lw.attention_unit_cost(cfg, S, PHASE, fabric_mod.default().attention_unit,
+                              hops=lw.unit_link_hops(fabric_mod.default()))   # die placement -> hops to the attach point
 for op in ops:
     print(f"  searching mapping: {op.name:<9} ({op.kind}) "
           f"P={op.P} C={op.C} M={op.M} N={op.N}", flush=True)
@@ -118,13 +121,17 @@ scen = {
            + total(records, "write_E", ALL) + elw_total("energy_J", False)
            + EMB["energy_J"],
     "B_E": total(records, "raw_E", ST) + total(records, "dist_extra_E", ST)
-           + elw_total("energy_J", True) + EMB["energy_J"],
+           + elw_total("energy_J", True) + EMB["energy_J"] + NL * UNIT["energy_J"],
     # latency (s)
     "C_L": total(records, "raw_L", ALL),
     "A_L": total(records, "raw_L", ALL) + total(records, "dist_L", ALL)
            + total(records, "write_L", ALL) + elw_total("latency_s", False),
     "B_L": total(records, "raw_L", ST) + total(records, "dist_L", ST)
-           + elw_total("latency_s", True),
+           + elw_total("latency_s", True) + NL * UNIT["chain_s"],
+    # the unit on its own (O9); B without it = the die side
+    "unit_E_B": NL * UNIT["energy_J"],
+    "unit_L_B": NL * UNIT["chain_s"],
+    "unit_link_hops": UNIT["link_hops"],
     # the O24 terms on their own (the embedding read is priced, not timed,
     # unless the fabric sets an off-chip bandwidth)
     "elementwise_E_A": elw_total("energy_J", False),

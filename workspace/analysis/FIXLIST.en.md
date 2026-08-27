@@ -440,6 +440,53 @@ and the report were updated to this configuration.
 
 ---
 
+### C22. The unit link carries the die placement in every script
+
+The offload streams' link energy (words x hops x pJ) had two hop
+conventions: the offload script priced it at the seating's mean hop count
+(3.5) while the scenario totals, the ledger and the two sweeps used the
+interface's reference hop (1). Decision: die-side quantities carry the die
+placement by default, the unit's internals stay average costs.
+`llm_workload.unit_link_hops` (canonical 48-die snake seating, routed grid,
+hub at the centre; a fabric with fewer dies falls back to the canonical
+package) is the one source; every script passes it. Moves only the link
+energy: unit 16.3 -> 17.6 mJ per prefill model (scenario B 211.0 -> 212.3
+mJ, still 28% under A), ledger 212.22 -> 213.48 mJ (unit row 8.2%), decode
++2.5 uJ per token; no latency, ranking or dividend moves. Group 21 pins
+the 3.5 and that hops touch the link energy alone (7 tests).
+
+### C21. O9 closed: the offload receiving unit is a black-box interface
+
+`fabric.AttentionUnit` (platform input DR-9): compute rate, average cost
+per MAC, per-call overhead, K/V memory bandwidth / energy / capacity,
+die<->unit link bandwidth / energy / reference hops, unit count. Shipped
+generic public figures (ANCHORS.md): 2 T MAC/s and 1 pJ/MAC (edge-NPU
+class), LPDDR4-class K/V memory (25.6 GB/s, 50 pJ/word, 2 GB), GRS-class
+link (12.5 GB/s, 10 pJ/word), one unit for all layers. The unit sits at
+the die scheme's hub (package attach point); `offload_streams` /
+`offload_flows` put Q, K/V and the attention output on the die wires as
+node-to-node flows (they share the wires with the hand-offs);
+`attention_unit_cost` gives the per-layer chain (link out, compute at the
+rate incl. softmax ops, K/V append + full read of the context, link
+back), serial inside the unit (stated). Entered in
+analyze_offload_contention (end-to-end stacks and multipliers, unit stage,
+beat with the streams at the example bandwidths and at the anchor),
+analyze_anchored_sweep (end-to-end decode rows), analyze_system_gpt2 (B
+totals), the ledger (an "attention on the external unit" entry with link /
+compute / K/V rows; the three offloaded ops point to it), and a new
+sensitivity sweep (`analyze_offload_unit_sensitivity.py`: dividend vs
+rate x unit count, decode ms and mJ per token vs context x K/V
+bandwidth). Findings at the generic values: prefill +12.6 ms / +17.6 mJ
+per model, dividend +124% kept (unit stage 8.61 < 10.63 ms; -57% at
+0.25 T MAC/s); decode 0.99 -> 1.99 ms per token, energy 0.47 -> 1.76 mJ
+(K/V reads), overtaking on-chip decode near 7k tokens of context; the
+streams converge on the attach point: busiest wire 1/1/4/47 -> 36/25/38/143
+hand-off equivalents, wire-bound at 256 w/c (10x), hidden at the 12.5 GB/s
+anchor. Group 21 (6 tests): stream volumes equal the die's foregone writes
+and projections, infinite unit reduces to the die side, decode scales with
+context, generic magnitudes, dividend never exceeds the die side, streams
+route to the hub. Die-side numbers stay published as a column.
+
 ### C20. Settings document for the company (2026-08-21)
 
 `analysis/settings_and_assumptions.tex` (local, like the report): every
@@ -635,7 +682,7 @@ which is how O12 and O20 went unflagged).
 | ~~O22 shared-direction wires~~ RESOLVED (C17) | was: up+down on one wire | full-duplex direction-split wires are the default for every point-to-point scheme (bus stays a shared medium); alone it relaxed multipliers 0-20% (e.g. corner 1.97 -> 1.61x at Simba) |
 | ~~O23 partial-sum width~~ RESOLVED (C17) | was: partial sums at 8-bit width | 16-bit partial sums up the tree (fabric.psum_word_bytes, platform input DR-7) roughly double every wire's load; it outweighs O22, so the NET direction is settled: the earlier numbers UNDERSTATED contention (Simba spread 1.00-3.11x -> 1.03-5.31x) |
 | ~~O24 softmax/LayerNorm/residual missing~~ RESOLVED (C19) | was: the block's non-matmul operators absent from every total | modeled on the die's digital vector unit (platform input DR-8, generic 64 lanes @ 1 GHz): 355M prefill +8.9 mJ (+3.1%) and +13.4 ms (+1.1%), decode negligible; denominators grew, so every contention multiplier eased slightly; qualitative conclusions unchanged |
-| O9 off-chip attention unit off the clock | offloaded columns count the on-chip side only; if the unit or its link ever binds, true token time is larger | the +126% dividend (v2 basis, unified 48-die half-layer stages; v1 published +53%, and a briefly-quoted +13% mixed a half-layer A stage with a whole-layer B stage) is an UPPER LIMIT of the benefit; offloaded columns are not end-to-end tokens/s |
+| ~~O9 off-chip attention unit off the clock~~ RESOLVED (C21) | was: offloaded columns counted the die side only | the unit is a black-box interface (rate, cost, K/V memory, link, count; generic public defaults, DR-9); end-to-end numbers published beside the die-side ones: prefill dividend +124% survives the generic unit (needs >~1.2 T MAC/s per unit), decode 0.99 -> 1.99 ms and 0.47 -> 1.76 mJ per token, streams converge on the attach point (busiest wire 1 -> 36 hand-off equivalents) |
 | O21 context ceiling | not a bias: S=512 numbers unaffected; the seating is INVALID past ~2.5k tokens | validity-domain statement only |
 | half-partition choice | the 23.49 ms stage and the +126% depend on the chosen attention/FFN split; another split moves both, direction unknown | second-order |
 | batch = 1 | compute and traffic scale together with batch; ratios approximately invariant, unverified | scope statement |
@@ -680,7 +727,7 @@ current owner and its open items. Bold items move current conclusions.
 | cross-die placement | die-group seating on the package | three styles measured per op | clustered jointly infeasible (**O20**); whole-model seating (**O16**); search (S4) |
 | cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17) | producer-to-consumer routing (O13); O19 applies |
 | traffic accounting | multicast/reduction structure | v1 structured traffic, counter-reconciled; down/up components kept, partial sums at 16 bits on wires (C17) | hyperedge membership convention (hygiene); partial-sum width in the ENERGY overlay (hygiene, transport <2% of energy) |
-| traffic accounting | cross-die traffic classes | hidden-state hand-offs + intra-op slices; elementwise operators move through the glb only (C19, stated) | KV-offload/host streams (O9) |
+| traffic accounting | cross-die traffic classes | hidden-state hand-offs + intra-op slices + the offload streams to the attach point (C21); elementwise operators move through the glb only (C19, stated) | host I/O streams |
 | contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default | queueing on the per-wire load vectors; joint tier sweep (hygiene) |
 | contention | operating mode | single-pass + pipelined, stage = slower half | bubbles/imbalance beyond the max rule; batch>1 (register) |
 | contention | critical-path composition | write + [max, sum](compute, network) + propagation -- both ends published (C16) | missing terms O24 |
@@ -688,7 +735,7 @@ current owner and its open items. Bold items move current conclusions.
 | calibration | per-level link energy | macro silicon-calibrated + re-pricing; D2D at GRS band midpoint | core/crossbar at zero (**O1**); bus (O8) |
 | calibration | physical geometry | slot_pitch_um in the configs | first consumer: derive ns/hop and energy scale (hygiene) |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | ~320-die joint deployment (O16); 70B-class probe (unscheduled) |
-| workload | phases & conditions | prefill/decode x attention on-chip/offloaded; non-matmul operators on the digital unit (C19) | end-to-end offload (O9) |
+| workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
 | verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 165 tests + goldens incl. the 48-die chain pins (C15), the v3 accounting pins (C17), the ledger conservation (C18) and the digital-unit pins (C19) | change-audit process rule |
 
 Rows 6--8 and 10--12 are the search space of S3/S4; rows 4 and 15 are its
@@ -708,7 +755,6 @@ corrected 355M objective values.
 | O16 | whole-model multi-die deployment never simulated jointly | 2.7B die-sets placed together on one package (~320 dies), inter-op hand-offs included | scale extension |
 | O14 | over-capacity K/V (long-context) has no policy | attention at S≳8k becomes simulatable honestly | scale extension |
 | O15 | the input-row split (cross-die addition of partial results) never exercised end to end | validates the expensive half of the spanning mechanism | coverage |
-| O9 | offload receiving side unmodeled | completes the offload account (die↔unit link + KV streams on die links) | coverage |
 | O8 | bus energy charged by distance-to-driver | removes the artifactual star↔bus energy tie | model quality |
 | O17 | analog→digital flip asserted, not quantified | a device-cycle sweep turns the report's flip remarks into curves | calibration |
 | O19 | four interconnect schemes only | torus / ring / express links / full-duplex / hierarchical NoC join every sweep for free | extensibility |
@@ -742,16 +788,6 @@ does not. Same gap, smaller: `h_tree.level_length` defaults to 1 per level
 where a physical H-tree lengthens toward the root.
 
 
-### O9. The offload receiving side is unmodeled
-
-Scenario B counts only what stays on chip: the attention unit itself, the
-die↔unit link, and the KV traffic that link carries are absent. Two
-consequences now that offload results are headline (C10/C11): the offload
-contention numbers are an on-chip-side lower bound, and KV-offload streams
-sharing the die links would add contention the model does not see (§6 items
-8/11 in the SUMMARY). Fix: give the attention unit a node on the package grid
-and route its flows through the same registry — the machinery exists; the
-work is the traffic model for Q/K/V/attention-out volumes.
 
 ### O13. Intra-op D2D flows are star-routed through the package attach point
 
@@ -952,8 +988,8 @@ process failure.
    unit as platform input DR-8, ledger rows filled, sensitivity sweep.
 7. **O13 owner-die routing** -- upgrades the tier-L bounds to routed values
    (folds naturally into S4's scoring).
-8. **O9 offload receiving side** -- turns the +126% dividend into an
-   end-to-end number.
+8. ~~O9 offload receiving side~~ -- **done (C21)**: black-box interface,
+   end-to-end numbers, sensitivity sweep.
 9. **O6 + S5 solver reconciliation** -- ON HOLD with the search discussion.
 10. **O16 whole-model deployment** (the search's eventual target), then O14
     long-context K/V, O15 input-row-split probe, O17 device sweep, O1 (DR-1

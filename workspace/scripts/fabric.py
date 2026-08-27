@@ -79,6 +79,31 @@ class DigitalUnit:
 
 
 @dataclass(frozen=True)
+class AttentionUnit:
+    """The external unit that receives the attention under offload (O9): an
+    ABSTRACT NPU-class digital engine off the die, at the package attach
+    point, with its own K/V memory. No internal structure is modeled; the
+    interface is this parameter set (platform input DR-9). Shipped values are
+    generic public figures (ANCHORS.md): an edge-NPU-class engine (4 TOPS
+    INT8 at 2 W -> 2 T MAC/s, 1 pJ per MAC all-in), LPDDR4-class K/V memory
+    (25.6 GB/s, ~6 pJ/bit -> 50 pJ per 8-bit word), and a die<->unit link of
+    the same class as the die-to-die links (Simba GRS: 12.5 GB/s per
+    direction, 10 pJ per word)."""
+    mac_per_second: float = 2.0e12          # internal compute rate
+    pj_per_mac: float = 1.0                 # internal average cost per MAC (all-in)
+    call_overhead_s: float = 0.0            # fixed per-layer invocation overhead
+    kv_words_per_second: float = 25.6e9     # K/V memory bandwidth (8-bit words)
+    kv_pj_per_word_read: float = 50.0
+    kv_pj_per_word_write: float = 50.0
+    kv_capacity_words: float = 2.0e9        # 2 GB
+    link_bandwidth_words_per_cycle: float = 18112.0   # 12.5 GB/s at the 1.449 us cycle
+    link_pj_per_word: float = 10.0
+    link_reference_hops: float = 1.0
+    n_units: int = 1                        # units sharing the model's layers
+    calibration: str = "DR-9: generic public figures (ANCHORS.md)"
+
+
+@dataclass(frozen=True)
 class Fabric:
     name: str
     levels: List[Level] = field(default_factory=list)
@@ -88,6 +113,8 @@ class Fabric:
     # off-chip port bandwidth for the model's embedding read (words/cycle at
     # the device cycle); None = not set -> the read is priced but not timed
     offchip_bandwidth_words_per_cycle: Optional[float] = None
+    # the external attention unit (O9); the platform default configuration
+    attention_unit: AttentionUnit = field(default_factory=AttentionUnit)
     # Width of a PARTIAL SUM crossing a link, in units of the 8-bit activation
     # word (O23). Outputs travelling UP the tree are partial sums until the
     # reduction completes at the top: W4 x A8 accumulated over K rows is
@@ -253,11 +280,15 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
         intermediate_bits=int(dg.get("intermediate_bits", DigitalUnit.intermediate_bits)),
         calibration=str(dg.get("calibration", DigitalUnit.calibration)))
     ob = raw.get("offchip_bandwidth_words_per_cycle")
+    au = raw.get("attention_unit") or {}
+    unit = AttentionUnit(**{k: (int(v) if k == "n_units" else (str(v) if k == "calibration" else float(v)))
+                            for k, v in au.items()})
     return Fabric(name=raw["name"], levels=levels,
                   cimloop=raw.get("cimloop", {}),
                   psum_word_bytes=float(raw.get("psum_word_bytes", 2.0)),
                   digital=digital,
-                  offchip_bandwidth_words_per_cycle=(None if ob is None else float(ob))
+                  offchip_bandwidth_words_per_cycle=(None if ob is None else float(ob)),
+                  attention_unit=unit,
                   ).validate()
 
 

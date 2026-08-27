@@ -191,6 +191,119 @@ def elementwise_cost(op: ElementwiseOp, digital, glb_pj_per_word: float = GLB_PJ
             "arith_ops": op.arith_ops}
 
 
+# ---------------------------------------------------------------------------
+# O9: attention offloaded to an ABSTRACT external unit (fabric.attention_unit).
+# The unit sits off the die at the package attach point (the die-level
+# scheme's hub) with its own K/V memory. Per layer, three streams cross the
+# die<->unit link: Q out, the new tokens' K and V out (appended to the unit's
+# memory), the attention output back. The unit computes QK^T, softmax and AV
+# for all stored tokens. No internal structure: rate, average cost, K/V
+# memory rate/energy, link -- the DR-9 interface.
+def offload_streams(cfg: GptConfig, S: int, phase: str = "prefill"):
+    """Per-layer word counts of the three die<->unit streams (8-bit words)."""
+    Pq = S if phase == "prefill" else 1
+    return {"q_out": Pq * cfg.d_model,            # Q of this step's rows
+            "kv_out": 2 * Pq * cfg.d_model,       # K and V of this step's rows
+            "attn_back": Pq * cfg.d_model}        # attention output rows
+
+
+def attention_unit_cost(cfg: GptConfig, S: int, phase: str, unit,
+                        context: int = None, cycle_seconds: float = 1.449e-6,
+                        hops: float = None):
+    """Per-layer cost of the offloaded attention on the external unit.
+
+    Serial inside the unit (stated): K/V append write, K/V read of all
+    `context` stored tokens, QK^T + softmax + AV arithmetic at the unit's MAC
+    rate (softmax's element operations counted as MAC-equivalents), plus a
+    fixed per-call overhead. Link: Q + K/V share the die->unit direction, the
+    attention output uses the unit->die direction; each timed at the link
+    bandwidth. `hops` (die->attach point) prices the link energy at
+    hops x pj per word (these words are NOT in the CiMLoop account, so no
+    flat charge exists to replace -- the full path is billed). Die-side
+    quantities carry the die placement: every script passes
+    `unit_link_hops()` (the mean over the attention dies under the seating);
+    `hops=None` falls back to the interface's reference hop count."""
+    Pq = S if phase == "prefill" else 1
+    ctx = S if context is None else context
+    st = offload_streams(cfg, S, phase)
+    d, H = cfg.d_model, cfg.n_heads
+    macs = 2 * Pq * ctx * d                      # QK^T and AV over all stored tokens
+    softmax_ops = H * Pq * ctx * 4               # 2 adds + 1 mul + 1 lookup per score
+    ops = macs + softmax_ops
+    compute_s = ops / unit.mac_per_second + unit.call_overhead_s
+    compute_J = ops * unit.pj_per_mac * 1e-12
+    kv_write_words = st["kv_out"]
+    kv_read_words = 2 * ctx * d                  # all stored K and V, once per layer
+    kv_s = (kv_write_words + kv_read_words) / unit.kv_words_per_second
+    kv_J = (kv_write_words * unit.kv_pj_per_word_write
+            + kv_read_words * unit.kv_pj_per_word_read) * 1e-12
+    bw = unit.link_bandwidth_words_per_cycle
+    link_out_s = (st["q_out"] + st["kv_out"]) / bw * cycle_seconds
+    link_back_s = st["attn_back"] / bw * cycle_seconds
+    h = unit.link_reference_hops if hops is None else hops
+    link_J = (st["q_out"] + st["kv_out"] + st["attn_back"]) * h * unit.link_pj_per_word * 1e-12
+    return {"macs": macs, "softmax_ops": softmax_ops,
+            "compute_s": compute_s, "compute_J": compute_J,
+            "kv_write_words": kv_write_words, "kv_read_words": kv_read_words,
+            "kv_s": kv_s, "kv_J": kv_J,
+            "link_out_s": link_out_s, "link_back_s": link_back_s, "link_J": link_J,
+            "link_hops": h,
+            "unit_s": compute_s + kv_s,                       # time inside the unit
+            "chain_s": link_out_s + compute_s + kv_s + link_back_s,   # one layer, serial
+            "energy_J": compute_J + kv_J + link_J,
+            "streams": st}
+
+
+def offload_flows(cfg: GptConfig, S: int, phase: str, attention_dies):
+    """The die<->unit streams as node-to-node flows for link_occupancy: from
+    each attention die to the package attach point (HUB) and back. Activation
+    width, one direction each; they share the die links with the layer
+    hand-offs."""
+    from scripts import interconnect as ic
+    st = offload_streams(cfg, S, phase)
+    flows = []
+    for d in attention_dies:
+        flows.append({"level": "die<->die", "level_name": "die", "nodes": (d, ic.HUB),
+                      "src": f"die{d}", "dst": "attention_unit",
+                      "volume": float(st["q_out"] + st["kv_out"]), "distance": 0.0})
+        flows.append({"level": "die<->die", "level_name": "die", "nodes": (ic.HUB, d),
+                      "src": "attention_unit", "dst": f"die{d}",
+                      "volume": float(st["attn_back"]), "distance": 0.0})
+    return flows
+
+
+def unit_link_hops(fabric=None, assignment="snake", n_layers: int = None):
+    """Mean hop count from the attention dies to the package attach point
+    (HUB) under the die placement -- the count that prices the offload
+    streams' link energy (O9). Die-side quantities carry the die placement by
+    default: `fabric` None, or a fabric with fewer dies than the seating
+    needs (the single-die file), means the canonical 48-die package
+    (analyze_d2d.MULTI); the die scheme is the routed
+    grid with the hub at the centre and the seating `assignment` is one of
+    analyze_d2d.assignments' labels or an explicit unit->slot list. The unit's
+    own internals stay average costs (rate, pJ per MAC, K/V memory)."""
+    from scripts import fabric as fabric_mod, placement as pm, interconnect as ic
+    from scripts.analyze_d2d import assignments, with_link, MULTI
+    L = GptConfig().n_layers if n_layers is None else n_layers
+    fab = fabric
+    if (fab is None or not any(l.name == "die" for l in fab.levels)
+            or fab.count_below("die") < 2 * L):        # fewer dies than the seating: canonical package
+        fab = fabric_mod.from_yaml(MULTI)
+    fm = with_link(fab, "mesh", {"routing": "xy", "hub": "center"}, 256.0)
+    pl = pm.sequential_fill(fm)
+    m = ic.build(fm, "die", pl)
+    asg = dict(assignments(fm))[assignment] if isinstance(assignment, str) else assignment
+    adies = attention_dies_of_chain(L, asg)
+    return sum(m.hops(ic.HUB, d) for d in adies) / len(adies)
+
+
+def attention_dies_of_chain(n_layers: int, assignment=None):
+    """In the two-dies-per-layer seating, unit 2L is layer L's attention die;
+    `assignment` maps unit index -> die slot."""
+    units = [2 * L for L in range(n_layers)]
+    return units if assignment is None else [assignment[u] for u in units]
+
+
 def half_layer_stages(per_op):
     """Per-die pipeline stages of the feasible 48-die configuration (two dies
     per layer) from a per-op record list ({name, compute_s, write_s}).

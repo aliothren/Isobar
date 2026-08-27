@@ -212,6 +212,50 @@ reading rule 2):
 
 ---
 
+### 4.4 Offload end to end: the external attention unit as an interface (O9)
+
+Until O9 every offload number counted the die side only. The receiving
+unit is now a black-box interface (`fabric.attention_unit`, platform input
+DR-9): compute rate, average cost per MAC, per-call overhead, K/V memory
+bandwidth/energy/capacity, die↔unit link bandwidth/energy/reference hops,
+and the number of units. Shipped generic public figures: 2 T MAC/s and
+1 pJ per MAC (edge-NPU class, 4 TOPS INT8 at 2 W), LPDDR4-class K/V memory
+(25.6 GB/s, 50 pJ per word, 2 GB), a GRS-class link (12.5 GB/s per
+direction, 10 pJ per word), one unit for all 24 layers. The unit sits at the
+package attach point; per layer three streams cross the die grid to it (Q
+0.52 M words, K/V 1.05 M, attention output 0.52 M back); inside the unit
+QKᵀ + softmax + AV run at the rate and the whole stored K/V is read once
+per layer, serial with the compute.
+
+| quantity | die side (before O9) | end to end (generic unit) |
+|---|---|---|
+| prefill stack, no contention | 505.5 ms | 518.1 ms (+12.6 ms: unit 0.359 + link 0.168 ms per layer) |
+| prefill energy | 195.9 mJ | 213.5 mJ (+17.6: compute 13.3, K/V 2.5, link 1.8 at the placement's mean 3.5 hops -- the one hop count every script uses, `unit_link_hops`) |
+| pipelined beat / dividend | 10.63 ms / +124% | max(10.63, unit stage 8.61) = 10.63 ms / +124% |
+| decode per token | 0.99 ms | 1.99 ms (K/V read of 25 MB at 25.6 GB/s = 0.98 ms) |
+| decode energy per token | 0.47 mJ | 1.76 mJ (K/V reads 1.26 mJ) — on chip 0.67 mJ |
+| busiest die wire, snake / sequential / adversarial / bus | 1 / 1 / 4 / 47 hand-offs | 36 / 25 / 38 / 143 hand-off equivalents (the streams converge on the attach point) |
+| pipelined beat with the streams, 256 w/c → 12.5 GB/s anchor | — | 10.05× → 1.00× the die stage (snake) |
+| decode at Simba, scheme spread | 1.03–5.61× | 1.01–3.28× |
+| ledger, whole model, prefill / decode | 195.91 mJ, 736.9 ms / 465 µJ, 1.48 ms | 213.48 mJ, 749.6 ms (unit row 8.2% / 1.7%) / 1,755 µJ, 2.48 ms (unit row 73.5% / 40.5%) |
+
+Three readings. (1) Prefill offload survives the generic unit: the unit's
+stage (8.61 ms) is under the die stage, so the +124% holds — but only
+above ~1.2 T MAC/s for one unit (−57% at 0.25 T; the sensitivity sweep
+`offload_unit_sensitivity.png` gives the curve per unit count). (2) Decode
+offload trades energy for time: the per-token K/V read grows linearly with
+context (1.99 → 4.98 → 16.9 ms at 512 / 2k / 8k tokens at 25.6 GB/s,
+overtaking the on-chip 14.8 ms near 7k tokens) and its energy exceeds the
+whole on-chip token. (3) The attach point is a new hot spot: three streams
+from 24 dies converge there, and at the example bandwidth they, not the
+hand-offs, set the beat; at the measured link bandwidth they hide. The die side
+always carries the die placement: the streams' link energy is priced at
+the seating's mean hop count in every script (the scenario totals, the
+ledger, the anchored and sensitivity sweeps and the offload script share
+`unit_link_hops`); only the unit's internals are average costs. Still
+unmodeled: the unit's internal structure and compute/memory overlap
+(stated), pinned in group 21.
+
 ## 5. Conclusion 3 — Thresholds beside real hardware: on-die pressured, die-to-die safe
 
 ### 5.1 Converting the axis
@@ -566,7 +610,7 @@ company's review.
 | 2 | crossbar/region | position | energy | 1.50×/3.62×, 17.8% — rankings | level unpriced | `crossbar_comm.py`, `analyze_region_locality.py` |
 | 3 | die | wiring scheme | stack latency | 1.00–4.08× (ref. input); 1.03–5.24× at Simba anchor (overlap end; zero-overlap 1.55–6.15×) | below per-scheme threshold (§5.2) | `analyze_contention_system.py` |
 | 4 | die | buffer position | stack latency | 1.49× (ref. input); 1.55× at Simba anchor | same | same |
-| 5 | die | scheme (decode, attention offloaded) | token latency | 1.03–5.61× at the anchors (overlap end) | write no longer masks | `analyze_offload_contention.py` |
+| 5 | die | scheme (decode, attention offloaded) | token latency | 1.03–5.61× die side, 1.01–3.28× end to end at the anchors (overlap end) | write no longer masks | `analyze_offload_contention.py` |
 | 6 | package | layer ordering | energy | ≤+0.15% | operator fits one die | `analyze_d2d.py` |
 | 7 | package | unit ordering (48-die config) | pipelined throughput | up to 2× (mesh orderings; bus 23×) at 64 w/c | mesh orderings below 0.011–0.044 GB/s; bus below 0.71 GB/s (overlap end) | same |
 | 8 | package | die-set placement of a spanning operator | op latency / energy | 4× / +77% | operator exceeds one die | `analyze_multidie_placement.py` |

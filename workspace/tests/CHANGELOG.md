@@ -174,3 +174,74 @@ magnitudes and the v4 readouts. Suite: 162 passed / 1 xfail.
 **What stayed pinned:** energies of the matmuls, every ranking, the v1-v3
 fixtures as references, groups 14/15/17/18 untouched (they pin the
 matmul-only stages and readouts explicitly).
+
+## O9: the offload receiving side as a black-box interface -- v4, 2026-08-26
+
+**What changed:** the external attention unit is modeled as an interface
+(`fabric.AttentionUnit`, platform input DR-9): compute rate and average
+cost per MAC, per-call overhead, K/V memory bandwidth / energy / capacity,
+die<->unit link bandwidth / energy / reference hops, unit count. Shipped
+generic public figures: 2 T MAC/s at 1 pJ/MAC, K/V memory 25.6 GB/s at
+50 pJ/word (2 G words), link 12.5 GB/s (18,112 w/c) at 10 pJ/word, one
+unit. The unit sits at the die scheme's hub; per layer Q, K/V and the
+attention output cross the die wires as node-to-node flows
+(`llm_workload.offload_streams` / `offload_flows`) and the unit's chain is
+link out + compute (incl. softmax ops) + K/V append and full read + link
+back (`attention_unit_cost`), serial inside the unit. Entered in
+analyze_offload_contention (end-to-end stacks and multipliers, unit stage,
+beat with the streams), analyze_anchored_sweep (end-to-end decode rows),
+analyze_system_gpt2 (scenario-B totals gain `unit_E_B` / `unit_L_B`), the
+ledger (an "attention on the external unit" entry with link / compute /
+K/V rows; the three offloaded ops point to it; offloaded type tables now
+titled end to end) and a new sweep `analyze_offload_unit_sensitivity.py`.
+No fixture changed: the die-side stacks, stages and energies are
+untouched, and every die-side number stays published as its own column.
+
+**New readouts (generic unit, S=512):** prefill unit chain 0.527 ms and
+0.73 mJ per layer (link priced at the placement's mean 3.5 hops; the
+scenario totals use the reference 1 hop: 16.3 mJ) -> scenario B 194.7 ->
+211.0 mJ and 209.6 -> 222.2 ms, still under A (296.4 mJ / 328.0 ms);
+offload stall-free stack 505.5 -> 518.1 ms; unit stage 8.61 ms under the
+die stage 10.63 ms, dividend +124% kept (needs >~1.2 T MAC/s per unit,
+-57% at 0.25 T); decode 0.99 -> 1.99 ms per token (K/V read 25 MB at
+25.6 GB/s), energy 0.47 -> 1.76 mJ, scenario B 0.38 -> 1.67 mJ and 1.00
+-> 2.01 ms (A: 0.58 mJ / 14.80 ms); streams converge on the attach point:
+busiest die wire 1 / 1 / 4 / 47 -> 36 / 25 / 38 / 143 hand-off
+equivalents (snake / rows / far pairs / bus), beat 10.05x the die stage
+at 256 w/c and 1.00x at the 12.5 GB/s anchor; anchored decode end to end
+at Simba 1.01-3.28x (die side 1.03-5.61x). Ledger: prefill offloaded
+whole model 195.91 -> 212.22 mJ and 736.92 -> 749.56 ms (unit 7.7% /
+1.7%); decode 465 -> 1,753 uJ and 1.48 -> 2.48 ms (unit 73.5% / 40.5%).
+Group 21 (`test_offload_unit.py`, 6 tests): stream volumes equal the
+die's foregone writes and projections, an infinite unit reduces to the
+die side, decode scales with context, generic magnitudes, the end-to-end
+dividend never exceeds the die side, streams route to the hub. Suite:
+171 passed / 1 xfail.
+
+**What stayed pinned:** all v1-v4 fixtures, groups 14-20, every die-side
+readout and ranking, the O7 bracket, the D2D chain integers.
+
+## O9 follow-up: the unit link priced at the die placement everywhere -- v4, 2026-08-27
+
+**What changed:** `llm_workload.unit_link_hops(fabric=None, assignment="snake")`
+is the one source of the hop count that prices the offload streams' link
+energy: the mean over the 24 attention dies of the routed-grid distance to
+the attach point under the canonical 48-die snake seating (84 / 24 = 3.5).
+Every script passes it (analyze_offload_contention, analyze_system_gpt2,
+op_breakdown, analyze_anchored_sweep, analyze_offload_unit_sensitivity);
+the interface's `link_reference_hops` (1) is only the fallback of a direct
+call without a placement. Rule recorded (FIXLIST C22): die-side quantities
+carry the die placement by default, the unit's internals stay average
+costs. The cost record gains `link_hops`; the ledger's link row states the
+hop count; the scenario totals JSON gains `unit_link_hops`.
+
+**Goldens moved:** none (no fixture holds the unit). Readouts: unit energy
+16.3 -> 17.6 mJ per prefill model (link 0.50 -> 1.76 mJ), scenario B
+prefill 211.0 -> 212.3 mJ (A 296.4), decode B 1.671 -> 1.674 mJ per token
+(2.87x A); ledger prefill offloaded 212.22 -> 213.48 mJ (unit row 7.7% ->
+8.2%), decode 1,753 -> 1,755 uJ; every latency, stage, dividend and ranking
+unchanged. Group 21 gains `test_unit_link_hops_come_from_the_die_placement`
+(3.5 from every entry; hops move the link energy only). Suite: 172 passed /
+1 xfail.
+
+**What stayed pinned:** all fixtures, groups 14-20, the die-side readouts.

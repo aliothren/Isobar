@@ -94,6 +94,22 @@ def main():
             print(f"  {label:22}" + "".join(
                 f"  {c:>7.2f}..{cs:<5.2f}x" for c, cs in zip(cells, cells_sum)))
         results[title] = {"base_s": base, "mult": rows, "mult_sum": rows_sum}
+        if not is_A:
+            # O9: end-to-end -- the external unit's per-token chain (link out,
+            # unit compute + K/V read of the whole context, link back) added as
+            # a constant to every scheme; multipliers ease, absolutes grow
+            from scripts import fabric as fabric_mod
+            unit = fabric_mod.default().attention_unit
+            c = lw.attention_unit_cost(lw.GptConfig(), 512, phase, unit,
+                                       hops=lw.unit_link_hops())   # die placement -> hops to the attach point
+            add = N_LAYERS * c["chain_s"]
+            rows_e2e = {label: [(stack(per[label], g * WC_PER_GBPS, is_A) + add) / (base + add)
+                                for _, g in ANCHORS] for label in ORDER}
+            results[title]["mult_e2e"] = rows_e2e
+            results[title]["base_e2e_s"] = base + add
+            print(f"  -- end-to-end with the external unit (+{add*1e3:.3f} ms per token):")
+            for label in ORDER:
+                print(f"     {label:22}" + "".join(f"{c_:>9.2f}x" for c_ in rows_e2e[label]))
         # the same table under every wire accounting (O22/O23), if the
         # system JSON carries them -- the published comparison table
         acc = d["phases"][phase].get("accounting_variants", {})
@@ -184,7 +200,9 @@ def main():
                    "wc_per_gbps": WC_PER_GBPS,
                    "results": {t: {"base_s": r["base_s"], "mult": r["mult"],
                                    "mult_sum": r["mult_sum"],
-                                   "by_accounting": r.get("by_accounting", {})}
+                                   "by_accounting": r.get("by_accounting", {}),
+                                   "mult_e2e": r.get("mult_e2e", {}),
+                                   "base_e2e_s": r.get("base_e2e_s")}
                                for t, r in results.items()}}, f, indent=1)
     print("JSON -> anchored_sweep.json")
 

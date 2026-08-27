@@ -68,7 +68,14 @@ accounted-by columns):
    shield and the per-stage compute margin lets contention reach decode for
    the first time (up to 4.4×), and the +124% throughput dividend is collected
    only where the package network is not the bottleneck (§2.3.1d; summary
-   figures: the two placement_impact panels).
+   figures: the two placement_impact panels). With the external attention
+   unit counted as a black-box interface (generic NPU figures, §2.3.1e) the
+   prefill dividend stays +124% (the unit keeps pace with the die stage), but
+   decode goes from 0.99 ms per token on the die side to 1.99 ms end to end
+   (the unit reads the whole K/V every token) and its ENERGY rises (K/V reads
+   1.29 mJ per token against 0.67 mJ for the whole token on chip); the three
+   streams converge on the attach point and wire-bind the pipeline at the
+   example bandwidth, not at the measured anchor.
 3. **Validation by composition**: that ReRAM writes are expensive is common
    knowledge (it is why these chips are weight-stationary), not a finding.
    Charging the one write inference cannot avoid (K/V) makes decode come out
@@ -391,6 +398,36 @@ Three panels: prefill drops everywhere with the spread intact; in decode the
 write block (tan) is the shield hiding the network — remove it and the 4.4×
 surfaces; the +124% pipelined dividend (beat 23.80→10.63 ms) is paid out only
 where the package network is not the bottleneck.
+**(e) The external attention unit, end to end (O9).** Offload is no longer
+the die side alone: the unit enters as a **black-box interface**
+(`fabric.attention_unit`, platform input DR-9, generic public figures:
+2 T MAC/s, 1 pJ per MAC, LPDDR4-class K/V memory at 25.6 GB/s and 50 pJ per
+word, a die↔unit link of the die-to-die class at 12.5 GB/s and 10 pJ per
+word, one unit serving every layer; sources in ANCHORS.md). Three streams
+per layer — Q out (0.52 M words), K/V out (1.05 M), attention output back
+(0.52 M) — travel from each attention die over the die grid to the attach
+point; inside the unit QKᵀ + softmax + AV run at the rate, K/V are appended
+and **the whole stored K/V is read once per layer**, serial with the compute
+(stated). Prefill: 0.359 ms unit + 0.168 ms link = 0.527 ms per layer,
++12.6 ms and +17.6 mJ per model → 518.1 ms end to end (die side 505.5);
+pipelined beat = max(die stage 10.63, unit stage 8.61) = 10.63 ms, so
+**the +124% dividend survives the generic unit**, but below ~1.2 T MAC/s
+the unit becomes the beat (−57% at 0.25 T; `offload_unit_sensitivity.png`).
+**Decode**: the unit reads 25 MB of K/V per token (0.98 ms at 25.6 GB/s) →
+1.99 ms per token end to end (die side 0.99; on chip 14.8), growing
+linearly with context and overtaking the on-chip value near 7k tokens;
+energy +1.29 mJ per token, almost all K/V reads — **1.76 mJ end to end
+against 0.67 mJ on chip**: offload buys decode time and pays in energy.
+**Convergence**: all streams meet at the attach point; under the snake
+seating the busiest die wire goes from 1 hand-off to 36 hand-off
+equivalents (sequential 25, adversarial 38, bus 143): at the 256 w/c example
+bandwidth the pipelined beat is wire-bound at 10× the die stage; at the
+12.5 GB/s anchor it is 1.00×. At the Simba anchor the end-to-end decode
+multipliers read 1.01–3.28× (die side 1.03–5.61×: the unit's constant term
+dilutes the network multipliers). The die-side numbers stay published as a
+column; the unit's internal structure and any compute/memory overlap inside
+it remain unmodeled.
+![offload unit sensitivity](offload_unit_sensitivity.png)
 ![offload contention](offload_contention.png)
 
 **Placement summarized per operating condition** (same layout, each figure
@@ -722,11 +759,16 @@ bus beat identity 23×words/bw, and the assignment ordering
 | Scenario | Energy | Latency |
 |---|---|---|
 | (C) baseline | 0.284 J | 0.249 s |
-| (A) full + overlays | 0.288 J (**1.01×**) | 0.315 s (**1.26×**) |
-| (B) offload attention | 0.191 J | 0.203 s |
+| (A) full + overlays | 0.296 J (**1.04×**) | 0.328 s (**1.32×**) |
+| (B) offload attention, end to end (with the external unit, O9) | 0.212 J | 0.222 s |
+| (B) of which the die side | 0.195 J | 0.210 s |
 
-A−C latency = 0.0655 s, **exactly the 65.4 ms write latency**; offload (A→B) saves
-34% energy, 36% latency.
+A−C latency = 0.0788 s = the 65.4 ms write latency + 13.4 ms on the digital
+unit; offload (A→B) saves 28% energy, 32% latency end to end (die side only:
+34% / 36%). The external unit at the generic defaults (2 T MAC/s, 1 pJ/MAC,
+K/V memory 25.6 GB/s, link 12.5 GB/s; the link energy priced at the die
+placement's mean 3.5 hops from the attention dies to the attach point, one
+source `unit_link_hops` for every script) costs 17.6 mJ / 12.6 ms per model.
 
 ### 4.2 decode (one generation step)
 ![system comparison decode](gpt2_system_comparison_decode_2x4.png)
@@ -734,11 +776,18 @@ A−C latency = 0.0655 s, **exactly the 65.4 ms write latency**; offload (A→B)
 | Scenario | Energy | Latency |
 |---|---|---|
 | (C) baseline | 5.60e-4 J | 1.46 ms |
-| (A) full + overlays | 5.66e-4 J (**1.01×**) | **14.8 ms (10.12×)** |
-| (B) offload attention | 3.75e-4 J | 0.987 ms |
+| (A) full + overlays | 5.84e-4 J (**1.04×**) | **14.8 ms (10.13×)** |
+| (B) offload attention, end to end (with the external unit, O9) | 1.67e-3 J | 2.01 ms |
+| (B) of which the die side | 3.83e-4 J | 1.00 ms |
 
-A−C = 13.3 ms, exactly the write latency; **offload saves 93% latency / 34%
-energy** — a throughput argument.
+A−C = 13.3 ms = the 13.3 ms write latency + 0.03 ms on the digital unit;
+**offload saves 86% latency end to end but the energy rises to 2.87× A** —
+per token the external unit reads the layer's whole K/V (512-token context,
+25 MB) back from its memory, 1.29 mJ/token, 77% of B. Die side only it is
+still 93% latency / 34% energy saved. The throughput argument (latency)
+holds, the energy argument flips; both grow linearly with the context, and
+near 7k tokens the end-to-end decode latency catches up with on-chip
+(§2.3.1(e)).
 
 ### 4.3 Attribution per level (read every result with its level and denominator)
 
@@ -756,8 +805,9 @@ energy** — a throughput argument.
 > - The qualitative picture (decode write-bound, offload = throughput win) needs no
 >   calibration; **the magnitudes (10.12×/90%/93%) are set by the write-granularity
 >   assumptions and move with DR-5** (and are ceilings — §2.3 directionality).
-> - Judge offload by **A vs B** (B vs C is apples-to-oranges); B counts only what
->   stays on-chip, not the receiving unit.
+> - Judge offload by **A vs B** (B vs C is apples-to-oranges); B's end-to-end
+>   figure includes the receiving unit (O9 black-box interface, generic
+>   defaults); the die side is listed on its own.
 
 ### 4.4 Where to see the searched mappings
 Every op goes through the Timeloop mapper (`models/include/mapper.yaml`: EDP,
@@ -777,7 +827,10 @@ softmax / GELU / LayerNorm / residual adds on the digital unit (O24,
 closed-form), the embedding read (priced; timed only with an off-chip
 bandwidth set) and the LM head (a real 8-die matmul, last token only);
 under both conditions — attention on chip / offloaded, where qk^t, av and
-softmax carry "已卸载至片外单元,片上不统计") → **per-operator totals** →
+softmax carry "offloaded to the external unit (see the attention-on-the-external-unit
+row)" and one more row is the external unit itself (O9 black-box interface:
+link out / unit compute / K/V memory / link back, each on its own row)) →
+**per-operator totals** →
 **every item on its own row** (all 24 CiMLoop components, placement
 re-pricing per component, K/V write, weight rewrite, D2D surplus, a residual
 row; latency: compute, write, busiest-wire occupancy, network exposed at
@@ -801,7 +854,31 @@ equal the system script's. Attention on chip, prefill, operator-type shares
 | embedding lookup (off-chip read, once per model) | 0.03 | 0.0% | priced, not timed (no off-chip bandwidth set) | — |
 | LM head (8-die matmul, last token, once per model) | 0.08 | 0.0% | 0.03 | 0.0% |
 | **counted total** | **298.38** | 100% | **1,253.7** | 100% |
-| offload receiving unit and die↔unit link | not modeled, not counted (O9) | — | not modeled, not counted | — |
+
+Attention offloaded (end to end: die + external unit at the generic defaults,
+link priced at the die placement's mean 3.5 hops), prefill:
+
+| operator type | model energy (mJ) | energy share | model latency (ms, perfect-overlap end) | latency share |
+|---|---|---|---|---|
+| Q/K/V projection | 49.70 | 23.3% | 124.6 | 16.6% |
+| output projection | 19.02 | 8.9% | 124.6 | 16.6% |
+| FFN layer 1 | 64.09 | 30.0% | 160.2 | 21.4% |
+| FFN layer 2 | 58.92 | 27.6% | 320.4 | 42.7% |
+| GELU (digital unit) | 1.70 | 0.8% | 4.72 | 0.6% |
+| LayerNorm ×2 (digital unit) | 1.20 | 0.6% | 1.97 | 0.3% |
+| residual adds ×2 (digital unit) | 1.17 | 0.5% | 0.39 | 0.1% |
+| embedding lookup (off-chip read, once per model) | 0.03 | 0.0% | priced, not timed (no off-chip bandwidth set) | — |
+| attention on the external unit (QKᵀ + softmax + AV, K/V in the unit's memory) | 17.57 | 8.2% | 12.64 | 1.7% |
+| LM head (8-die matmul, last token, once per model) | 0.08 | 0.0% | 0.03 | 0.0% |
+| **counted total** | **213.48** | 100% | **749.6** | 100% |
+
+The external-unit row decomposes (whole model) as energy = unit compute 13.29
++ K/V memory 2.52 + link 1.76 mJ; latency = link out 3.02 + unit compute 6.64
++ K/V memory 1.97 + link back 1.01 ms. Decode (one token) under the same
+condition: 1.755 mJ / 2.48 ms per model, of which the external unit is
+1.290 mJ (73.5%) / 1.01 ms (40.5%), almost all of it K/V memory (the layer's
+whole K/V is read back per token: 1.26 mJ / 0.99 ms); the die side keeps
+0.465 mJ / 1.48 ms.
 
 The four digital-unit operators total 8.9 mJ (3.0%) and 13.4 ms (1.1%),
 more than half of it softmax, and their energy is glb passes rather than
@@ -967,6 +1044,12 @@ direction only: **toward underestimation**.
 | `analyze_contention_system.py` | whole-stack contention: GPT-2 both phases × scheme × bandwidth + threshold table; `--replot` redraws from JSON (§2.3.1c) |
 | `analyze_offload_contention.py` | scenario-B (offload) contention/D2D: the multipliers once decode loses its write shield (§2.3.1d) |
 | `analyze_d2d.py` | D2D: layer→die assignment × die scheme × die bandwidth + thresholds + die-grid load map (§3.5) |
+| `analyze_anchored_sweep.py` | silicon-anchor bandwidth sweep: on-chip / offloaded × scheme × anchor, the offloaded column end to end with the external unit (§2.3.1c/e) |
+| `analyze_scale_tiers.py` | 2.7B tier: operators spanning dies × assignment × anchor (§3.5) |
+| `run_2p7b_block.py` | 2.7B one-layer block per-operator components (feeds the tier) |
+| `analyze_digital_sensitivity.py` | digital vector unit lanes × clock vs latency share (§4.5) |
+| `analyze_offload_unit_sensitivity.py` | external attention unit interface sensitivity: rate × unit count (prefill dividend), K/V bandwidth × context (decode per token) (§2.3.1e) |
+| `op_breakdown.py` | per-operator ledger, one entry point: type shares / per-operator totals / every item, both conditions (§4.5) |
 | **search side** (collaborator) | |
 | `die_solver.py` | reduction-clustered placement solver: lambda-1 hierarchical metric + two placers (see §3.1 note) |
 | `placement_sim_compare.py` | encodes a placement as average hops for the simulator ⚠️ **cannot run today**, see FIXLIST O6 |
@@ -1016,7 +1099,7 @@ they go through `tests/compare_baseline.py`, which diffs a fresh
 acceptance gate for re-plumbing work; model upgrades re-freeze with
 `--freeze v1` plus a changelog entry).
 
-There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op values under the physical accounting (3.43×–27.68×) are pinned in the same file's v3 group.
+There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op values under the physical accounting (3.43×–27.68×) are pinned in the same file's v3 group. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point).
 
 Note: all-green does **not** mean physically correct. It only guarantees "the
 code equals the documented model"; whether the model is right waits for the

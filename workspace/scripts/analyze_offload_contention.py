@@ -21,6 +21,7 @@ everywhere else).
 
 Usage (container): python3 scripts/analyze_offload_contention.py
 """
+import dataclasses
 import json
 import os
 import sys
@@ -36,6 +37,41 @@ WORDS_DEC = 1024                        # decode boundary (d_model)
 CYC = 1.449e-6
 
 BWS = [64.0, 256.0, 1024.0]
+
+
+def unit_view(sysd):
+    """O9: the external attention unit's per-layer costs (prefill/decode) and
+    the die-chain busiest-wire integers WITH the offload streams on the die
+    links (Q + K/V out to the attach point, attention output back). The unit
+    sits at the die scheme's hub; the attention dies are units 0, 2, 4, ...
+    of the 48-chain."""
+    from scripts import fabric as fabric_mod, placement as pm
+    import scripts.crossbar_comm as cc
+    from scripts.analyze_d2d import assignments, with_link, UNITS, MULTI
+    base = fabric_mod.from_yaml(MULTI)
+    unit = base.attention_unit
+    cfg = lw.GptConfig()
+    ucfg = lw.GptConfig(n_layers=UNITS, name="units48")
+    fm = with_link(base, "mesh", {"routing": "xy", "hub": "center"}, 256.0)
+    pl = pm.sequential_fill(fm)
+    # link energy priced at the mean hop count from the attention dies to the
+    # attach point under the snake seating -- single source for every script
+    hops = lw.unit_link_hops(fm, "snake")
+    costs = {}
+    for phase in ("prefill", "decode"):
+        costs[phase] = lw.attention_unit_cost(cfg, 512, phase, unit, hops=hops)
+        costs[phase]["mean_hops"] = hops
+    words = 512 * cfg.d_model
+    busiest = []
+    for label, asg in assignments(fm):
+        d = lw.die_to_die_activation(ucfg, 512, "prefill", fabric=fm, assignment=asg)
+        adies = lw.attention_dies_of_chain(cfg.n_layers, asg)
+        flows = d["flows"] + lw.offload_flows(cfg, 512, "prefill", adies)
+        occ = cc.link_occupancy(flows, fm, CYC, pl)
+        busiest.append((label, occ["bottleneck"]["volume"] / words))
+    busiest.append(("bus (shared interposer)",
+                    UNITS - 1 + 4 * cfg.n_layers * 1.0))   # 47 hand-offs + 4 stream-words per layer per boundary-word
+    return {"unit": dataclasses.asdict(unit), "costs": costs, "busiest_with_streams": busiest}
 
 
 def d2d_busiest():
@@ -140,6 +176,61 @@ def main():
                             "table_sum": d2d_out_sum}
     out["decode_stage_B_s"] = stage_dB
 
+    # ---------------- O9: the external attention unit -- end-to-end scenario B
+    uv = unit_view(sysd)
+    cp, cd = uv["costs"]["prefill"], uv["costs"]["decode"]
+    n_units = uv["unit"]["n_units"]
+    unit_stage = cp["unit_s"] * N_LAYERS / n_units       # one unit serves N_LAYERS/n_units layers per beat
+    stage_B_e2e = max(stage_B, unit_stage)
+    print(f"\n=== O9: attention on the external unit ({uv['unit']['mac_per_second']/1e12:g} T MAC/s, "
+          f"K/V {uv['unit']['kv_words_per_second']/1e9:g} GB/s, link "
+          f"{uv['unit']['link_bandwidth_words_per_cycle']/1449:.1f} GB/s, {n_units} unit(s)) ===")
+    print(f"  prefill per layer: unit {cp['unit_s']*1e3:.3f} ms (compute {cp['compute_s']*1e3:.3f}, "
+          f"K/V {cp['kv_s']*1e3:.3f}) + link {1e3*(cp['link_out_s']+cp['link_back_s']):.3f} ms "
+          f"= chain {cp['chain_s']*1e3:.3f} ms; energy {cp['energy_J']*1e6:.1f} uJ "
+          f"(compute {cp['compute_J']*1e6:.1f}, K/V {cp['kv_J']*1e6:.1f}, link {cp['link_J']*1e6:.1f})")
+    print(f"  decode  per layer: chain {cd['chain_s']*1e3:.4f} ms (K/V read of the whole context "
+          f"{cd['kv_s']*1e3:.4f} ms); energy {cd['energy_J']*1e6:.2f} uJ")
+    e2e = {}
+    for phase, c in (("prefill", cp), ("decode", cd)):
+        d = sysd["phases"][phase]
+        sf_B = out["phases"][phase]["stall_free_B_s"]
+        sf_e2e = sf_B + N_LAYERS * c["chain_s"]
+        rows = {}
+        for label, v in out["phases"][phase]["on_die"].items():
+            rows[label] = {"latency_s": v["latency_s"] + N_LAYERS * c["chain_s"],
+                           "mult": (v["latency_s"] + N_LAYERS * c["chain_s"]) / sf_e2e}
+        e2e[phase] = {"stall_free_e2e_s": sf_e2e, "unit_chain_s_x_layers": N_LAYERS * c["chain_s"],
+                      "unit_energy_J_x_layers": N_LAYERS * c["energy_J"], "on_die": rows}
+        print(f"  {phase}: die side {sf_B*1e3:.3f} ms -> end-to-end {sf_e2e*1e3:.3f} ms "
+              f"(+{N_LAYERS*c['chain_s']*1e3:.2f} ms unit+link); unit energy +{N_LAYERS*c['energy_J']*1e3:.3f} mJ")
+        print("   " + "  ".join(f"{lab.split(' ')[0]}/{lab.split(',')[-1].strip()[:6]} {r['mult']:.2f}x"
+                                for lab, r in rows.items()))
+    print(f"  pipelined: die stage B {stage_B*1e3:.2f} ms, unit stage {unit_stage*1e3:.2f} ms "
+          f"-> beat {stage_B_e2e*1e3:.2f} ms; dividend die-side +{(stage_A/stage_B-1)*100:.0f}% "
+          f"-> end-to-end +{(stage_A/stage_B_e2e-1)*100:.0f}%")
+    print("  busiest die wire with the offload streams (boundary-words): " +
+          ", ".join(f"{lab.split(' ')[0]} {b:.1f}" for lab, b in uv["busiest_with_streams"]))
+    # pipelined beat with the streams on the die wires, at the example bandwidths
+    anchor_bw = uv["unit"]["link_bandwidth_words_per_cycle"]        # GRS-class die links, 12.5 GB/s
+    bws = list(BWS) + [anchor_bw]
+    print(f"  {'pipelined beat / die stage B, end-to-end':26}" + "".join(
+        f"{f'@{b:,.0f} w/c':>14}" for b in BWS) + f"{'@anchor 12.5GB/s':>18}")
+    beats = {}
+    for lab, bz in uv["busiest_with_streams"]:
+        cells = [max(stage_B_e2e, bz * WORDS / bw * CYC) / stage_B for bw in bws]
+        beats[lab] = dict(zip((str(int(b)) for b in bws), cells))
+        print(f"  {lab:26}" + "".join(f"{c:>13.2f}x" for c in cells[:-1]) + f"{cells[-1]:>17.2f}x")
+
+    out["offload_unit"] = {"unit": uv["unit"], "per_layer": uv["costs"],
+                           "unit_stage_s": unit_stage, "beat_B_e2e_s": stage_B_e2e,
+                           "dividend_die_side": stage_A / stage_B - 1,
+                           "dividend_e2e": stage_A / stage_B_e2e - 1,
+                           "busiest_with_streams": uv["busiest_with_streams"],
+                           "beat_with_streams": beats,
+                           "anchor_bw_words_per_cycle": anchor_bw,
+                           "e2e": e2e}
+
     with open(os.path.join(OUT, "offload_contention.json"), "w") as f:
         json.dump(out, f, indent=1)
     print("\nJSON -> offload_contention.json")
@@ -221,6 +312,7 @@ def make_figure(sysd, out):
     # (64 w/c ~ 0.044 GB/s) -- measured D2D links sit two orders higher, so
     # this panel illustrates the mechanism, not an expected operating point.
     stage_A, stage_B = half_stages(pre_A["per_op"]["mesh, glb centre"])
+    stage_B = max(stage_B, out.get("offload_unit", {}).get("unit_stage_s", 0.0))   # O9: unit is a stage too
     labels3 = ["ideal\nnetwork", "snake", "sequential", "far pairs\n(worst)",
                "bus"]
     busiest = [0] + [b for _, b in d2d_busiest()]
@@ -243,9 +335,9 @@ def make_figure(sysd, out):
                 color="#b33f2b" if gain < 1 else "#1c6b60")
     ax.set_xticks(x3); ax.set_xticklabels(labels3, fontsize=8.5)
     ax.set_ylabel("pipelined throughput (requests/s)\n@64 w/c EXAMPLE input (48-die config)")
-    ax.set_title(f"The offload dividend (+{(stage_A/stage_B-1)*100:.0f}%) "
-                 "is paid out\nonly where the package network is not the "
-                 "bottleneck", fontsize=10)
+    ax.set_title(f"The offload dividend (+{(stage_A/stage_B-1)*100:.0f}%, end-to-end "
+                 "with the external unit)\nis paid out only where the package "
+                 "network is not the bottleneck", fontsize=10)
     ax.legend(fontsize=8, loc="center right"); ax.grid(alpha=0.25, axis="y")
 
     fig.suptitle("Offloading attention removes the two shields that kept the "
@@ -303,6 +395,7 @@ def make_placement_figures(sysd, out):
     dec_B = {k: v["latency_s"] for k, v in out["phases"]["decode"]["on_die"].items()}
     stage_A, stage_B = half_stages(
         sysd["phases"]["prefill"]["per_op"]["mesh, glb centre"])
+    stage_B = max(stage_B, out.get("offload_unit", {}).get("unit_stage_s", 0.0))   # O9
 
     CASES = [
         ("onchip", "attention ON chip",

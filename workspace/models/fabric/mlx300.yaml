@@ -78,6 +78,22 @@ fabric:
   # off-chip port bandwidth (words/cycle at the 1.449 us device cycle) used
   # only to TIME the model's embedding read; unset = priced, not timed.
   # offchip_bandwidth_words_per_cycle: 16384
+  # ---- the external attention unit (O9, platform input DR-9): an abstract
+  # NPU-class digital engine OFF the die at the package attach point, with its
+  # own K/V memory. Generic public figures (ANCHORS.md); every field optional.
+  attention_unit:
+    mac_per_second: 2.0e12          # 4 TOPS INT8 edge-NPU class
+    pj_per_mac: 1.0                 # 2 TOPS/W all-in
+    call_overhead_s: 0.0
+    kv_words_per_second: 25.6e9     # LPDDR4-class (2 x 32-bit channels, 3200 MT/s)
+    kv_pj_per_word_read: 50.0       # ~6 pJ/bit
+    kv_pj_per_word_write: 50.0
+    kv_capacity_words: 2.0e9        # 2 GB
+    link_bandwidth_words_per_cycle: 18112   # 12.5 GB/s per direction (Simba GRS)
+    link_pj_per_word: 10.0
+    link_reference_hops: 1.0
+    n_units: 1
+    calibration: "DR-9: generic public figures (ANCHORS.md)"
   cimloop:
     system: ws_chip2chip_link
     chip: mlx_die
