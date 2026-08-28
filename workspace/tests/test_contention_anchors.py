@@ -178,28 +178,32 @@ def _flows_v3():
             for m in range(8)]
 
 
-def test_v3_single_op_table():
-    """Published single-op multipliers under O22/O23 (full-duplex wires, 16-bit
-    partial sums): star 3.43x, mesh-centre 10.29x, 2x4 13.71x, h-tree 13.71x,
-    mesh-corner 17.14x, bus 27.68x; scheme alone 8.07x, layout alone 1.67x.
-    Doubling the partial-sum width roughly doubles every wire's load, so the
-    ratios of the v1 table survive while the absolute multipliers double."""
-    want = {("star", "{}", "None"): 3.43,
-            ("mesh", "{'routing': 'xy', 'hub': 'center'}", "None"): 10.29,
-            ("mesh", "{'routing': 'xy', 'hub': 'center'}", "(2, 4)"): 13.71,
-            ("h_tree", "{'branching': 4}", "None"): 13.71,
-            ("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None"): 17.14,
-            ("bus", "{'driver': 'center'}", "None"): 27.68}
+def test_v5_single_op_table():
+    """Published single-op readout under the physical wire accounting AND
+    value units (C25), ffn1 prefill at 16,384 words/cycle: the busiest wire
+    hides behind compute at every scheme (perfect-overlap end 1.00x) and
+    the zero-overlap end reads star 1.071x, mesh-centre 1.214x, 2x4 1.286x,
+    h-tree 1.286x, mesh-corner 1.357x, bus 1.589x; the serialization ratios
+    scheme alone (bus / star) 8.27x and layout alone (corner / centre)
+    1.67x. Retired (v3, counter units: 14x inputs, 48x outputs): 3.43 /
+    10.29 / 13.71 / 13.71 / 17.14 / 27.68x."""
+    want_sum = {("star", "{}", "None"): 1.071,
+                ("mesh", "{'routing': 'xy', 'hub': 'center'}", "None"): 1.214,
+                ("mesh", "{'routing': 'xy', 'hub': 'center'}", "(2, 4)"): 1.286,
+                ("h_tree", "{'branching': 4}", "None"): 1.286,
+                ("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None"): 1.357,
+                ("bus", "{'driver': 'center'}", "None"): 1.589}
     flows = _flows_v3()
-    got = {}
+    assert flows[0]["down"] == 65_536 and flows[0]["up"] == 1_048_576   # values, one macro edge
+    ser = {}
     for topo, params, mesh, _ in SCHEMES:
         fab = _with(topo, params, mesh=mesh)
-        ser = cc.link_occupancy(flows, fab, CYC,
-                                placement.sequential_fill(fab))["serialization_s"]
-        got[(topo, str(params), str(mesh))] = max(COMPUTE_S, ser) / COMPUTE_S
-    for k, v in want.items():
-        approx(got[k], v, 5e-3)
-    approx(got[("bus", "{'driver': 'center'}", "None")]
-           / got[("star", "{}", "None")], 8.07, 5e-3)
-    approx(got[("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None")]
-           / got[("mesh", "{'routing': 'xy', 'hub': 'center'}", "None")], 1.67, 5e-3)
+        ser[(topo, str(params), str(mesh))] = cc.link_occupancy(
+            flows, fab, CYC, placement.sequential_fill(fab))["serialization_s"]
+    for k, v in want_sum.items():
+        approx(max(COMPUTE_S, ser[k]) / COMPUTE_S, 1.00, 1e-9)
+        approx((COMPUTE_S + ser[k]) / COMPUTE_S, v, 5e-3)
+    approx(ser[("bus", "{'driver': 'center'}", "None")]
+           / ser[("star", "{}", "None")], 8.27, 5e-3)
+    approx(ser[("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None")]
+           / ser[("mesh", "{'routing': 'xy', 'hub': 'center'}", "None")], 1.67, 5e-3)

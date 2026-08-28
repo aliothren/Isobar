@@ -164,8 +164,9 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
             vol_edge["die"] = ev["die"]["in"] + ev["die"]["out"]
             vol_dn["die"], vol_up["die"] = ev["die"]["in"], ev["die"]["out"]
     elif model == "uniform":
-        in_per_xb = cbs._per_tensor_volume(txt, "row_drivers") / nX
-        out_per_xb = cbs._per_tensor_volume(txt, "adc") / nX
+        ts_u = traffic.extract(output_dir, fab, stats_text=txt)   # value units (C25)
+        in_per_xb = ts_u.in_leaf * ts_u.n_active / nX
+        out_per_xb = ts_u.out_leaf * ts_u.n_active / nX
         f_m, f_c, f_x = nM, cores_per_macro, xbars_per_core
         vol_edge = {lvl_m.name: (in_per_xb + out_per_xb) * cores_per_macro * xbars_per_core,
                     lvl_c.name: (in_per_xb + out_per_xb) * xbars_per_core,
@@ -315,7 +316,7 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None,
         icl = ics[lname]
         split = icl.duplex if duplex is None else bool(duplex)
         if nodes is not None:                 # one-directional hand-off a->b
-            comps = [(f["volume"], nodes, 1.0)]
+            comps = [(f["volume"], nodes, float(f.get("width", 1.0)))]   # width: partial sums (O13 row split)
         elif node is not None:                # inputs down, partial sums up
             down = f.get("down", f["volume"])
             up = f.get("up", 0.0)

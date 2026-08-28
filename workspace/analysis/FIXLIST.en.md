@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 117 pass + 1 expected-fail, which is
+(`python3 tests/run_tests.py`; currently 185 pass + 1 expected-fail, which is
 open item O1).
 
 ---
@@ -440,6 +440,91 @@ and the report were updated to this configuration.
 
 ---
 
+### C25. Wire volumes in values: the 14x / 48x unit error
+
+**What was wrong.** Since the structured traffic model (C4, v1) the leaf
+volumes were Timeloop's "Total scalar accesses" of the row drivers and the
+ADCs taken as 8-bit words. CiMLoop counts the Inputs dataspace in input
+bit slices (the X loops, 7 per signed 8-bit word) and the Outputs
+dataspace in output bits (the Z loops, 8 per word); every physical cell
+column of a weight (Y at the column level, 2 under differential encoding)
+converts on its own ADC; and the total adds fills (and updates) to the
+reads. Net: inputs 14x, outputs 48x the values (frozen ffn1 fixture:
+917,504 = 65,536 x 7 x 2 and 1,572,864 = 32,768 x 8 x 2 x 3). C4's
+"reconciled against Timeloop's counters" was the divisibility guard, not
+a unit check. Timeloop's own per-level counts show each value entering the
+die once and each level once per multicast group (fills = reads at the
+core input buffer and the row drivers) -- the input register is already
+in CiMLoop's arch; there was no physical re-read.
+
+**What was done.** `traffic.extract` takes row-driver and ADC READS,
+divides by the unit factors parsed from the mapping (X product, Z
+product, the column-level Y factor), and guards that the leaves' distinct
+slices reassemble P x C x N and P x M x N exactly once (raises otherwise;
+43 real mappings pass); `crossbar_comm`'s uniform path follows. Value
+units checked on 43 stored mappings of all shapes (355M, 2.7B, LM head,
+probe). Fixture `stack_per_op_v5.json` (compute / write / digital rows
+bit-identical to v4, all 60 serialization rows moved); `slow_golden_v2`
+(tiny2x2 spread 1.25, unchanged). Groups 11 (values + the unit
+decomposition + the reassembly guard), 14 (single-op table) and 17 (v5
+block: readout, direction v5 <= v3, thresholds, ordering) re-pinned;
+group 22 re-pinned. Full regeneration of every contention, anchored,
+D2D, offload, tier, sensitivity, ledger and map output.
+
+**What moved.** Every on-die contention number. Single op (ffn1 prefill,
+16,384 w/c): 3.43-27.68x -> 1.00x (zero-overlap 1.07-1.59x), the scheme
+ratios kept (bus/star occupancy 8.27x, corner/centre 1.67x). Whole stack
+at the reference input: 1.00 / 1.52 / 1.88 / 2.27 / 4.08x -> 1.00x for
+all (zero-overlap 1.01-1.11x); at the Simba anchor 1.03-5.24x -> 1.00x
+(zero-overlap 1.01-1.15x); the buffer-position lever 1.49-1.55x -> 1.00x;
+offloaded decode 1.03-5.61x -> 1.00x; 1% thresholds 5.7-45 GB/s ->
+0.35-1.4 GB/s, doubling thresholds 1.4-22.6 GB/s -> only the bus, at
+0.35 GB/s. Per-crossbar maps 3.62x / 1.50x -> 3.69x / 1.70x, region
+17.8% unchanged, every energy unchanged. Ledger latency columns: the
+perfect-overlap end is now compute + write (prefill on chip 1,253.7 ->
+826.4 ms; offloaded end to end 749.6 -> 518.1 ms; decode 14.81 / 2.02 ms).
+2.7B tiers: on-die multipliers 1.33x at the Simba NoC -> 1.00x. The
+company report's within-die conclusion is rewritten: on this analog
+device the on-die network hides behind compute at every published
+bandwidth; the rankings survive as second-order (zero-overlap) and
+energy orderings; D2D and offload conclusions unchanged.
+
+### C23. O13 closed: the 2.7B block as a chain of die-sets, routed producer -> consumer
+
+Two things were wrong with the spanning-operator (tier M / L) die flows:
+they were routed hub <-> die (the attach point as a parent storage), and
+they were SIZED by the structured traffic model's leaf counters -- the
+row-driver reads (14x the input tensor: the bit-slice passes) and ADC reads
+(48x the output piece) that are on-die re-reads out of the die's own
+buffer, the outputs additionally at partial-sum width although a
+column-split output is complete. The layer hand-offs had always used the
+tensor once. Now (`llm_workload.block_chain / seat_block /
+block_die_flows / die_flow_surplus_energy`): the block's five die-sets
+(4 / 1 attention / 2 / 5 / 5) are seated disjointly on the 24-die package
+in three styles (clustered = nearest free seats to the attach point in
+chain order, row-fill, spread = farthest-point), every operator's input is
+routed from the dies owning the previous operator's output as node-to-node
+flows over the die mesh (column split: each consumer die receives every
+owner's piece at activation width; input-row split: every consumer receives
+all partial sums at partial-sum width -- generic, exercised by a test, no
+2.7B op uses it), the offloaded attention routes Q/K/V to the attach point
+and the output back, elementwise operators and the residual stream are not
+routed (O24 convention), the last die-set feeds the next layer's first.
+Latency: busiest die wire per die-set (link_occupancy, `width`-aware);
+energy: surplus beyond one hop at 10 pJ/word. Readouts at the anchors:
+tier M 3.10--6.20x -> 1.00x (zero-overlap 1.03--1.06x), 0--1.30 mJ ->
+0--35 uJ; tier L prefill 1.22 / 2.14 / 1.97x -> 1.02x at every seating
+(zero-overlap 1.26--1.28x), 0 / 792 / 829 mJ -> 30 / 27 / 30 mJ (+1.2--1.3%);
+offloaded decode 1.27--2.50x -> 1.00--1.01x. Decomposition published
+(`scale_tiers.json`: `tierL_v1`, `tierL_hub_once`, headline): the volume
+basis 1.22--2.14x -> 1.02x and 792 -> 37 mJ, the routing 37 -> 27 mJ.
+The combined figure's reading changed accordingly: die-set seating of a
+spanning model is a ~1% energy lever and hides in latency at the measured
+anchor; the latency lever at 2.7B stays on the die. Group 22
+(`test_die_chain.py`, 8 tests): chain order / dies / splits, disjoint
+seatings, tensor-once conservation, row-split partial sums, attach-point
+routing when offloaded, decode = prefill / S, surplus rule, the readouts.
+
 ### C22. The unit link carries the die placement in every script
 
 The offload streams' link energy (words x hops x pJ) had two hop
@@ -675,9 +760,10 @@ which is how O12 and O20 went unflagged).
 
 | item | which quantity errs, and which way | consequence for the conclusion |
 |---|---|---|
+| ~~wire volumes in counter units~~ RESOLVED (C25) | was: on-die wire volumes 14x (inputs) / 48x (outputs) the values since v1 -- Timeloop's bit-slice / bit / access counters taken as 8-bit words | every on-die contention multiplier collapsed to 1.00x at the reference input and at every anchor (zero-overlap end 1.01-1.15x); thresholds 14-48x lower (0.35-1.4 GB/s); energies, D2D, offload and O13 unchanged; the within-die "latency lever" conclusion of the company report withdrawn |
 | ~~O12 co-residency~~ RESOLVED (C14) | was: compute published with 256 arrays/op vs the true 96--128 share | prediction confirmed by the re-run: stack 314.65 -> 813.06 ms, every multiplier shrank (Simba spread 1.42--8.60x -> 1.00--3.11x), knees down ~4x; the v2 co-residency basis is now the published one and the direction is pinned as a test |
-| O20 joint seating | the tier-L clustered row is each op's private best seat; the jointly achievable best is WORSE | the "best" end of the placement lever is too good; worst rows unaffected -- the lever is exaggerated from the best side |
-| O13 attach-point routing | naive-placement cross-die concentration: star-through-hub loads exceed producer-to-consumer routing; clustered truth is exactly 0 | the "worst" end (58% / +35--37% / 3.10--6.20x on the v3 accounting) is too bad -- the lever is exaggerated from the worst side. O20+O13 together squeeze the true 2.7B placement lever from BOTH ends |
+| O20 joint seating (block level RESOLVED by C23; whole model open) | was: the tier-L clustered row was each op's private best seat | the block's die-sets are now seated disjointly, so every tier-L row is an achievable block configuration; the joint seating of all 32 layers (O16) can only lengthen the hand-offs -- the published rows are its lower bound |
+| ~~O13 attach-point routing~~ RESOLVED (C23) | was: intra-op die flows hub-routed AND sized by Timeloop's row-driver/ADC counters (14x the input tensor, 48x the output piece at partial-sum width) | producer -> consumer routing with the tensor once: 2.7B op 3.10--6.20x -> 1.00x (zero-overlap 1.03--1.06x), +58% -> +1.6% of the op; model 1.22--2.14x -> 1.02x (zero-overlap 1.26--1.28x), +34--36% -> +1.2--1.3%; the volume basis did almost all of it, the routing a third of the remaining energy. The 2.7B placement lever is a ~1% energy lever at the anchor |
 | ~~O7 max-only contention~~ RESOLVED (C16) | was: only the perfect-overlap end published | both ends now published everywhere as a bracket; the identity upper-lower = sum(min(compute, serial)) and both-end scheme ordering are pinned as tests; queueing (equal-peak load vectors indistinguishable) remains the open refinement |
 | ~~O22 shared-direction wires~~ RESOLVED (C17) | was: up+down on one wire | full-duplex direction-split wires are the default for every point-to-point scheme (bus stays a shared medium); alone it relaxed multipliers 0-20% (e.g. corner 1.97 -> 1.61x at Simba) |
 | ~~O23 partial-sum width~~ RESOLVED (C17) | was: partial sums at 8-bit width | 16-bit partial sums up the tree (fabric.psum_word_bytes, platform input DR-7) roughly double every wire's load; it outweighs O22, so the NET direction is settled: the earlier numbers UNDERSTATED contention (Simba spread 1.00-3.11x -> 1.03-5.31x) |
@@ -686,8 +772,10 @@ which is how O12 and O20 went unflagged).
 | O21 context ceiling | not a bias: S=512 numbers unaffected; the seating is INVALID past ~2.5k tokens | validity-domain statement only |
 | half-partition choice | the 23.49 ms stage and the +126% depend on the chosen attention/FFN split; another split moves both, direction unknown | second-order |
 | batch = 1 | compute and traffic scale together with batch; ratios approximately invariant, unverified | scope statement |
+| **O25 anchor identity** | not a number: the on-die anchors (Simba / ESP / FlooNoC) and the D2D anchor (GRS) are DIGITAL-ecosystem links, read as if they were the operating points of analog CIM chips. No fabricated analog CIM system publishes an on-die link bandwidth; the ones that describe their fabric are DMA + shared SRAM (MX100), board-level FPGA hubs (NeuRRAM, the Tsinghua multi-chip system) or compile-time scheduled (Mythic, HERMES) -- an estimated 2-20x below the digital anchors on die and 1-2 orders below GRS die to die | every "hidden behind compute at every published bandwidth" sentence is the reading of ONE cell (NeuRRAM-class device x digital-class link), where hiding was to be expected. Against an analog-reality tier (on die 0.4-8 GB/s, D2D 0.1-2 GB/s, both estimated) the same v5 thresholds put the 2.7B die chain's busiest link at its compute time near 0.5 GB/s and 5-8x past it at 0.1 GB/s [est, linear from the GRS reading] |
+| **O17 device speed** | not a number: every threshold is a words-per-cycle reading at the NeuRRAM cycle (1.449 us x 7 slices = 10.1 us per MVM row); in GB/s the thresholds scale as 1 / t_MVM | NeuRRAM is the slow end of the analog spectrum (ISAAC-class 1.6 us per MVM row, 6x; HERMES-class ~130 ns, ~76x [derived]). At the fast end the on-die 1% band moves from 0.35-1.4 to 26-107 GB/s (Simba below the bus doubling point, FlooNoC inside the band) and the 2.7B chain's 1-1.8 ms per layer of die-link occupancy at GRS exceeds a ~0.4 ms compute -- both stories flip INSIDE the analog family |
 
-Three cross-cutting readings, more important than any row: (1) ABSOLUTE
+Four cross-cutting readings, more important than any row: (1) ABSOLUTE
 numbers are no longer systematically small: O12, O7 and O24 have each
 paid their share (the zero-overlap end bounds the overlap side from
 above; the non-matmul operators are in). What remains outside the totals
@@ -703,9 +791,18 @@ sums the earlier numbers UNDERSTATED contention -- every multiplier grew
 model, which can only push within the bracket's interior, not past its
 ends, and the partial-sum width itself, which is a platform input (16-bit
 default; the real ADC/accumulator width decides).
-(3) The 2.7B placement lever is exaggerated from both ends (O20 lifts the
-best end, O13 lowers the worst end); its true width needs O16's joint
-seating plus O13's real routing.
+(3) The 2.7B placement lever, once read as 1.22--2.14x and +34--36%, is
+~1% of energy and hidden in latency at the measured anchor (C23): the old
+reading sized die-to-die flows by on-die counters. What remains open at
+2.7B is the whole-model joint seating (O16), which can only lengthen the
+block-level hand-offs.
+(4) The v5 numbers are one CELL of a phase diagram -- model scale x device
+speed x transfer paradigm x link tier -- and every published anchor sits in
+the digital-ecosystem column of it. "Placement does not matter" is the
+reading of the (NeuRRAM-class device x digital-class link) cell, where it was
+never expected to; the deliverable is the diagram, not the cell (O25, O17).
+The thresholds themselves are ours (traffic and device cycle; no anchor
+enters them) and survive the re-reading unchanged.
 
 ### The factor map
 
@@ -714,7 +811,7 @@ current owner and its open items. Bold items move current conclusions.
 
 | category | factor | current solution | improvements (item) |
 |---|---|---|---|
-| device | array energy/latency model | CiMLoop's silicon-calibrated wan macro | device-cycle sweep for the digital flip (O17) |
+| device | array energy/latency model | CiMLoop's silicon-calibrated wan macro (NeuRRAM class: 1.449 us cycle, 7 input slices = 10.1 us per MVM row) | device speed as a fabric input + three silicon scales + the scaling law (**O17**); the cycle is hard-coded in six scripts (O17 prerequisite) |
 | device | value-dependent energy | real per-model histograms (OPT-2.7b extracted); per-crossbar mode gated by device class | seed the CNN samples (hygiene) |
 | device | weight / K-V write model | append-only geometry + per-cell/row-serial params (our overlay) | write params are platform inputs (DR-5); long-context K/V (O14) |
 | per-op mapping | intra-op loop tiling | **provided by the CiMLoop mapper** (EDP search) under the op's co-residency share (C14) | default greedy path guarded by the residency tripwire |
@@ -722,49 +819,145 @@ current owner and its open items. Bold items move current conclusions.
 | per-op placement | weight blocks -> macro/core/crossbar | Placement object + sequential fill; rankings measured | unpriced links keep it a ranking (O1); search (S3) |
 | per-op placement | shared-buffer attach point | scheme parameter; 1.56x lever measured (v3 accounting, Simba anchor) | search (S3) |
 | on-die wiring | interconnect organisation | scheme registry: star/mesh/tree/bus per level; full-duplex per-direction wires, bus shared (C17) | more schemes (O19); bus wire energy (O8); routing-algorithm asymmetries (XY vs YX replies, O19) |
+| on-die wiring | transfer paradigm | schemes are wiring; the paradigm (DMA + shared SRAM, compile-time scheduled, NoC) is implicit | paradigm -> tier mapping: DMA/shared-SRAM -> shared medium at the T1 hub bandwidth, scheduled -> star, NoC -> mesh (**O25**); `schedule_slack` input (O26) |
 | cross-die mapping | dies per op and split dimension | tiling planner (power-of-two aware, residency enforced) | cross-die addition path unexercised (O15); utilisation loss quantified, not optimised |
 | cross-die mapping | layer/op -> die granularity | feasible 48-die config, two dies/layer (C13); co-resident per-op mapping (C14) | context ceiling (O21); half-partition is an assumption (register) |
-| cross-die placement | die-group seating on the package | three styles measured per op | clustered jointly infeasible (**O20**); whole-model seating (**O16**); search (S4) |
-| cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17) | producer-to-consumer routing (O13); O19 applies |
-| traffic accounting | multicast/reduction structure | v1 structured traffic, counter-reconciled; down/up components kept, partial sums at 16 bits on wires (C17) | hyperedge membership convention (hygiene); partial-sum width in the ENERGY overlay (hygiene, transport <2% of energy) |
+| cross-die placement | die-group seating on the package | the block's die-sets seated disjointly, three styles (C23) | whole-model seating (**O16**); search (S4) |
+| cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17); producer-to-consumer routing, the tensor once (C23) | O19 applies |
+| traffic accounting | multicast/reduction structure and units | v1 structured traffic in VALUE units (C25: reads / bit-slice, bit and cell-column factors; reassembly guard); down/up components kept, partial sums at 16 bits on wires (C17) | hyperedge membership convention (hygiene); partial-sum width in the ENERGY overlay (hygiene, transport <2% of energy) |
 | traffic accounting | cross-die traffic classes | hidden-state hand-offs + intra-op slices + the offload streams to the attach point (C21); elementwise operators move through the glb only (C19, stated) | host I/O streams |
-| contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default | queueing on the per-wire load vectors; joint tier sweep (hygiene) |
+| contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default | the max end stated as the bound it is (any schedule, given the routing) and queueing / BookSim-class checks narrowed to the NoC paradigm (**O26**); joint tier sweep (hygiene) |
 | contention | operating mode | single-pass + pipelined, stage = slower half | bubbles/imbalance beyond the max rule; batch>1 (register) |
 | contention | critical-path composition | write + [max, sum](compute, network) + propagation -- both ends published (C16) | missing terms O24 |
-| calibration | bandwidth operating points | platform inputs + published anchors (blind-test pinned) | primary ESP citation, UCIe-class D2D anchor (hygiene) |
-| calibration | per-level link energy | macro silicon-calibrated + re-pricing; D2D at GRS band midpoint | core/crossbar at zero (**O1**); bus (O8) |
+| calibration | bandwidth operating points | platform inputs + published anchors (blind-test pinned) -- all of them digital-ecosystem links | anchor grid paradigm x tier with `status`, analog-reality rows (estimated), real-system -> registry mapping table (**O25**); primary ESP citation, HERMES supplement check (O25 hygiene); UCIe-class D2D anchor |
+| calibration | per-level link energy | macro silicon-calibrated + re-pricing; D2D at GRS band midpoint | core/crossbar at zero (O1; ceiling ~2% of an op after C25); bus (O8) |
+| energy | static / idle power | not modeled -- every total is dynamic-only | `idle_power_w` per level (default 0) + closed-form static term, static-share sweep, peak concurrency as an output field (O27) |
 | calibration | physical geometry | slot_pitch_um in the configs | first consumer: derive ns/hop and energy scale (hygiene) |
-| workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | ~320-die joint deployment (O16); 70B-class probe (unscheduled) |
+| workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 165 tests + goldens incl. the 48-die chain pins (C15), the v3 accounting pins (C17), the ledger conservation (C18) and the digital-unit pins (C19) | change-audit process rule |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 185 tests + goldens incl. the 48-die chain pins (C15), the v3 accounting pins (C17), the ledger conservation (C18), the digital-unit pins (C19) and the v5 unit pins (C25) | change-audit process rule; the P0 gate (below) |
 
-Rows 6--8 and 10--12 are the search space of S3/S4; rows 4 and 15 are its
-evaluator's foundations.
+The per-op placement, on-die wiring and cross-die placement / wiring rows
+are the search space of S3/S4; the mapping and traffic-accounting rows are
+its evaluator's foundations.
 
-Priority order (what closing each one buys). O12 (C14) and O18 (C15) are
-closed -- the 48-die configuration's honesty debts are paid; the search
-milestone (S1--S5, below the item list) is the next deliverable and has its
-corrected 355M objective values.
+Priority order (what closing each one buys), re-cut 2026-08-27 after C25 and
+the anchor-identity finding: the v5 tables are complete for ONE cell of the
+phase diagram; the next deliverables open the other cells (P0 anchor grid,
+P1 device axis), state the model's semantics (P1), then run the search (P3).
 
 | # | gap | what closing it buys | class |
 |---|---|---|---|
-| O7 | contention = max over busiest wire, no queueing | tightens every latency/throughput multiplier, both levels at once | model quality |
-| O13 | intra-op D2D routed through the package attach point (v1 star) | replaces the 58%/36% upper bounds with routed values | model quality |
-| O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the collaborator's solver; lifts the 47% citation ban | search prereq |
-| O1 | core/crossbar links carry no energy (the 1 xfail) | turns the 1.50×/3.62× and 17.8% rankings into joules; region joins the search objective | search prereq |
-| O16 | whole-model multi-die deployment never simulated jointly | 2.7B die-sets placed together on one package (~320 dies), inter-op hand-offs included | scale extension |
-| O14 | over-capacity K/V (long-context) has no policy | attention at S≳8k becomes simulatable honestly | scale extension |
-| O15 | the input-row split (cross-die addition of partial results) never exercised end to end | validates the expensive half of the spanning mechanism | coverage |
-| O8 | bus energy charged by distance-to-driver | removes the artifactual star↔bus energy tie | model quality |
-| O17 | analog→digital flip asserted, not quantified | a device-cycle sweep turns the report's flip remarks into curves | calibration |
-| O19 | four interconnect schemes only | torus / ring / express links / full-duplex / hierarchical NoC join every sweep for free | extensibility |
-| O20 | tier-L die-set placements overlap (every op given the best seat) | jointly feasible 2.7B placements; honest clustered row | honesty debt |
-| O21 | 48-die config has an unstated ~2.5k-token K/V ceiling | validity domain on every 48-die result | honesty debt |
+| **O25** | the anchors are digital-ecosystem links read as analog operating points; no analog-reality tier exists | the paradigm x tier anchor grid, the analog-reality rows, the real-system -> registry mapping table; every v5 threshold table read in both columns; the first "current" conclusion that is not 1.00x (the 2.7B chain at analog-reality D2D) | reading position (P0) |
+| **O17** | device speed is one hard-coded number (1.449 us in six scripts) and the flip is asserted | device speed as a fabric input; three silicon scales; the on-die scaling law (knee ~ d_model for the projections); the phase-diagram table | core experiment (P1) |
+| **O26** | the max end is described as "no queueing", not as the bound it is | the T2 semantic statement; validation scope narrowed to the NoC paradigm; a `schedule_slack` input | model semantics (P1) |
+| S1--S6 | no search code exists; the evaluator-proxy question is unmeasured | first search results and the proxy-optimization study | search (P3) |
+| O27 | no static energy, no peak-concurrency output | idle-power input + closed-form static term; static-share sweep; concurrency field | energy completion (P4) |
+| O21 | 48-die config has an unstated ~2.5k-token K/V ceiling | validity domain on every 48-die result | honesty debt (cheap) |
+| O15 | the input-row split (cross-die addition of partial results) never exercised end to end | the row-split branch of the scaling law (O17) and the expensive half of the spanning mechanism | coverage |
+| O1 | core/crossbar links carry no energy (the 1 xfail) | turns the 3.69x/1.70x and 17.8% rankings into joules -- now bounded to ~2% of an op (C25) | DR-1 input |
+| O8 | bus energy charged by distance-to-driver | removes the artifactual star-bus energy tie | model quality |
+| O19 | four interconnect schemes only | torus / ring / express links / hierarchical NoC join every sweep for free | extensibility |
+| O16 | whole-model multi-die deployment never simulated jointly | ~320-die joint seating; the search's eventual target | scale extension (outside the v5 paper) |
+| O20 | tier-L seated one block at a time | subsumed by O16 | honesty debt (captioned) |
+| O14 | over-capacity K/V (long-context) has no policy | attention at S>~8k simulatable honestly | scale extension (outside the v5 paper) |
+| O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the collaborator's solver (S5); lifts the 47% citation ban | search prereq (on hold) |
+
+### O25. The anchors are digital-ecosystem links; the analog-reality tier is missing
+
+Nothing numerical is wrong: the thresholds are computed from our traffic and
+our device cycle, and no anchor enters them. What is wrong is the READING
+POSITION. The three on-die anchors and the GRS D2D anchor were chosen
+because they are the only fabricated links with a published per-link
+bandwidth -- and every one of them is a digital accelerator's NoC. The
+analog CIM systems that exist do not run at those points:
+
+| system | fabric | published on-die link bandwidth | registry tier |
+|---|---|---|---|
+| NeuRRAM (Nature 2022) | inter-core buffers and partial-sum accumulation on the board FPGA; no on-chip core network | none (chip IO, 130 nm: ~100 MB/s class [est]) | hub-IO upper bound |
+| TetraMem MX100 (arXiv 2410.14882) | 10 NPUs + RISC-V + DMA engine + shared SRAM (512 KB + 1 MB), 65 nm | none (shared medium: SRAM port width x clock [est]) | bus, at the T1 hub bandwidth |
+| HERMES 64-core (Nat. Electron. 2023) | a real on-chip network, per-core link controllers | not in the main text (supplement to check, arXiv 2212.02872) | star (compile-time scheduled) |
+| Mythic AMP M1076 / M1108 | per-tile 64 KB SRAM + NoC router | none (product material only) | star (compile-time scheduled) |
+| Tsinghua multi-chip (Nat. Commun. 2025; Yao et al. 2020) | 8 chips + FPGA hub, no chip-to-chip direct links | none (everything through the FPGA) | hub-IO / bus |
+| Simba, ESP, FlooNoC (the current anchors) | digital NoCs, 12-16 nm | 8.75 / 32 / 80.6 GB/s | mesh (digital ecosystem) |
+
+Structural estimates for what those fabrics deliver: on die 0.4-8 GB/s
+(32-128 bit x 100-500 MHz), die to die 0.1-2 GB/s (board-level or older-node
+direct links) -- 2-20x below the digital anchors on die, 1-2 orders below
+GRS. All `status = estimated`, derivation stated beside each.
+
+**Fix.**
+1. `ANCHORS.md` and the anchor lists in `analyze_anchored_sweep.py` /
+   `analyze_scale_tiers.py` (and the GRS constants in
+   `analyze_multidie_placement.py` and `fabric.AttentionUnit`) become one
+   anchor grid: paradigm (digital-ecosystem | analog-reality) x level (on-die |
+   die-to-die). Digital entries keep their provenance and are re-labelled
+   "upper bound of what fabricated NoCs deliver"; analog-reality entries carry
+   the structural estimate and its derivation. Every anchor row gets a
+   `status` (measured / post-layout / secondary / estimated) and a paradigm
+   tag; every sweep prints both columns.
+2. The real-system -> registry-tier table above goes into the settings
+   document, with the model-side rule made explicit: a DMA + shared-SRAM
+   fabric is a T1 number in our model (`hub_bandwidth_words_per_cycle`), not
+   a T2 link; compile-time scheduled fabrics are the star scheme; NoCs are the
+   mesh scheme.
+3. Re-read every v5 threshold table in both columns. The sentence "hidden
+   behind compute at every published bandwidth" becomes "at every
+   digital-ecosystem bandwidth"; in the analog-reality D2D tier the 2.7B
+   chain's busiest die link (1-1.8 ms per layer at GRS -- the v5 tier-L sum
+   end minus compute over 32 layers, the FlooNoC column -- against 28.8 ms of
+   compute) reaches the compute time near 0.5 GB/s and 5-8x past it at
+   0.1 GB/s [est, linear from the GRS reading -- the run replaces the
+   estimate]. That is a CURRENT conclusion at NeuRRAM speed, before any
+   device-axis extrapolation.
+4. Goldens: numbers do not move (labels + new rows); one new test group pins
+   the grid and the analog-reality rows; v4-and-earlier goldens stay archived,
+   not deleted.
+5. Hygiene folded in: the ESP secondary citation -> the primary ESP
+   publication (candidate: Jia et al., "12nm Agile-Designed SoC ...
+   Multi-Plane NoC", ESSCIRC 2022 -- verify before use); HERMES supplementary
+   material for link width / clock (if absent, record "not disclosed").
+
+**Gate.** Until O25 lands, no [est] number enters an external document, and
+the v4-and-earlier anchored figures and tables are retired from citation.
+
+### O26. Say what the max end IS: a bound, not "no queueing"
+
+`link_occupancy`'s max end is, per wire, volume / bandwidth on the busiest
+wire. For a FIXED routing, any schedule -- a compile-time one included --
+needs at least that long on that wire. So the max end is the exact ideal of
+the scheduled paradigms (Mythic / HERMES class) and the optimistic bound of
+the NoC paradigm; the sum end is the fully serialised bound. Today the
+documents describe it as "no queueing", which reads as a simplification
+rather than as the bound it is.
+**Fix.** (1) State it in the model section of the settings document and the
+report (one paragraph; "for a given routing" is load-bearing -- a scheduler
+that re-routes changes the per-wire volumes, and that is a search move (S3),
+not a T2 refinement). (2) Consequence for validation: queueing /
+BookSim-class checks apply to the NoC paradigm only (the digital column of
+O25); for the scheduled paradigms the open question is feasibility, answered
+by a `schedule_slack` platform input (default 1.0, multiplies the max end)
+rather than by a queueing model. (3) One test: the identity max <= any
+schedule <= sum on the frozen flows.
+
+### O27. Energy is dynamic-only; static power and peak concurrency are absent
+
+Every energy total is CiMLoop dynamic energy plus our overlays; no idle /
+leakage term exists anywhere in `scripts/`. So a layout that lengthens time
+cannot cost energy through static power -- "energy is layout-blind" holds by
+construction for the static part, and the report should say so.
+**Fix (cheap, closed-form, after P0-P3).** `idle_power_w` per level in the
+fabric (default 0) and E_static = P_idle x T_total as a ledger
+post-processing row; one figure: static share 0-30% on x, the energy ranking
+of layouts on y (static energy inherits the latency ranking); peak
+concurrency (max simultaneously active crossbars / macros, from the mapping's
+spatial factors) as a standard output field; settings assumption #20:
+dynamic-only is the default tier.
 
 ### O1. Only the macro-level router carries an interconnect energy model *(xfail)*
 
 `inter_core_in_macro_spatial` / `inter_crossbar_in_core_spatial` are zero-energy
-fanout markers, so the 3.62× and 17.8% results are rankings, not costs.
+fanout markers, so the 3.69× / 1.70× and 17.8% results are rankings, not costs.
 Fix: per-level link energy placeholders in the fabric config feed a CostModel
 energy path (the per-hop/per-word values are platform inputs — example defaults
 until a chip's own values are filled in; the request for the company's values
@@ -773,6 +966,12 @@ closed for the current paper deadline — the anchored evidence explicitly
 covers scheme × hub position only, the core-level region allocation stays a
 ranking, and O1 is listed as a PREREQUISITE of the search-space work (the
 region dimension cannot join the objective until its links carry a price).
+Ceiling after C25: the volumes a price would multiply are 14-48x smaller
+than before -- per ffn1 operator each crossbar receives 65,536 values and
+returns 32,768 16-bit partial sums, ~24 M word-equivalents per die; at
+1 pJ/word over 2 hops that is ~0.05 mJ against the operator's ~2.7 mJ
+(~2%). DR-1 turns the rankings into joules; it cannot make the within-die
+placement an energy lever.
 
 
 ### O8. Bus energy is underestimated by construction
@@ -789,21 +988,6 @@ where a physical H-tree lengthens toward the root.
 
 
 
-### O13. Intra-op D2D flows are star-routed through the package attach point
-
-The spanning-operator numbers (58% of op energy, +35--37% of model energy,
-3.10--6.20x latency on the v3 accounting) route every intra-op flow hub->die. Physically the
-input arrives from the PREVIOUS op's die-set and outputs leave toward the
-next: producer->consumer routing over the die mesh.
-**Fix:** extend `crossbar_comm.build_flows` die-level flows with
-`nodes:(src_die, dst_die)` pairs derived from the op chain (previous op's
-output-owner set -> this op's die-set, broadcast under an output-column
-split), reusing the
-node-to-node paths that already exist; clustered placements are already the
-refined model's lower bound (zero surplus), so this narrows naive-vs-
-clustered, not the lever's existence. Files: `crossbar_comm.py`,
-`analyze_scale_tiers.py`, report section 7(v) updated with measured (not
-bounded) values.
 
 ### O14. Long-context K/V arrays have no over-capacity policy
 
@@ -814,7 +998,8 @@ die. Long-context decode is currently unsimulatable past that point.
 Klen -- a spatial split is an append-sharding across dies, write lands on
 one die per token); charge the D2D read fan-in of attention over the shard
 set. Files: `llm_workload.py` (plan_spatial for dynamic kinds + write
-routing), `test_capacity.py`.
+routing), `test_capacity.py`. Scope: outside the v5 paper (residency
+detail).
 
 ### O15. Of the two ways to split an op across dies, the expensive one has never run
 
@@ -831,6 +1016,8 @@ dimension forces the input-row split; verify end to end that the mapping,
 the extracted traffic (outputs marked as merging, not concatenating), and
 the wire occupancy of the cross-die addition are all correct; pin as a
 test. Files: probe in `test_d2d.py` (slow tier) or a script probe.
+Also the row-split branch of O17's scaling law (per-die input / k, partial
+sums x k): the law is stated for the column split until this runs.
 
 ### O16. The 2.7B results examine one op at a time; a real deployment seats everyone at once
 
@@ -846,17 +1033,51 @@ placement search will ultimately have to solve.
 disjointly; hand-off flows between consecutive operators' regions; score
 latency/energy under 2--3 seating heuristics. Files: new fabric variant,
 `analyze_deployment.py` (new); the op-chain hand-off volumes already exist
-in `llm_workload.py`.
+in `llm_workload.py`. Scope: outside the v5 paper; it remains the search's
+eventual target (S4).
 
-### O17. The analog-to-digital flip is asserted, not quantified
+### O17. The device-speed axis: one hard-coded number, and the flip asserted rather than drawn
 
-The report states both governing ratios collapse on digital devices (Simba
-as the existence proof). The platform can quantify it: sweep the device
-cycle (1.449 us -> ns-class) and re-read every threshold table.
-**Fix:** `analyze_device_sweep.py` (closed-form: thresholds scale with
-cycle_seconds through the words/cycle conversion); one figure -- threshold
-curves vs device cycle with the analog and digital regimes marked. Turns
-the report's flip remarks into a curve a reviewer can check.
+**Current state.** The device cycle is the literal `1.449e-6` in
+`analyze_d2d.py`, `analyze_offload_contention.py` (three places),
+`analyze_multidie_placement.py`, `analyze_digital_sensitivity.py`,
+`op_breakdown.py` (`CYC_DEFAULT`) and `llm_workload.py` (`cycle_seconds`
+default); the fabric stores bandwidths in words per cycle AT that cycle (die
+link and unit link 18,112 = 12.5 GB/s), so a cycle change would silently
+re-label every anchor. Thresholds in words/cycle are device-invariant only at
+a fixed slice count; the honest axis is seconds per MVM row (cycle x input
+slices): NeuRRAM 7 x 1.449 us = 10.1 us.
+
+**Fix.**
+1. The fabric gains `device: {cycle_seconds, input_slices_per_mvm}` and every
+   script reads it; bandwidths are declared in GB/s (YAML and anchors) and
+   converted to words/cycle at load. This refactor comes first -- it is the
+   only code the sweep needs.
+2. `analyze_device_sweep.py`, closed-form: every threshold scales as
+   1 / t_MVM. Three silicon scales: NeuRRAM 10.1 us per MVM row (calibrated);
+   ISAAC-class 1.6 us (16 one-bit slices x 100 ns, the ISCA 2016 design point;
+   6x); HERMES-class ~130 ns (63.1 TOPS / 64 cores / (2 x 256 x 256)
+   [derived]; ~76x) -- derivations into ANCHORS.md. Re-read at each scale: the
+   on-die 1% band and bus doubling point, the D2D masking ratio of the 2.7B
+   chain, the offload dividend. What is FIXED across the sweep and must be
+   said so on the figure: the write model (SET pulse, DR-5), the digital unit
+   (1 GHz), the attention unit, the link bandwidths. At the fast end decode
+   becomes write- and unit-bound -- that is the finding, not a bug ("device
+   76x faster, decode 1.3x faster").
+3. The scaling law. For the projections (qkv / out / ffn) under the column
+   split, trunk volume S x d over compute S x t_MVM: the on-die knee is
+   proportional to d_model and independent of S. NOT for the row split (input
+   / k, partial sums x k; O15) and NOT for the attention crossbar operators
+   (K^T resident, output S x S: knee ~ S). Probe d in {1024, 2560, 4096, 8192}
+   at S = 512 and S in {128 .. 2048} at d = 1024; pin the proportionality as a
+   test. [est] from v5: 355M 0.35-1.4 -> 2.7B 0.9-3.5 -> 7B-class 1.4-5.6 ->
+   70B-class 2.8-11 GB/s (1% band), so from the 7B class the analog-reality
+   on-die tier (0.4-8 GB/s) sits inside the band and the shared-medium tier
+   crosses the doubling point near the 1B class -- the trend conclusion
+   beside O25's current one.
+4. Deliverable: one table, model tier x device tier x paradigm / link tier ->
+   knee position against that tier's bandwidth (the phase diagram's numeric
+   base), and one figure with the analog-reality and digital bands marked.
 
 ### O19. The interconnect registry should grow beyond its four schemes
 
@@ -872,16 +1093,16 @@ routing-algorithm parameters (adaptive vs fixed order). Each lands as one
 class in `interconnect.py` plus its hand-derived identity tests; every
 existing analysis then sweeps it for free.
 
-### O20. Every 2.7B operator was given the best seats; jointly they overlap
+### O20. The 2.7B layers are seated one block at a time
 
-The tier-L "clustered" placement puts EACH operator's die group at the
-package attach point -- but with all operators resident at once there is
-one best region and it cannot host everyone. The clustered rows are
-per-operator lower bounds, not an achievable joint configuration; the
-jointly feasible optimum lies between the clustered and spread rows.
-**Fix:** subsumed by O16's allocator (seat all groups disjointly, then
-re-read the tier-L table); until then the tier-L caption must call the
-clustered rows "per-op lower bound", including in the report.
+C23 seats the BLOCK's die-sets disjointly (17 of 24 dies), so the
+tier-L rows are achievable block configurations and the old "clustered =
+per-operator lower bound" caveat is retired at block level. What is still
+assumed is that every layer is a copy of the same block seating (the last
+die-set feeds the next layer's first). The whole-model seating -- 32 blocks
+on a ~576-die package -- can only lengthen those hand-offs.
+**Fix:** subsumed by O16's allocator; until then the tier-L caption states
+"block-level; the whole-model seating is its upper bound".
 
 ### O21. The 48-die configuration has an unstated context ceiling
 
@@ -946,25 +1167,31 @@ excluded):
 
 ---
 
-## The search milestone (S1--S5): first placement-search results
+## The search milestone (S1--S6): first placement-search results
 
-The evidence chain is complete (multiplicative effects, anchored operating
-points, measured intuition failures); the next deliverable is a first
-working search with results. All scoring is closed-form re-scoring on
-frozen per-op data, so search iterations cost microseconds, not mapper
-minutes.
+No search code exists today: `placement.py` (the Placement object,
+sequential fill), `placement_aware.py` (the cost overlay) and
+`analyze_placement_*.py` (enumeration) are the evaluator side. S1 is still the
+first line of search code. All scoring is closed-form re-scoring on frozen
+per-op data, so search iterations cost microseconds, not mapper minutes.
 
 | # | task | files / how | what it delivers |
 |---|---|---|---|
-| S1 | **Evaluator API**: one function `score(config) -> (E, T_single, T_pipe)` wrapping the existing pipelines; config = {scheme+params per level, hub position, macro slot permutation, unit→die assignment, die-set placement} | new `scripts/search_eval.py`, thin calls into `link_occupancy` / `die_to_die_activation` / `die_pipeline_interval` + the frozen per-op fixture | the objective the search and the collaborator's solver both consume; pinned by identity tests against the published tables |
-| S2 | **Heuristic baselines**: snake / clustered / centre-hub / sequential named as first-class baseline configs | `search_eval.py` registry | the bar a search must beat; also the report's "heuristics fail between metrics" gets its quantitative referee |
-| S3 | **On-die search (355M)**: simulated annealing + exhaustive-where-small over hub position × scheme params × macro permutation, objective T_single at each NoC anchor, E as constraint | new `scripts/search_ondie.py`; SA ~10^4 evals, seconds | first search result: does search beat the best heuristic at the Simba anchor, and by how much; Pareto front figure (E vs T) |
-| S4 | **Package search (355M 48-die + tier-L die-sets)**: SA over unit→die assignment (and per-op die-set placement for 2.7B), objective T_pipe + surplus energy | new `scripts/search_package.py` | search vs snake/clustered gap; if search only ties the heuristics, that is a finding too (publish it honestly) |
-| S5 | **Solver reconciliation** (needs O6): fix `W_MACRO_DIST` from fabric geometry, run the collaborator's solver on the same objective, Spearman-correlate his rankings against `score()` | `die_solver.py` (his), `search_eval.py`, a Spearman harness | the two search efforts become comparable; lifts the 47% citation ban |
+| S1 | **Evaluator API**: one function `score(config) -> (E, T_single, T_pipe)` wrapping the existing pipelines; config = {scheme+params per level, hub position, macro slot permutation, unit->die assignment, die-set placement}; anchor column and device scale as arguments (O25, O17); `schedule_slack` honoured (O26) | new `scripts/search_eval.py`, thin calls into `link_occupancy` / `die_to_die_activation` / `die_pipeline_interval` + the frozen v5 fixtures | the objective the search and the collaborator's solver both consume; pinned by identity tests against the published tables |
+| S2 | **Heuristic baselines**: snake / clustered / centre-hub / sequential as first-class configs, plus a **constructive greedy** (flows in descending volume, each placed where the incremental peak-wire load is smallest) | `search_eval.py` registry | the bar a search must beat; the shared baseline of S3, S4 and S6 |
+| S3 | **On-die search (355M)**: simulated annealing + exhaustive-where-small over hub position x scheme params x macro permutation; objective T_single per anchor column, E as constraint | new `scripts/search_ondie.py`; SA ~10^4 evals, seconds | does search beat the best heuristic, and in which cells; Pareto front (E vs T) |
+| S4 | **Package search (355M 48-die + 2.7B die-sets)**: SA over unit->die assignment and die-set seating; objective T_pipe + surplus energy | new `scripts/search_package.py` | search vs snake / clustered gap; a tie is a finding too (publish it honestly) |
+| S5 | **Solver reconciliation** (needs O6): `W_MACRO_DIST` from fabric geometry, the collaborator's solver on the same objective, Spearman against `score()` | `die_solver.py` (his), `search_eval.py`, a Spearman harness | the two search efforts become comparable; lifts the 47% citation ban |
+| S6 | **Proxy-optimization study**: same SA, space, budget and seeds; only the evaluator changes -- E0 full `score` / E1 volume x distance / E2 prefill-only / E3 the wrong paradigm tier; every solution re-scored by E0 under every condition | `search_ondie.py` + a harness | the 4 x N cross matrix: where a simplified evaluator returns the wrong layout, plus one "safe cell" control row (slow device x wide link: every evaluator expected to tie) |
 
-Dependencies: S1's objective bases are now the O12-corrected (C14) ones;
-S5 needs O6. S3/S4 can run on the O12-corrected bases the moment S1
-lands.
+Cell discipline: search experiments run only where the phase diagram has
+play -- the fast device tier, the shared-medium tier, offload-decode, weak
+D2D x spanning -- and the safe cell as the control. Running the search in the
+(NeuRRAM x digital-link) cell reproduces 1.00x and proves nothing.
+
+Dependencies: S1 on the v5 fixtures and O25's anchor columns; S3/S4 on P1's
+cells; S6 on S3; S5 on O6 and the collaboration discussion (ON HOLD since
+2026-08-21).
 
 ## Process rule (added after the 24-to-48-die miss)
 
@@ -973,38 +1200,69 @@ the results-affecting register above, recorded in tests/CHANGELOG.md, in
 the same change. Discovering a stale assumption by being asked is a
 process failure.
 
+P0 gate (2026-08-27): until O25 lands, no [est] number enters an external
+document; v4-and-earlier anchored figures and tables are retired from
+citation; every new row is built on the v5 fixtures. Correction history
+stays in the CHANGELOG -- the paper presents v5 numbers and the four
+validation mechanisms (closed forms, counter reconciliation, anchor
+landing, regression pins), not the corrections.
+
 ## Worklist (priority order)
 
-1. ~~O12 co-residency bases~~ -- **done (C14)**: v2 fixture frozen, direction pinned, docs cascaded.
-2. ~~O18 pin the remaining 48-die numbers~~ -- **done (C15)**: group 18, plus the 24-vs-48 offload-script fix it caught.
-3. **S1--S4 first search results** -- ON HOLD pending the collaboration
-   discussion (user, 2026-08-21).
-4. ~~O7 overlap bracket~~ -- **done (C16)**; queueing on the load vectors
-   is the remaining refinement (interior of the bracket only).
-5. ~~O22 duplex wires + O23 partial-sum width~~ -- **done (C17)**: net
-   direction settled (understated), v3 fixture, four-accounting comparison
-   published.
-6. ~~O24 softmax/LayerNorm/residual terms~~ -- **done (C19)**: digital
-   unit as platform input DR-8, ledger rows filled, sensitivity sweep.
-7. **O13 owner-die routing** -- upgrades the tier-L bounds to routed values
-   (folds naturally into S4's scoring).
-8. ~~O9 offload receiving side~~ -- **done (C21)**: black-box interface,
-   end-to-end numbers, sensitivity sweep.
-9. **O6 + S5 solver reconciliation** -- ON HOLD with the search discussion.
-10. **O16 whole-model deployment** (the search's eventual target), then O14
-    long-context K/V, O15 input-row-split probe, O17 device sweep, O1 (DR-1
-    input), O8.
-11. Small hygiene: derive `res.energy` from the exact per-component
-    `Energy (total)` lines instead of the rounded per-compute summary table
-    (pytimeloop `parse_stats_stream`: pJ/compute x computes) -- the
-    per-operator ledger shows the gap as a 0.1-0.5% residual row; seed the
-    CNN sample inputs in `crossbar_value_real.py`
+Done (see Completed): O12 (C14), O18 (C15), O7 (C16), O22/O23 (C17), O24
+(C19), O9 (C21, C22), O13 (C23), the unit fix (C25).
+
+1. **O25 anchor grid** (P0, before anything else): the paradigm x tier
+   registry with `status`; the analog-reality rows with derivations; the
+   real-system mapping table into settings; both columns on every threshold
+   table; the 2.7B chain read at analog-reality D2D; test group; ESP primary
+   citation and the HERMES supplement check.
+2. **O17 device axis** (P1, the core experiment): the `1.449e-6` refactor
+   into a fabric `device` block with GB/s-declared bandwidths first; then the
+   three silicon scales, the fixed-terms statement, the scaling-law probes
+   (d and S), the phase-diagram table and figure.
+3. **O26 T2 statement + `schedule_slack`** (P1: documents, one parameter,
+   one test).
+4. **S1--S6** (P3, after P0/P1 have produced the cells): S1 evaluator API ->
+   S2 baselines + greedy -> S3 / S4 -> S6 proxy study; S5 / O6 when the
+   collaboration discussion resumes.
+5. **O27 static energy + peak concurrency** (P4, cheap).
+6. **Documents** (P5, after each of the above): settings / SUMMARY (zh + en)
+   / report: anchor identity, mapping table, T2 statement, the DR table
+   (DR-2 returns to first order in the analog-reality column; DR-5 stays the
+   one device-side input that moves the decode conclusions); README script
+   index; a CHANGELOG entry per step with the register re-audit. The deck is
+   maintained on the user's side.
+7. Kept, lower: O21 (cheap; with step 6), O15 (needed for the row-split
+   branch of O17's law), O16 -> O20, O14, O1 (DR-1 input; ~2% ceiling after
+   C25), O8, O19.
+8. Small hygiene: derive `res.energy` from the exact per-component
+   `Energy (total)` lines instead of the rounded per-compute summary table
+   (pytimeloop `parse_stats_stream`: pJ/compute x computes) -- the
+   per-operator ledger shows the gap as a 0.1-0.5% residual row; seed the
+   CNN sample inputs in `crossbar_value_real.py`
    (removes the 1.199 vs 1.204 sampling drift); prune `make_figures.py`
    stages that regenerate deleted figures; derive `ns_per_hop`/`hop_scale`
-   from `slot_pitch_um` (its first consumer); primary ESP citation and a
-   UCIe-class D2D anchor before any external submission; T1×T2 joint
-   operating-point sweep; verify `reduction_hyperedges` membership
+   from `slot_pitch_um` (its first consumer); UCIe-class D2D anchor; T1 x T2
+   joint operating-point sweep; verify `reduction_hyperedges` membership
    convention against Timeloop's spatial index order.
+
+Paper scope (the v5 narrative). Thesis: when the communication cost of
+analog CIM is first-order is a phase diagram (model scale x device speed x
+transfer paradigm x link tier); this work is the first instrument that can
+draw it, with the axes calibrated against published silicon. Three
+contributions: the instrument (placement-explicit, contention-computable,
+paradigm-selectable; T2 statement, four validations, microsecond
+re-scoring), the diagram (on-die and D2D unified by two ratios plus the
+device axis; current conclusions at the slow analog tier -- point-to-point
+free, shared medium at the line, spanning forbidden at weak D2D -- and trend
+conclusions from the scaling law and the three silicon scales), and the
+search (S1--S6, with the proxy-optimization failure as the result). Energy
+in one sentence: dynamic energy is layout-blind (v5: <=0.2% on die, +1.2-1.3%
+across dies at the GRS anchor), static energy inherits the latency ranking
+(O27). Out of scope for the paper: the agent direction, residency detail
+(O14 / O16), company-specific wording, meshX > 1, O15, BookSim-class
+validation (digital column only), the long-form report.
 
 Not scheduled until asked: giant layers across dies beyond the tiler's
 range, multi-package scaling.

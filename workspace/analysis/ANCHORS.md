@@ -6,6 +6,16 @@ fabricated (or post-layout) accelerators, so that "where real chips land on
 our threshold curves" is a sourced statement, not a guess. Consumed by
 `scripts/analyze_anchored_sweep.py`.
 
+**Identity (O25).** Every anchor below is a DIGITAL accelerator's link --
+Simba, ESP and FlooNoC NoCs on die, Simba's GRS package mesh die to die.
+They are the upper bound of what fabricated interconnects deliver, not the
+operating points of analog CIM chips: no fabricated analog CIM system
+publishes an on-die link bandwidth (survey and registry mapping in "What
+analog CIM systems publish" below). Every readout against these anchors is
+therefore the digital-ecosystem column of the phase diagram (model scale x
+device speed x transfer paradigm x link tier); the analog-reality column is
+open item O25 and enters no external document until its rows exist.
+
 ## On-die NoC, per link, one direction
 
 | tier | value | system | provenance | notes |
@@ -28,10 +38,35 @@ with an explicit "as reported in [FlooNoC]" footnote — do not cite it bare.
 |---|---|---|---|
 | **12.5 GB/s** (100 Gb/s) | Simba package GRS mesh | same JSSC 2020: "36 dice ... mesh network with 100 Gb/s interconnect in each link direction"; lanes run 11–25 Gb/s at **0.82–1.75 pJ/bit** | silicon-measured D2D on an organic substrate. **Adopted**: the die-link default energy is now 10 pJ/word = the midpoint of this measured band (6.6–14 pJ/word), replacing the earlier optimistic 5 pJ/word example |
 
+## What analog CIM systems publish (survey 2026-08-27), and the registry tier each maps to
+
+| system | fabric | published on-die link bandwidth | registry tier in this model |
+|---|---|---|---|
+| NeuRRAM (Wan et al., Nature 2022) | inter-core buffers and partial-sum accumulation on the board FPGA; no on-chip core network | none (chip IO, 130 nm) | hub-IO upper bound |
+| TetraMem MX100 (arXiv 2410.14882) | 10 NPUs + RISC-V + DMA engine + shared SRAM (512 KB + 1 MB), 65 nm | none (shared medium) | bus, bandwidth at the T1 hub (`hub_bandwidth_words_per_cycle`) |
+| HERMES 64-core (Le Gallo et al., Nat. Electron. 2023; arXiv 2212.02872) | on-chip network with per-core link controllers | not in the main text (supplement to check) | star (compile-time scheduled) |
+| Mythic AMP M1076 / M1108 | per-tile 64 KB SRAM + NoC router | none (product material only) | star (compile-time scheduled) |
+| Tsinghua multi-chip (Nat. Commun. 2025; Yao et al., Nature 2020) | 8 chips + FPGA hub, no chip-to-chip direct links | none (everything through the FPGA) | hub-IO / bus |
+| Simba, ESP, FlooNoC, GRS (the anchors above) | digital NoCs and package links, 12-16 nm | 8.75 / 32 / 80.6 GB/s; 12.5 GB/s | mesh (digital ecosystem) |
+
+Mapping rule: a DMA engine with shared SRAM is a shared medium whose
+bandwidth is a T1 (hub) number in this model, not a T2 link; a compile-time
+scheduled point-to-point fabric is the star scheme; a NoC is the mesh
+scheme.
+
+Structural estimate of the analog-reality tier -- `status = estimated`, NOT
+an anchor, not read out anywhere until O25 adds the rows: on die 0.4-8 GB/s
+(32-128 bit x 100-500 MHz), die to die 0.1-2 GB/s (board-level or older-node
+direct links) -- 2-20x below the digital anchors on die, 1-2 orders below
+GRS.
+
 ## Conversion into the simulator's unit
 
-The simulator meters bandwidth in words/cycle: 1 word = 8 bit, device cycle
-= 1.4486 µs (calibrated array model) → **1 GB/s = 1,449 words/cycle**.
+The simulator meters bandwidth in words/cycle: 1 word = one 8-bit value (an
+activation, or one partial sum counted at 2 words), device cycle = 1.4486 µs
+(calibrated array model) → **1 GB/s = 1,449 words/cycle**. Wire volumes are
+values (C25): CiMLoop's bit-slice / bit / access counters are divided out in
+`traffic.py`; before 2026-08-27 they were taken as words (14x / 48x).
 
 | tier | GB/s | words/cycle |
 |---|---|---|
@@ -39,6 +74,13 @@ The simulator meters bandwidth in words/cycle: 1 word = 8 bit, device cycle
 | MID (ESP) | 32.0 | 46,354 |
 | HIGH (FlooNoC) | 80.6 | 116,793 |
 | D2D (Simba GRS) | 12.5 | 18,107 |
+
+The unit carries the device (O17): a threshold in words/cycle is fixed by
+the traffic; its GB/s value scales as 1/t_MVM -- one MVM per input row is 7
+slices x 1.4486 us = 10.1 us here; ISAAC-class ~1.6 us (16 one-bit slices x
+100 ns, 6x), HERMES-class ~130 ns (63.1 TOPS / 64 cores / 2*256*256, derived;
+~76x). The words/cycle fields in the fabric configs (18,112 = 12.5 GB/s at
+the 1.449 us rounding) are this cycle's conversion and move with it.
 
 **What is and is not substituted.** An anchor substitutes exactly ONE
 number — the per-link bandwidth. The workload (GPT-2 medium, our mapper
@@ -52,8 +94,8 @@ NoCs deliver, what happens" — not a simulation of those chips.
 Note (O22/O23): the model's per-wire loads are likewise per direction (full-duplex point-to-point schemes; a bus is one shared medium) and count partial sums at 16 bits up the tree, so anchor bandwidths and modeled loads are compared like for like.
 
 Caveats: per-link, one direction, headline rates (no protocol overhead
-deducted); our model treats a link as undirected (up+down share it), which
-is conservative by up to 2× against duplex hardware. Process nodes differ
+deducted); the model's wires are per direction as well (C17), so the
+comparison is like for like. Process nodes differ
 (12–16 nm vs our 130 nm device model) — the anchors bound what NoCs of
 shipping accelerators deliver, they do not calibrate our wires.
 

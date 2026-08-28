@@ -89,7 +89,8 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   **`analyze_d2d.py`** / **`analyze_offload_contention.py`** /
   **`analyze_scale_tiers.py`** — the system-level contention study (whole-stack
   multipliers vs link bandwidth, both overlap ends, four wire accountings),
-  its readout at published NoC bandwidths, the die-to-die single-pass /
+  its readout at published NoC bandwidths (digital accelerators' links, read
+  as the upper bound; `analysis/ANCHORS.md`), the die-to-die single-pass /
   pipelined modes on the 48-die configuration, the attention-offloaded
   condition, and the 355M → 2.7B scale tiers.
 - **`analyze_digital_sensitivity.py`** — how much of the model's time the
@@ -159,7 +160,7 @@ python3 scripts/analyze_offload_unit_sensitivity.py   # external attention unit 
 ### Tests
 
 ```bash
-python3 tests/run_tests.py            # fast guardrail suite (172 tests, ~4 min)
+python3 tests/run_tests.py            # fast guardrail suite (185 tests, ~4 min)
 python3 tests/run_tests.py --slow     # plus one real mapper run
 ```
 

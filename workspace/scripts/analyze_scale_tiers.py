@@ -30,6 +30,7 @@ from scripts import fabric as fabric_mod
 from scripts import interconnect as ic
 from scripts import llm_workload as lw
 from scripts import placement as pm
+import scripts.crossbar_comm as cc
 import dataclasses
 
 OUT = "/home/workspace/analysis"
@@ -84,6 +85,41 @@ def die_serial(fab, slots_n, edge_words, wc, edge_down=None, edge_up=None):
     return (max(load.values()) / wc * CYC if load else 0.0), m, pl
 
 
+def die_bw(fab, wc):
+    """The fabric with its die link at `wc` words per cycle (scheme unchanged)."""
+    return dataclasses.replace(fab, levels=[
+        dataclasses.replace(l, link=dataclasses.replace(
+            l.link, bandwidth_words_per_cycle=wc)) if l.name == "die" else l
+        for l in fab.levels]).validate()
+
+
+def occupancy_on(fab, slots_n, flows, wc):
+    """Busiest die wire's occupancy for node-to-node flows whose nodes 0..n-1
+    are the op's dies seated on slots_n (the other slots keep their order)."""
+    seq = pm.sequential_fill(fab)
+    rest = [s for s in seq.slots["die"] if s not in slots_n]
+    pl = dataclasses.replace(seq, slots={**seq.slots,
+                                         "die": list(slots_n) + rest}).verify(fab)
+    occ = cc.link_occupancy(flows, die_bw(fab, wc), CYC, pl)
+    return occ["serialization_s"], ic.build(fab, "die", pl), pl
+
+
+def probe_flows(fab, n, P, C, M):
+    """One operator alone, split by output columns over n dies: the whole
+    input (P x C) from the attach point to every die, each die's complete
+    output piece (P x M / n) back -- the tensor once, activation width."""
+    lv = fab.level("die")
+    fl = []
+    for d in range(n):
+        fl.append({"level": lv.link.name, "level_name": "die", "nodes": (ic.HUB, d),
+                   "src": "package", "dst": f"die{d}", "volume": float(P * C),
+                   "width": 1.0, "distance": 0.0})
+        fl.append({"level": lv.link.name, "level_name": "die", "nodes": (d, ic.HUB),
+                   "src": f"die{d}", "dst": "package", "volume": float(P * M / n),
+                   "width": 1.0, "distance": 0.0})
+    return fl
+
+
 def die_surplus_energy(m, edge_words):
     return sum(v * max(m.hops(ic.HUB, i) - 1.0, 0.0) * PJ
                for i, v in enumerate(edge_words))
@@ -97,23 +133,36 @@ def main():
     wc_grs = GRS * WC_PER_GBPS
 
     # ================= tier M: probe op at the GRS anchor =================
+    # Headline (O13): the tensor ONCE per die -- the input from the attach
+    # point to every die, each die's complete output piece back, at
+    # activation width. v1 (comparison): Timeloop's row-driver / ADC
+    # counters as die-edge words, hub-routed, outputs at partial-sum width.
     comp, vol, cyc = probe["compute_s"], probe["die_edge_words"], probe["cycle_s"]
     n = probe["op"]["dies"]
+    P_pr, C_pr, M_pr = probe["op"].get("P", 64), probe["op"]["C"], probe["op"]["M"]
     print(f"=== tier M: one {n}-die operator at the measured D2D anchor "
           f"({GRS} GB/s) ===")
-    tierM = []
+    print(f"  tensor once: {P_pr*C_pr/1e6:.3f} M words in per die, "
+          f"{P_pr*M_pr/n/1e6:.3f} M out per die | v1 counters: "
+          f"{probe.get('die_edge_down', vol)/1e6:.2f} M down, "
+          f"{probe.get('die_edge_up', 0.0)/1e6:.2f} M up (x{fab.psum_word_bytes:g} wide)")
+    tierM, tierM_v1 = [], []
     for label, slots_n in die_styles(fab, n):
-        ser, m, _ = die_serial(fab, slots_n, [vol] * n, wc_grs,
-                               [probe.get("die_edge_down", vol)] * n,
-                               [probe.get("die_edge_up", 0.0)] * n)
-        lat = max(comp, ser)                       # perfect-overlap end (O7)
-        lat_sum = comp + ser                       # zero-overlap end
-        e_sur = die_surplus_energy(m, [vol] * n)
-        tierM.append({"label": label, "lat_s": lat, "lat_sum_s": lat_sum,
-                      "surplus_J": e_sur})
-        print(f"  {label:10} op latency {lat*1e3:8.2f} ms "
-              f"({lat/comp:5.2f}x..{lat_sum/comp:4.2f}x compute) "
-              f"| surplus energy {e_sur*1e3:.2f} mJ")
+        fl = probe_flows(fab, n, P_pr, C_pr, M_pr)
+        ser, m, plx = occupancy_on(fab, slots_n, fl, wc_grs)
+        e_sur = lw.die_flow_surplus_energy(fl, fab, placement=plx, pj_per_word=PJ * 1e12)
+        tierM.append({"label": label, "lat_s": max(comp, ser), "lat_sum_s": comp + ser,
+                      "surplus_J": e_sur, "d2d_s": ser})
+        ser1, m1, _ = die_serial(fab, slots_n, [vol] * n, wc_grs,
+                                 [probe.get("die_edge_down", vol)] * n,
+                                 [probe.get("die_edge_up", 0.0)] * n)
+        tierM_v1.append({"label": label, "lat_s": max(comp, ser1), "lat_sum_s": comp + ser1,
+                         "surplus_J": die_surplus_energy(m1, [vol] * n), "d2d_s": ser1})
+        print(f"  {label:10} op latency {tierM[-1]['lat_s']*1e3:6.3f} ms "
+              f"({tierM[-1]['lat_s']/comp:4.2f}x..{tierM[-1]['lat_sum_s']/comp:4.2f}x compute)"
+              f" | surplus {e_sur*1e6:7.2f} uJ"
+              f" | v1: {tierM_v1[-1]['lat_s']/comp:4.2f}x..{tierM_v1[-1]['lat_sum_s']/comp:4.2f}x,"
+              f" {tierM_v1[-1]['surplus_J']*1e3:.2f} mJ")
 
     # ================= tier L: full model =================
     n_layers = full["config"]["n_layers"]
@@ -129,10 +178,11 @@ def main():
     # The two conditions match the anchored sweep: with attention on chip the
     # K/V write (append-only programming, NOT a rewrite -- the rewrite
     # mechanism fires zero times in these runs) is charged; offloaded drops
-    # the attention ops and their write entirely, on-chip side only.
+    # the attention ops and their write, on-chip side only.
     CONDS = [("prefill, attention on chip", "prefill", True),
              ("decode, attention offloaded", "decode", False)]
-    tierL = {}
+    STYLES = ["clustered", "row-fill", "spread"]
+    tierL, tierL_v1, tierL_hub1, seatings = {}, {}, {}, {}
     for title, phase, on_chip in CONDS:
         recs = [r for r in full["phases"][phase] if on_chip or STAYS(r["name"])]
         for eo in lw.block_elementwise_ops(c27, S=S27, phase=phase):
@@ -146,46 +196,108 @@ def main():
         wr = (lambda r: r["write_s"]) if on_chip else (lambda r: 0.0)
         base = sum(wr(r) + r["compute_s"] for r in recs) * n_layers
         e_tot = sum(r["energy_J"] for r in recs) * n_layers
-        rows = []
-        for noc_name, noc_g in NOC:
-            for style, _ in die_styles(fab, 2):
+        ops27 = {o.name: o for o in lw.block_ops(c27, S27, phase)}
+        # O13 headline: the block's die-sets seated DISJOINTLY, every input
+        # routed producer -> consumer, the tensor once
+        chain = lw.block_chain(c27, S27, phase, on_chip=on_chip)
+        entry_of = {o: e["name"] for e in chain for o in e["ops"]}
+        pays = {e["name"]: e["ops"][0] for e in chain}   # the op that waits for the entry's input
+        rows, rows_v1, rows_h1 = [], [], []
+        for style in STYLES:
+            seating = lw.seat_block(fab, chain, style)
+            seatings[f"{title} | {style}"] = seating
+            flows = lw.block_die_flows(chain, seating, fab)
+            pl0 = pm.sequential_fill(fab)
+            fab_grs = die_bw(fab, wc_grs)
+            d2d_of = {nm: cc.link_occupancy(fl, fab_grs, CYC, pl0)["serialization_s"]
+                      for nm, fl in flows.items()}
+            e_sur_layer = sum(lw.die_flow_surplus_energy(fl, fab, placement=pl0,
+                                                         pj_per_word=PJ * 1e12)
+                              for fl in flows.values())
+            # offloaded: the die side pushes Q/K/V to the unit -- nobody's
+            # inbound on the die, so it is its own term (nothing overlaps it)
+            unit_in = d2d_of.get(lw.ATTENTION_DIE, 0.0) if not on_chip else 0.0
+            for noc_name, noc_g in NOC:
                 tot = tot_sum = 0.0
-                e_sur = 0.0
                 for r in recs:
                     ondie = r["ondie_serial_ref_s"] * REF_WC / (noc_g * WC_PER_GBPS)
+                    ent = entry_of.get(r["name"])
                     d2d = 0.0
-                    if r["die_flow_words"]:
-                        nd = len(r["die_flow_words"])
-                        slots_n = dict(die_styles(fab, nd))[style]
-                        d2d, m, _ = die_serial(fab, slots_n,
-                                               r["die_flow_words"], wc_grs,
-                                               r.get("die_flow_down"),
-                                               r.get("die_flow_up"))
-                        e_sur += die_surplus_energy(m, r["die_flow_words"])
+                    if ent is not None and pays[ent] == r["name"] and \
+                            not (ent == lw.ATTENTION_DIE and not on_chip):
+                        d2d = d2d_of.get(ent, 0.0)
                     # O7 bracket: max = every network term hides behind
                     # compute (and behind each other); sum = nothing overlaps
                     tot += wr(r) + max(r["compute_s"], ondie, d2d)
                     tot_sum += wr(r) + r["compute_s"] + ondie + d2d
+                tot += unit_in
+                tot_sum += unit_in
                 rows.append({"noc": noc_name, "style": style,
                              "lat_s": tot * n_layers, "mult": tot * n_layers / base,
                              "lat_sum_s": tot_sum * n_layers,
                              "mult_sum": tot_sum * n_layers / base,
-                             "surplus_J": e_sur * n_layers})
-        tierL[title] = {"base_s": base, "energy_J": e_tot, "rows": rows}
+                             "surplus_J": e_sur_layer * n_layers,
+                             "d2d_layer_s": sum(d2d_of.values())})
+            # comparisons, every op seated ALONE on its best seats (the v1
+            # per-op reading): v1 = counter volumes, hub-routed, 16-bit up;
+            # hub-once = the tensor once, still hub-routed
+            for variant, rows_out in (("v1", rows_v1), ("hub-once", rows_h1)):
+                for noc_name, noc_g in NOC:
+                    tot = tot_sum = e_sur = 0.0
+                    for r in recs:
+                        ondie = r["ondie_serial_ref_s"] * REF_WC / (noc_g * WC_PER_GBPS)
+                        d2d = 0.0
+                        if r["die_flow_words"]:
+                            nd = len(r["die_flow_words"])
+                            slots_n = dict(die_styles(fab, nd))[style]
+                            if variant == "v1":
+                                d2d, m, _ = die_serial(fab, slots_n, r["die_flow_words"],
+                                                       wc_grs, r.get("die_flow_down"),
+                                                       r.get("die_flow_up"))
+                                e_sur += die_surplus_energy(m, r["die_flow_words"])
+                            else:
+                                op = ops27[r["name"]]
+                                fl = probe_flows(fab, nd, op.P, op.C, op.M)
+                                d2d, m, plx = occupancy_on(fab, slots_n, fl, wc_grs)
+                                e_sur += lw.die_flow_surplus_energy(
+                                    fl, fab, placement=plx, pj_per_word=PJ * 1e12)
+                        tot += wr(r) + max(r["compute_s"], ondie, d2d)
+                        tot_sum += wr(r) + r["compute_s"] + ondie + d2d
+                    rows_out.append({"noc": noc_name, "style": style,
+                                     "lat_s": tot * n_layers, "mult": tot * n_layers / base,
+                                     "lat_sum_s": tot_sum * n_layers,
+                                     "mult_sum": tot_sum * n_layers / base,
+                                     "surplus_J": e_sur * n_layers})
+        tierL[title] = {"base_s": base, "energy_J": e_tot, "rows": rows,
+                        "chain": [dict(e) for e in chain]}
+        tierL_v1[title] = {"base_s": base, "energy_J": e_tot, "rows": rows_v1}
+        tierL_hub1[title] = {"base_s": base, "energy_J": e_tot, "rows": rows_h1}
         print(f"  {title}: no-network stack {base*1e3:.2f} ms, "
-              f"energy {e_tot*1e3:.1f} mJ")
+              f"energy {e_tot*1e3:.1f} mJ; block die-sets "
+              f"{[(e['name'], e['n_dies'], e['split']) for e in chain]}")
         for r in rows:
-            print(f"    NoC {r['noc']:12} die-placement {r['style']:9} "
+            print(f"    NoC {r['noc']:12} seating {r['style']:9} "
                   f"-> {r['lat_s']*1e3:9.2f} ms ({r['mult']:5.2f}x"
                   f"..{r['mult_sum']:4.2f}x)"
-                  f"  D2D surplus {r['surplus_J']*1e3:7.2f} mJ")
+                  f"  D2D surplus {r['surplus_J']*1e3:7.2f} mJ"
+                  f"  (die transfers {r['d2d_layer_s']*1e3:.3f} ms per layer)")
+        print("    comparison at the mid NoC anchor (per-op-alone seats):")
+        for style in STYLES:
+            v1 = next(r for r in rows_v1 if r["noc"] == "ESP 32" and r["style"] == style)
+            h1 = next(r for r in rows_h1 if r["noc"] == "ESP 32" and r["style"] == style)
+            hd = next(r for r in rows if r["noc"] == "ESP 32" and r["style"] == style)
+            print(f"      {style:9} v1 counters/hub {v1['mult']:5.2f}x..{v1['mult_sum']:4.2f}x "
+                  f"{v1['surplus_J']*1e3:7.1f} mJ | tensor-once/hub {h1['mult']:5.2f}x"
+                  f"..{h1['mult_sum']:4.2f}x {h1['surplus_J']*1e3:6.1f} mJ | routed chain "
+                  f"{hd['mult']:5.2f}x..{hd['mult_sum']:4.2f}x {hd['surplus_J']*1e3:6.1f} mJ")
 
     # ================= figures =================
     # tier M figure
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.4))
     g = np.geomspace(1, 200, 200)
     for label, slots_n in die_styles(fab, n):
-        ser0, m, _ = die_serial(fab, slots_n, [vol] * n, WC_PER_GBPS)  # @1GB/s
+        ser0, m, _ = occupancy_on(fab, slots_n, probe_flows(fab, n, P_pr, C_pr, M_pr),
+                                  WC_PER_GBPS)                        # @1GB/s
         ys = [max(comp, ser0 / x) * 1e3 for x in g]
         axes[0].plot(g, ys, lw=1.7, label=label)
     axes[0].axvline(GRS, color="0.35", ls="--", lw=1.2)
@@ -211,7 +323,7 @@ def main():
                       fontsize=10)
     axes[1].grid(alpha=0.25, axis="y")
     fig.suptitle("Tier M — a single operator that spans dies "
-                 "(2.7B-class FFN probe)", fontsize=12)
+                 "(2.7B-class FFN probe; the tensor once per die, O13)", fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.9])
     p1 = os.path.join(OUT, "scale_tier_probe.png")
     fig.savefig(p1, dpi=130); plt.close(fig)
@@ -241,8 +353,8 @@ def main():
         ax.grid(alpha=0.25, axis="y")
         ax.set_ylim(0, max(r["mult"] for r in rows) * 1.22)
         ax.legend(fontsize=8, title="die placement", loc="lower right")
-    fig.suptitle("Tier L — full 2.7B-class model: on-die anchor × die "
-                 "placement", fontsize=12)
+    fig.suptitle("Tier L — full 2.7B-class model: on-die anchor × seating of the "
+                 "block's die-sets (inputs routed producer → consumer, O13)", fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.9])
     p2 = os.path.join(OUT, "scale_tier_2p7b.png")
     fig.savefig(p2, dpi=130); plt.close(fig)
@@ -256,25 +368,37 @@ def main():
     tS_e = (max(r["surplus_uJ"] for r in d2["assignments"]) * 1e-6
             / tot355["scenarios"]["A_E"])
     tM_lat = max(t["lat_s"] for t in tierM) / min(t["lat_s"] for t in tierM)
+    tM_lat_sum = max(t["lat_sum_s"] for t in tierM) / min(t["lat_sum_s"] for t in tierM)
     probe_E = 2.239e-3
     tM_e = max(t["surplus_J"] for t in tierM) / probe_E
     pref = tierL["prefill, attention on chip"]["rows"]
     mid = [r for r in pref if r["noc"] == "ESP 32"]
     tL_lat = max(r["lat_s"] for r in mid) / min(r["lat_s"] for r in mid)
+    tL_lat_sum = max(r["lat_sum_s"] for r in mid) / min(r["lat_sum_s"] for r in mid)
     tL_e = (max(r["surplus_J"] for r in mid)
             / tierL["prefill, attention on chip"]["energy_J"])
     tiers = ["355M\n(every op fits\none die)", "2.7B-class\nsingle operator\n(4 dies)",
              "2.7B-class\nfull model\n(2-5 dies/op)"]
     lat = [tS_lat, tM_lat, tL_lat]
+    lat_sum = [tS_lat, tM_lat_sum, tL_lat_sum]
     en = [tS_e * 100, tM_e * 100, tL_e * 100]
 
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.4))
-    axes[0].bar(tiers, lat, 0.5, color=[SLATE, GOLD, RED])
-    for i, v in enumerate(lat):
-        axes[0].text(i, v * 1.02, f"{v:.2f}x", ha="center", fontsize=10,
+    xs = np.arange(3)
+    axes[0].bar(xs - 0.17, lat, 0.32, color=[SLATE, GOLD, RED],
+                label="perfect-overlap end")
+    axes[0].bar(xs + 0.17, lat_sum, 0.32, color=[SLATE, GOLD, RED], alpha=0.45,
+                hatch="//", label="zero-overlap end")
+    for i, (v, w) in enumerate(zip(lat, lat_sum)):
+        axes[0].text(i - 0.17, v * 1.01, f"{v:.2f}x", ha="center", fontsize=9,
                      fontweight="bold")
+        axes[0].text(i + 0.17, w * 1.01, f"{w:.2f}x", ha="center", fontsize=9)
+    axes[0].set_xticks(xs)
+    axes[0].set_xticklabels(tiers)
+    axes[0].set_ylim(0, max(lat + lat_sum) * 1.18)
+    axes[0].legend(fontsize=8, loc="upper right")
     axes[0].set_ylabel("worst / best layout latency (at the anchors)")
-    axes[0].set_title("latency leverage of layout", fontsize=10)
+    axes[0].set_title("latency leverage of layout (both bracket ends, O7)", fontsize=10)
     axes[0].grid(alpha=0.25, axis="y")
     axes[1].bar(tiers, en, 0.5, color=[SLATE, GOLD, RED])
     for i, v in enumerate(en):
@@ -284,16 +408,24 @@ def main():
     axes[1].set_ylabel("worst-layout extra D2D energy\n(% of the TIER's OWN total: model / op / model; log)")
     axes[1].set_title("energy leverage of layout", fontsize=10)
     axes[1].grid(alpha=0.25, axis="y", which="both")
-    fig.suptitle("Layout leverage grows with model scale — because operators "
-                 "start to span dies", fontsize=12)
+    fig.suptitle("Layout leverage across scale at the anchors: every latency lever hides "
+                 "behind compute (zero-overlap end <= 3%); the energy lever grows from "
+                 "0.5% to ~1.5% as operators span dies", fontsize=10.5)
     fig.tight_layout(rect=[0, 0, 1, 0.89])
     p3 = os.path.join(OUT, "scale_combined.png")
     fig.savefig(p3, dpi=130); plt.close(fig)
     print(f"PNG -> {p3}")
 
     with open(os.path.join(OUT, "scale_tiers.json"), "w") as f:
-        json.dump({"tierM": tierM, "tierL": tierL,
-                   "combined": {"tiers": tiers, "lat": lat, "energy_pct": en}},
+        json.dump({"tierM": tierM, "tierM_v1": tierM_v1,
+                   "tierL": tierL, "tierL_v1": tierL_v1, "tierL_hub_once": tierL_hub1,
+                   "seatings": seatings,
+                   "accounting": "O13: block die-sets seated disjointly, inputs routed "
+                                 "producer -> consumer, the tensor once per consumer die; "
+                                 "v1 = Timeloop counters as die-edge words, hub-routed, "
+                                 "per-op-alone seats; hub_once = the tensor once, hub-routed",
+                   "combined": {"tiers": tiers, "lat": lat, "lat_sum": lat_sum,
+                                "energy_pct": en}},
                   f, indent=1, default=float)
     print("JSON -> scale_tiers.json")
 

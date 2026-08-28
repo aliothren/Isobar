@@ -245,3 +245,94 @@ unchanged. Group 21 gains `test_unit_link_hops_come_from_the_die_placement`
 1 xfail.
 
 **What stayed pinned:** all fixtures, groups 14-20, the die-side readouts.
+
+## O13: the 2.7B block as a chain of die-sets -- v4, 2026-08-27
+
+**What changed:** the spanning-operator die flows (tier M / tier L) were
+hub-routed and sized by the structured traffic model's leaf counters --
+row-driver reads (14x the input tensor) and ADC reads (48x the output
+piece, at partial-sum width). Those re-reads happen out of the die's own
+buffer; the die-to-die wire carries the tensor once, the layer hand-off
+convention. `llm_workload.block_chain` (data-flow order, dies and split
+dim from plan_spatial, the attention die = qk^t + softmax + av, the
+external unit when offloaded), `seat_block` (disjoint seats: clustered /
+row-fill / spread), `block_die_flows` (node-to-node flows producer ->
+consumer; column split = every owner's piece to every consumer at
+activation width, row split = all partial sums at partial-sum width) and
+`die_flow_surplus_energy`; `link_occupancy` honours a flow `width`;
+`analyze_scale_tiers.py` publishes the routed chain as the headline and
+keeps `tierM_v1` / `tierL_v1` / `tierL_hub_once` as the comparison; the
+combined figure shows both bracket ends. `analyze_multidie_placement.py`
+untouched (its JSON is the v1 comparison; P=64 recorded by
+analyze_scale_tiers).
+
+**Readouts moved (anchors: on-die ESP 32 GB/s, D2D GRS 12.5 GB/s):**
+tier M 3.10 / 6.20 / 6.20x -> 1.00x at every seating (zero-overlap
+1.03 / 1.06 / 1.06x), surplus 0 / 1.15 / 1.30 mJ -> 0 / 31 / 35 uJ; tier L
+prefill 1.22 / 2.14 / 1.97x -> 1.02x (zero-overlap 1.26 / 1.28 / 1.26x),
+surplus 0 / 792 / 829 mJ -> 30.5 / 27.1 / 30.1 mJ (+1.2-1.3% of 2297 mJ);
+offloaded decode 1.27 / 2.50 / 2.27x -> 1.00 / 1.01 / 1.01x; combined
+figure latency leverage 1.55 / 4.0 / 1.75x -> 1.55 / 1.00 (1.03) / 1.00
+(1.01)x, energy 0.46 / 58 / 36% -> 0.46 / 1.58 / 1.33%. Every 355M
+number, fixture and group untouched. Group 22 (`test_die_chain.py`,
+8 tests) pins the mechanism and the readouts. Suite: 180 passed / 1 xfail.
+
+**What stayed pinned:** all fixtures, groups 14-21, the 355M readouts, the
+v1 tier numbers as the comparison rows in scale_tiers.json.
+
+## C25: wire volumes in values -- v4 -> v5, 2026-08-27
+
+**What changed:** `traffic.extract` now returns leaf volumes in VALUES.
+Timeloop counts the Inputs dataspace in input bit slices (X, 7 per signed
+8-bit word), the Outputs dataspace in output bits (Z, 8 per word), once
+per physical cell column of a weight (Y at the column level, 2), and its
+"Total scalar accesses" add fills and updates to reads; v1-v4 took those
+totals as 8-bit words -- 14x the input tensor and 48x the output piece on
+every on-die wire. Now: row-driver READS / X and ADC READS / Z / Y_col,
+with a guard that the leaves' distinct slices reassemble P*C*N and P*M*N
+exactly once (the check that would have caught this at v1). The uniform
+(v0 comparison) path follows. Energies, K/V writes, layer hand-offs and
+the O13 die flows never used the counters and are unchanged.
+
+**Goldens moved:** `stack_per_op_v5.json` frozen (compute / write /
+digital-unit rows bit-identical to v4; all 60 serialization rows moved);
+`slow_golden_v2.json` (tiny2x2 spread 1.25, same value, provenance
+updated). Readouts: single op 3.43-27.68x -> 1.00x (zero-overlap
+1.07-1.59x; scheme ratios kept: bus/star occupancy 8.27x, corner/centre
+1.67x); whole stack at 16,384 w/c 1.00/1.52/1.88/2.27/4.08x -> 1.00x for
+every scheme (zero-overlap 1.01/1.03/1.05/1.04/1.11x); Simba anchor
+1.03-5.24x -> 1.00x (zero-overlap 1.01-1.15x), ESP <= 1.04x, FlooNoC
+<= 1.02x; buffer lever 1.49-1.55x -> 1.00x; offloaded decode
+1.03-5.61x -> 1.00x; 1% thresholds 5.7-45 GB/s -> never / 0.35 / 0.71 /
+0.71 / 1.41 GB/s, doubling only the bus at 0.35 GB/s; per-crossbar maps
+3.62x / 1.50x -> 3.69x / 1.70x; region 17.8% unchanged; ledger
+perfect-overlap latencies = compute + write (prefill 826.4 ms, offloaded
+end to end 518.1 ms, decode 14.81 / 2.02 ms); 2.7B tiers 1.00x at every
+NoC anchor (were 1.33x at Simba). Group 11 rewritten (values, unit
+decomposition, reassembly guard), group 14 single-op table re-pinned,
+group 17 gains the v5 block (readout, direction v5 <= v3, thresholds,
+ordering), group 22 re-pinned. Suite: 185 passed / 1 xfail.
+
+**What stayed pinned:** every energy, every compute / write / stage
+number, the D2D chain integers and knees, the O9 unit numbers, the O13
+tensor-once flows and surplus energies, groups 12-13 and 15-16 and 18-21.
+
+## O25 / O17 / O26 registered: the anchor-identity re-read -- doc-only, 2026-08-27
+
+**What changed:** nothing in code, fixtures or goldens. The
+results-affecting register gained two rows that are reading positions,
+not numbers: the four bandwidth anchors (Simba / ESP / FlooNoC on die,
+GRS die to die) are digital-ecosystem links, and every "hidden at every
+published bandwidth" sentence is the reading of one cell (NeuRRAM-class
+device x digital-class link) of a phase diagram (model scale x device
+speed x transfer paradigm x link tier); the thresholds carry no anchor
+and are unchanged. Documents re-labelled accordingly: SUMMARY zh/en 2.5
+(new), PROGRESS 5.5 (new) / 5.2 / 6.4 / 8.2 / 9, ANCHORS identity +
+real-system survey and registry mapping, DIRECTION update, FIXLIST
+re-cut (O25 anchor grid, O17 device axis, O26 busiest-wire bound, O27
+static energy, S1-S6). Estimates for the analog-reality tier and the
+device scales are marked [est] / [derived] and enter no external
+document until O25 / O17 run (P0 gate).
+
+**What stayed pinned:** everything -- 185 passed / 1 xfail on the v5
+fixtures.

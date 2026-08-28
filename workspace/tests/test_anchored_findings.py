@@ -293,3 +293,99 @@ def test_v3_scheme_ordering_unchanged():
         for ov in ("max", "sum"):
             vals = [stack3("prefill", l, g, True, ov) for l in order]
             assert vals == sorted(vals), (g, ov)
+
+
+# -------------------------------------------------- C25: value units (v5)
+FIX5 = json.load(open(os.path.join(HERE, "fixtures", "stack_per_op_v5.json")))
+
+
+def stack5(phase, label, gbps, attention_on_chip, overlap="max"):
+    per = FIX5["phases"][phase]["per_op"][label]
+    wc = gbps * WC_PER_GBPS
+    tot = base = 0.0
+    for o in per:
+        if not attention_on_chip and o["name"] not in STATIC:
+            continue
+        wr = o["write_s"] if attention_on_chip else 0.0
+        ser = o["serial_s"] * REF / wc
+        tot += wr + (max(o["compute_s"], ser) if overlap == "max"
+                     else o["compute_s"] + ser)
+        base += wr + o["compute_s"]
+    return tot / base
+
+
+def test_v5_compute_and_write_unchanged():
+    """The unit fix touches wires only: every compute / write / digital-unit
+    row of v5 equals v4 bit for bit; every serialization moved."""
+    v4 = json.load(open(os.path.join(HERE, "fixtures", "stack_per_op_v4.json")))
+    moved = 0
+    for phase in ("prefill", "decode"):
+        for label, per in FIX5["phases"][phase]["per_op"].items():
+            for a, b in zip(per, v4["phases"][phase]["per_op"][label]):
+                assert a["name"] == b["name"]
+                assert a["compute_s"] == b["compute_s"] and a["write_s"] == b["write_s"]
+                moved += a["serial_s"] != b["serial_s"]
+        assert FIX5["phases"][phase]["stall_free_s"] == v4["phases"][phase]["stall_free_s"]
+    assert moved == 60                      # 6 matmuls x 5 schemes x 2 phases
+
+
+def test_v5_anchored_readout():
+    """The published (post-C25) anchored table: with the wires carrying
+    values instead of Timeloop's bit-slice / bit / access counters (14x
+    inputs, 48x outputs), the busiest wire hides behind compute at every
+    anchor and scheme (perfect-overlap end 1.00x, both conditions); the
+    zero-overlap end at the Simba anchor reads star 1.01x, centred grid
+    1.04x, corner grid 1.07x, tree 1.05x, bus 1.15x (prefill) and the bus
+    1.17x in offloaded decode; at ESP the bus's zero-overlap end is 1.04x,
+    at FlooNoC 1.02x."""
+    for phase, on_chip in (("prefill", True), ("decode", False)):
+        for label in FIX5["phases"][phase]["per_op"]:
+            for g in ANCH.values():
+                approx(stack5(phase, label, g, on_chip), 1.00, 1e-3)
+    Z = lambda label, g, ph="prefill", oc=True: stack5(ph, label, g, oc, "sum")
+    approx(Z("star (private links)", ANCH["simba"]), 1.01, 1e-2)
+    approx(Z("mesh, glb centre", ANCH["simba"]), 1.04, 1e-2)
+    approx(Z("mesh, glb corner", ANCH["simba"]), 1.07, 1e-2)
+    approx(Z("h-tree (k=4)", ANCH["simba"]), 1.05, 1e-2)
+    approx(Z("bus (shared medium)", ANCH["simba"]), 1.15, 1e-2)
+    approx(Z("bus (shared medium)", ANCH["simba"], "decode", False), 1.17, 1e-2)
+    approx(Z("bus (shared medium)", ANCH["esp"]), 1.04, 1e-2)
+    approx(Z("bus (shared medium)", ANCH["floonoc"]), 1.02, 1e-2)
+
+
+def test_v5_direction_and_thresholds():
+    """Direction, pinned: value units never raise a multiplier relative to
+    the v3 counter units (the inflation was 14x/48x, one-sided). The
+    reference-input thresholds: no scheme doubles the stack at any
+    bandwidth of the scripts' sweep (2^9..2^23 w/c) except the bus (512 w/c); the 1%
+    thresholds sit at 512 (centred grid) .. 2,048 w/c (bus), and private
+    links never reach 1%."""
+    for phase, on_chip in (("prefill", True), ("decode", False)):
+        for label in FIX5["phases"][phase]["per_op"]:
+            for g in ANCH.values():
+                for ov in ("max", "sum"):
+                    assert stack5(phase, label, g, on_chip, ov) <= \
+                        stack3(phase, label, g, on_chip, ov) + 1e-9, (phase, label, g, ov)
+
+    def at_wc(label, wc, ov="max"):
+        return stack5("prefill", label, wc / WC_PER_GBPS, True, ov)
+    def knee(label, level):
+        hit = [wc for wc in (2 ** k for k in range(9, 24)) if at_wc(label, wc) >= level]   # the scripts' sweep 2^9..2^23
+        return max(hit) if hit else None
+    assert knee("star (private links)", 1.01) is None
+    assert knee("mesh, glb centre", 1.01) == 512
+    assert knee("mesh, glb corner", 1.01) == 1024
+    assert knee("h-tree (k=4)", 1.01) == 1024
+    assert knee("bus (shared medium)", 1.01) == 2048
+    assert knee("bus (shared medium)", 2.0) == 512
+    assert all(knee(l, 2.0) is None for l in FIX5["phases"]["prefill"]["per_op"] if "bus" not in l)
+
+
+def test_v5_scheme_ordering_unchanged():
+    """The zero-overlap end still ranks the schemes as before at every anchor
+    (the perfect-overlap end is a tie at 1.00x and carries no order)."""
+    order = ["star (private links)", "mesh, glb centre", "h-tree (k=4)",
+             "mesh, glb corner", "bus (shared medium)"]
+    for g in ANCH.values():
+        vals = [stack5("prefill", l, g, True, "sum") for l in order]
+        assert vals == sorted(vals), g

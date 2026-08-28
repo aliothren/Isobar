@@ -44,7 +44,7 @@ accounted-by columns):
 **Three main conclusions** (details in §2–§4):
 
 1. **Placement machinery is built at every level and its effects are measured**:
-   crossbar position differs 1.50× (primary 2×4 layout; 3.62× on the 3×3 comparison, v1 real traffic), region placement differs 17.8% (both are
+   crossbar position differs 1.70× (primary 2×4 layout; 3.69× on the 3×3 comparison, value units), region placement differs 17.8% (both are
    rankings); the macro level is priced (line vs mesh = 1.52× NoC energy =
    **0.34%** of a block). The unpriced levels (core/crossbar links, D2D) are
    exactly where the leverage should be larger → each gap is one DR.
@@ -54,20 +54,27 @@ accounted-by columns):
    transport shares are **lower bounds** — every unpriced term is a network term);
    the payoff route is **contention (bandwidth) and D2D**. The contention side is
    now built and measured (§2.3.1, co-residency basis + physical wire
-   accounting + digital unit, v4): under shared interconnects the whole-stack
-   prefill differs 4.1× across schemes and 1.5× with the glb position, while
-   decode caps at 1.34×; at the silicon-measured Simba anchor the scheme
-   spread stretches to 5.2× and the glb lever to 1.55× (all perfect-overlap
-   ends; since O7 every contention multiplier is also published with its
-   zero-overlap end — e.g. 1.55–6.15× at Simba — the truth lies inside the
-   bracket and both ends rank schemes identically)
-   — **placement's leverage is in latency, not energy**. The same holds one
-   level up (W3, 48-die feasible configuration): pipelined, the layer→die
-   assignment spans up to 4× in throughput (64 w/c example) at +0.48% energy.
-   **Offload amplifies rather than exempts all of this**: removing the write
-   shield and the per-stage compute margin lets contention reach decode for
-   the first time (up to 4.4×), and the +124% throughput dividend is collected
-   only where the package network is not the bottleneck (§2.3.1d; summary
+   accounting + digital unit + value units, v5): the busiest on-die wire's
+   occupancy **hides behind the analog arrays' compute** at the reference
+   input and at all three silicon anchors — every scheme, both buffer
+   positions, both conditions read 1.00× on the whole stack (zero-overlap
+   end 1.01–1.15× at the Simba anchor; both ends rank the schemes
+   identically); the stack first moves 1% at 0.35–1.4 GB/s per link, an
+   order of magnitude below published on-die NoCs (Simba / ESP / FlooNoC are
+   all digital accelerators' NoCs — the digital ecosystem's upper bound; reading
+   position in §2.5). The earlier "4.1×/5.2×
+   across schemes, 1.5× from the glb position" was a unit error in the wire
+   volumes (C25) and is retired — **within-die placement is neither an
+   energy lever nor, in the (NeuRRAM-class device × digital-ecosystem link)
+   cell, a latency lever** (§2.5); the leverage
+   is one level up (W3, 48-die feasible configuration): pipelined, the
+   layer→die assignment spans up to 4× in throughput (64 w/c example) at
+   +0.48% energy.
+   **Offload amplifies the die-to-die side of this**: removing the
+   per-stage compute margin halves the D2D knees, while the on-die network
+   stays hidden even once the decode write shield is gone; the +124%
+   throughput dividend is collected only where the package network is not
+   the bottleneck (§2.3.1d; summary
    figures: the two placement_impact panels). With the external attention
    unit counted as a black-box interface (generic NPU figures, §2.3.1e) the
    prefill dividend stays +124% (the unit keeps pace with the die stage), but
@@ -194,14 +201,17 @@ cannot move.
 ![bandwidth sensitivity](bandwidth_sweep.png)
 
 > **Where the knee is: ffn1's router trunk flips from compute-bound to
-> link-bound at ~2.9e4 words/cycle.** That position is **not a placeholder** — it
-> follows from the op's real link volume (51.2 M words, v1 structured traffic,
-> reconciled against Timeloop's counters), the device cycle time (1.449 µs, from
-> CiMLoop's calibrated macro model), and the compute latency. In absolute units
-> that is **≈ 20 GB/s** for 8-bit words — **squarely inside the range real on-die
-> NoCs occupy**. So DR-2 (per-level link bandwidths) is not a formality: **the
-> answer can land on either side of this knee**, and on the left side on-die
-> communication becomes prefill's dominant latency term.
+> link-bound between 512 and 2,048 words/cycle** (C25 value units; the earlier
+> ~2.9e4 words/cycle rested on wire volumes 14–48× too large). The position
+> follows from the op's real link volume (one macro edge: 65,536 input values
+> down, 1.05 M partial-sum values up at 16 bits), the device cycle time
+> (1.449 µs, from CiMLoop's calibrated macro model), and the compute latency.
+> In absolute units that is **≈ 0.35–1.4 GB/s** per link — an order of
+> magnitude **below the range real on-die NoCs occupy** (8.75–80.6 GB/s). So
+> on this analog device DR-2 (per-level link bandwidths) decides only the
+> zero-overlap margin; on-die communication is not prefill's dominant latency
+> term at any published digital-ecosystem bandwidth — analog CIM systems' own
+> fabrics have no published anchor yet (§2.5).
 >
 > **That still would not make DISTANCE matter** (measured, see §2.3): today's T2
 > reads per-link volumes only, never distance; permuting macro slots leaves the
@@ -248,8 +258,8 @@ evidence the model really distinguishes layouts):
 
 | Layout | heatmap spread (distance) | mesh peak segment (congestion) | total segment load |
 |---|---|---|---|
-| 3×3 | 3.62× (**worse**) | **3V (better)** | 10V |
-| 2×4 | **1.50× (better)** | 4V (**worse**) | 12V |
+| 3×3 | 3.69× (**worse**) | **3V (better)** | 10V |
+| 2×4 | **1.70× (better)** | 4V (**worse**) | 12V |
 
 **The same two layouts rank in opposite orders under the two metrics**: 2×4
 spreads distance more evenly but, being elongated, funnels more flows onto one
@@ -277,7 +287,17 @@ opposite recommendation.
 > they run on the die's digital vector unit (`fabric.digital`, platform
 > input DR-8, generic 64 lanes @ 1 GHz), closed-form — +8.9 mJ (+3.1%) and
 > +13.4 ms (+1.1%) on 355M prefill, decode practically unchanged; softmax
-> leaves with the attention under offload. v4 fixture. Historical numbers in
+> leaves with the attention under offload. v4 fixture. **C25 (2026-08-27)
+> fixed the UNITS of the wire volumes**: v1–v4 took Timeloop's "Total scalar
+> accesses" as 8-bit words, while CiMLoop counts inputs in bit slices (7 per
+> word), outputs in bits (8 per word) and once per cell column of a weight
+> (2), and adds fills/updates to reads — every on-die wire carried 14×
+> (inputs) / 48× (outputs) too much. In values (`traffic.py` takes the
+> row-driver / ADC READS divided by the unit factors, with a guard that the
+> leaves' slices reassemble the operand exactly once) **every on-die
+> contention multiplier is 1.00× at every published (digital-ecosystem) anchor**, and the
+> thresholds sit 14–48× lower; v5 fixture, groups 11/14/17 re-pinned.
+> Historical numbers in
 > this section not rewritten line-by-line are the **exclusive-die (v1)
 > basis**, archived as `contention_system_fulldie.json` and the v1 fixture;
 > the current numbers live in PROGRESS and the report.
@@ -294,19 +314,21 @@ Sources: [`analyze_contention_impact.py`](../scripts/analyze_contention_impact.p
 (whole stack).
 
 **(a) Single op (ffn1 prefill, stall-free 2.596 ms; physical wire
-accounting v3).** Identical traffic, identical mapping; load on the busiest
-wire (in units of one edge's combined volume): star 2× / mesh-centre 6× /
-2×4 8× / h-tree 8× / mesh-corner 10× / bus 16× → op latency 3.43× to
-27.68×. **The scheme alone is 8.07×; on the 3×3 grid, moving the glb from
-centre to corner under the same mesh is 1.67×** (under the earlier "both
-directions on one wire, everything 8-bit" accounting: 1× / 3× / 4× / 4× /
-5× / 8× → 1.75×–13.96×, scheme alone 8.00×; 16-bit partial sums up the tree
-roughly double every wire's load — **ratios unchanged, absolute multipliers
-doubled**). ⚠️ The layout's lever on the PEAK depends
-on the grid shape: on the fill-exact **2×4 the centre and corner hubs both peak
-at 4×** (the elongated grid funnels a full column either way) — see the segment
-map below; only the squarer grid has the 3×→5× headroom. All anchors (including
-the 2×4 invariance) are pinned in `tests/test_contention_anchors.py`.
+accounting + value units, v5).** Identical traffic, identical mapping; one
+macro edge carries 65,536 input values down and 1.05 M partial-sum values
+(16-bit) up; load on the busiest wire (in units of one edge): star 2× /
+mesh-centre 6× / 2×4 8× / h-tree 8× / mesh-corner 9× / bus 16×, i.e.
+occupancy 0.19 / 0.56 / 0.74 / 0.74 / 0.93 / 1.53 ms — **all hidden behind
+the 2.60 ms of compute: 1.00× at the perfect-overlap end**; the zero-overlap
+end reads 1.07× / 1.21× / 1.29× / 1.29× / 1.36× / 1.59×. The ratios between
+schemes are what they were (scheme alone: 8.27× in occupancy; on the 3×3 grid,
+moving the glb from centre to corner under the same mesh: 1.67×); the absolute
+multipliers fell from the earlier 3.43×–27.68× (counter units) to 1. ⚠️ The
+layout's lever on the PEAK depends on the grid shape: on the fill-exact **2×4
+the centre and corner hubs both peak at 4×** (the elongated grid funnels a full
+column either way) — see the segment map below; only the squarer grid has the
+3×→5× headroom. All anchors (including the 2×4 invariance) are pinned in
+`tests/test_contention_anchors.py`.
 
 **(b) This is a latency finding, not an energy finding.** Across the same
 variants, system energy spans **1.007×** total, and two pairs have **identical**
@@ -321,57 +343,48 @@ Per-level attribution: 1.60× within the router level × its 0.99% share →
 ![per-link load vectors](placement_link_loads.png)
 
 **(c) The system denominator (GPT-2 medium × 24 blocks, S=512; co-residency
-basis, digital-unit terms in).** The two phases answer differently by an
-order of magnitude, and the reason is phase structure — prefill is
-compute-dominated (arrays 90.5% + digital unit 1.6%), which contention can
-overtake; decode is write-dominated (89.8%), a serial SET term communication
-cannot rise past:
+basis, digital-unit terms in, value units v5).** Both phases are dominated by
+compute or write — prefill: arrays 90.5% + digital unit 1.6%; decode: write
+89.8% — and the on-die network cannot surface at the reference input:
 
-| scheme / layout | prefill (stall-free 826.42 ms) | decode (stall-free 14.80 ms/token) |
+| scheme / layout | prefill (stall-free 826.42 ms) perfect-overlap / zero-overlap end | decode (stall-free 14.80 ms/token) |
 |---|---|---|
-| star (lower bound) | 826.42 ms (1.00×) | 14.80 ms (1.00×) |
-| mesh, glb centre | 1253.63 ms (1.52×) | 15.63 ms (1.06×) |
-| h-tree k=4 | 1556.23 ms (1.88×) | 16.22 ms (1.10×) |
-| mesh, glb corner | 1872.18 ms (2.27×) | 16.84 ms (1.14×) |
-| bus | 3369.61 ms (4.08×) | 19.76 ms (1.34×) |
+| star (lower bound) | 1.00× / 1.01× | 1.00× / 1.00× |
+| mesh, glb centre | 1.00× / 1.03× | 1.00× / 1.00× |
+| h-tree k=4 | 1.00× / 1.04× | 1.00× / 1.00× |
+| mesh, glb corner | 1.00× / 1.05× | 1.00× / 1.01× |
+| bus | 1.00× / 1.11× | 1.00× / 1.01× |
 
-**Whole-stack prefill: 4.08× across schemes, 1.49× from the glb position
-alone; decode caps at 1.34×** (reference input 16,384 w/c; at the Simba
-anchor the spread is 5.24× and the glb lever 1.55× — see the anchored tables
-in PROGRESS). Each scheme gets two thresholds (bandwidth below which the
-stack moves 1% / doubles) for users to compare their own link bandwidth
-against (mesh-centre: 32,768 / 8,192 w/c). Wire accounting (O22/O23):
-full-duplex direction-split links (the bus is a shared medium) and 16-bit
-partial sums up the tree; against the earlier "both directions on one
-wire, everything 8-bit" accounting every threshold moved up ~2× — the
-partial-sum width outweighs the relief of separate wires, so the earlier
-multipliers UNDERSTATED contention (comparison table in PROGRESS §5.2).
-**The O7 overlap bracket.** The table above is the perfect-overlap end
-(communication hides behind compute — double buffering); the zero-overlap
-end (compute + communication in series) reads star 1.42× / centre 2.27× /
-corner 3.11× / h-tree 2.69× / bus 4.98× at the reference input, and
-1.55×–6.15× at the Simba anchor. The truth lies between. Three usable
-qualitative readings: both ends **rank the schemes identically** (every
-placement-ordering conclusion survives, pinned as a test); the doubling
-threshold moves at most 2× with the overlap assumption (**"when the
-network hurts badly" is decided by bandwidth, robust to overlap**); the 1%
-threshold moves ~64× (**"when the network is perfectly invisible" is
-decided by the double-buffering microarchitecture, not by bandwidth** —
-with zero overlap even a FlooNoC-class link leaves 33% on the bus). On the exclusive-die basis (v1) there was also a counter-example:
-in decode, mesh-corner came out slightly faster than centre, because ops
-occupying a small part of the array under a corner hub send some flows
-across no segment at all. The co-residency basis pins every op to its
-seating share (spanning the die), so that observable no longer appears at
-the system denominator — but the coupling of active slots to hub position
-remains pinned as a mechanism in
+**At the reference input (16,384 w/c) the whole stack is 1.00× for all five
+schemes**; even the zero-overlap end adds only 1–11%. Thresholds (bandwidth
+below which the stack moves 1% / doubles, perfect-overlap end): star never /
+never, mesh-centre 512 / never, mesh-corner 1,024 / never, h-tree 1,024 /
+never, bus 2,048 / 512 w/c — a link has to fall to 0.35–1.4 GB/s before the
+stack moves 1%, and only a shared bus doubles it, below 0.35 GB/s (the
+zero-overlap 1% thresholds are 16,384 / 32,768 / 65,536 / 65,536 / 131,072
+w/c). All three silicon anchors (Simba 8.75 / ESP 32 / FlooNoC 80.6 GB/s) sit
+on the invisible side: 1.00× in every cell at the perfect-overlap end; at the
+zero-overlap end Simba reads star 1.01× / centre 1.04× / corner 1.07× / h-tree
+1.05× / bus 1.15×, ESP at most 1.04×, FlooNoC at most 1.02× (full tables in
+PROGRESS §5.2). The previously published 1.00–4.13× / 1.03–5.24× / hub lever
+1.50×–1.55× are retired — they were the 14×/48× unit error (C25). The
+physical wire accounting (O22/O23: direction-split full-duplex links, 16-bit
+partial sums) stays; at the correct volumes it moves the multipliers from
+1.00 to 1.00. **The O7 bracket** is still published at both ends; the three
+qualitative readings are now: both ends **rank the schemes identically**
+(pinned; zero-overlap star < centre < h-tree < corner < bus); a "doubling"
+threshold does not exist inside the anchor range (bus excepted, 0.35 GB/s);
+the "1%" threshold is decided by the overlap assumption — with zero overlap
+the bus still leaves 15% at the Simba anchor. The decode corner
+counter-example of the exclusive-die basis (a corner hub under which part of
+the traffic crosses no segment) does not appear on the co-residency basis,
+but the mechanism stays pinned in
 `test_partial_occupancy_couples_layout_to_active_slots`.
 ![contention at the system denominator](contention_system.png)
-![where the congestion sits (primary 2×4 layout)](contention_segment_map_2x4.png)
-(3×3 comparison version: `contention_segment_map.png` — centre 6× / corner 10×
-busiest-wire loads under the physical accounting (3× / 5× before O23: 16-bit
-partial sums up the tree roughly double every wire's load), the source of
-the 1.50× layout lever above; the load maps depend on traffic, routing and
-word widths, not on the compute basis.)
+![where the congestion sits (2×4 primary layout)](contention_segment_map_2x4.png)
+(3×3 comparison `contention_segment_map.png`: centre 6× / corner 9× on the
+busiest wire in units of one edge; the load maps depend on traffic, routing
+and word width, not on the compute basis.)
 
 **(d) The offload (scenario B) version** (source
 [`analyze_offload_contention.py`](../scripts/analyze_offload_contention.py),
@@ -385,19 +398,17 @@ residual work, the FFN die gains the GELU) — the compute margin halves,
 every D2D knee doubles, and transfers hide less easily (D2D pipelined at
 64 w/c: snake and sequential rows both degrade, 1.12× — on full-duplex
 wires the row wrap rides the opposite direction, so sequential rows equal
-snake; adversarial 4.47×; bus 52.5×); on-die contention multipliers stay
-near A (centre 1.46× to bus 4.35×). **Decode: the write shield (90%)
-leaves with the attention, and on-die contention reaches decode for the
-first time** — mesh-corner 2.26×, bus 4.35× (versus 1.14×/1.34× under A);
-D2D starts to graze it too
-(sequential ~2.3× at the 64 w/c example input; still free at the measured
-anchor).
-**Offload is a throughput win that AMPLIFIES the communication problem — the
-compute it removes is exactly where the transfers used to hide.**
-Three panels: prefill drops everywhere with the spread intact; in decode the
-write block (tan) is the shield hiding the network — remove it and the 4.4×
-surfaces; the +124% pipelined dividend (beat 23.80→10.63 ms) is paid out only
-where the package network is not the bottleneck.
+snake; adversarial 4.47×; bus 52.5×). **On the die** (value units) the
+offloaded stack is still 1.00× (zero-overlap star 1.01× … bus 1.13×, the
+same in prefill and decode): once the write shield (90%) leaves with the
+attention, decode's on-die network **still hides behind compute** — the
+earlier "on-die contention reaches decode for the first time, 2.26×/4.35×"
+was the unit error (C25) and is retired. **Offload is a throughput win that
+amplifies the die-to-die communication problem** (the compute it removes is
+exactly where the transfers used to hide); the on-die network is
+unaffected. Three panels: prefill drops everywhere; the +124% pipelined
+dividend (beat 23.80→10.63 ms) is paid out only where the package network is
+not the bottleneck.
 **(e) The external attention unit, end to end (O9).** Offload is no longer
 the die side alone: the unit enters as a **black-box interface**
 (`fabric.attention_unit`, platform input DR-9, generic public figures:
@@ -432,13 +443,14 @@ it remain unmodeled.
 
 **Placement summarized per operating condition** (same layout, each figure
 stands alone — they are not a comparison): three panels = within the die (glb
-position → one request's latency; decode is immune to that choice) / across
-dies (layer→die assignment → pipelined throughput) / the same choices priced
-in energy (full scale, no axis zoom — essentially flat). Attention on chip:
-floorplan 1.50×, assignment 2.0×, energy +0.48%; attention offloaded:
-floorplan 1.56×, assignment 4.0×, energy +0.72% (offloaded, even snake is
-network-bound at 64 w/c, so the assignment lever grows; 48-die feasible
-configuration, 64 w/c example input, co-residency basis v2).
+position → one request's latency) / across dies (layer→die assignment →
+pipelined throughput) / the same choices priced in energy (full scale, no
+axis zoom — essentially flat). Attention on chip: floorplan 1.00×,
+assignment 2.0×, energy +0.48%; attention offloaded: floorplan 1.00×,
+assignment 4.0×, energy +0.72% (offloaded, even snake is die-to-die
+network-bound at 64 w/c, so the assignment lever grows; the on-die floorplan
+hides behind compute in both conditions; 48-die feasible configuration,
+64 w/c example input, co-residency basis, value units v5).
 ![placement impact, attention on chip](placement_impact_onchip.png)
 ![placement impact, attention offloaded](placement_impact_offload.png)
 
@@ -447,8 +459,10 @@ path used to take only `max(compute, serial)` (perfect overlap); both ends
 are now published — perfect overlap (the lower end, i.e. every number quoted
 so far) and zero overlap (`write+compute+serial+prop`, the upper end). The
 truth lies inside the bracket, and the identity upper − lower =
-Σ min(compute, serial) is pinned as a test. What remains unmodeled is
-queueing: only the busiest wire counts, so the load vectors `3,2,1,1,1,1,1`
+Σ min(compute, serial) is pinned as a test. The busiest wire's occupancy is
+the lower bound of any schedule for the given routing (exact for compile-time
+scheduled fabrics, optimistic for NoCs, §2.5); what remains unmodeled is
+queueing in the NoC paradigm: only the busiest wire counts, so the load vectors `3,2,1,1,1,1,1`
 and `3,3,3,3,3,3,3` are equivalent (the full per-wire vector is exposed to
 consumers via `link_occupancy`'s `per_link` — the segment maps read it).
 ② Bus energy is charged by distance to the driver; a real bus drives the whole
@@ -474,6 +488,65 @@ offload's 93% are **ceilings**. The one open sign is the +0.2% distance re-prici
 being programmed exactly once in its lifetime (a structural invariant).
 
 ---
+
+### 2.5 The reading position: what the anchors are, and are not (O25 / O17 / O26)
+
+Every "hidden behind compute at any published bandwidth" sentence above is
+the reading of ONE cell of a phase diagram whose axes are model scale ×
+device speed × transfer paradigm × link tier; the v5 numbers sit in the
+(NeuRRAM-class device × digital-ecosystem link) cell. The thresholds
+themselves (0.35–1.4 GB/s on die; the 2.7B chain's 1–1.8 ms per layer of
+die-link occupancy at GRS against 28.8 ms of compute) come from our traffic
+and our device cycle — no anchor enters them; the anchors decide only where
+they are read.
+
+**What the anchors are.** Simba, ESP, FlooNoC and GRS are digital
+accelerators' links: the upper bound of what fabricated interconnects
+deliver, not operating points of analog CIM chips. No fabricated analog CIM
+system publishes an on-die link bandwidth; the ones that describe their
+fabric are DMA + shared SRAM (TetraMem MX100: 10 NPUs + RISC-V + 512 KB +
+1 MB SRAM, 65 nm), board-level FPGA hubs (NeuRRAM's inter-core buffers and
+partial-sum accumulation sit on the board; the Tsinghua multi-chip system
+routes all 8 chips through an FPGA), or compile-time scheduled point-to-point
+networks (HERMES: per-core link controllers, no bandwidth in the main text;
+Mythic AMP: per-tile 64 KB SRAM + router, product material only). In this
+model they map to: DMA / shared SRAM → a shared medium whose bandwidth is the
+T1 hub bandwidth; compile-time scheduled → the star scheme; NoC → the mesh
+scheme (mapping table in ANCHORS.md).
+
+**The missing tier (O25).** The analog-reality tier is not in the registry
+yet. Its structural estimate — on die 0.4–8 GB/s (32–128 bit × 100–500 MHz),
+die to die 0.1–2 GB/s (board-level or older-node direct links) — is an
+estimate, not an anchor, and enters no external document until O25's rows
+exist and are run. Linear from the v5 GRS reading, the 2.7B chain's busiest
+die link meets its compute near 0.5 GB/s and runs 5–8× past it at 0.1 GB/s
+[est]: a candidate CURRENT conclusion at NeuRRAM speed, with no device
+extrapolation.
+
+**The device axis (O17).** Thresholds are metered in words per cycle; in
+GB/s they scale as 1/t_MVM (one MVM per input row: NeuRRAM 7 slices × 1.449
+µs = 10.1 µs). NeuRRAM is the slow end of the analog spectrum: the ISAAC
+design point is 16 slices × 100 ns = 1.6 µs (6×), HERMES silicon ~130 ns
+(63.1 TOPS ÷ 64 cores ÷ 2·256·256 [derived], ~76×). At HERMES speed the
+on-die 1% band moves to 26–107 GB/s (Simba below the bus doubling point,
+FlooNoC inside the band) and the 2.7B chain's die-link occupancy exceeds a
+~0.4 ms compute — both stories flip inside the analog family. Scaling law:
+for the projections under the column split the on-die knee is proportional
+to d_model and independent of S (trunk S×d over compute S×t_MVM; not for the
+row split, O15, nor for the attention operators, whose knee follows S).
+From it [est]: 2.7B 0.9–3.5, 7B-class 1.4–5.6, 70B-class 2.8–11 GB/s —
+pending O17. The device cycle is hard-coded in six scripts (`1.449e-6`) and
+the fabric's words/cycle bandwidths (18,112 = 12.5 GB/s) are bound to it;
+O17's first step is a fabric `device` input.
+
+**What the busiest wire means (O26).** For a given routing, any schedule —
+a compile-time one included — needs at least volume ÷ bandwidth on each
+wire, so the max end is the exact ideal of the scheduled paradigms and the
+optimistic bound of the NoC paradigm; the sum end is the fully serialised
+bound. "No queueing" is a gap of the NoC column only, not a coarseness of
+the model: queueing / BookSim-class checks apply to the digital column; for
+scheduled fabrics the open question is feasibility, expressed as a
+`schedule_slack` platform input (default 1.0).
 
 ## 3. Models & results, level by level
 
@@ -746,6 +819,34 @@ bus beat identity 23×words/bw, and the assignment ordering
 
 ---
 
+#### 3.5.1 Operators spanning dies (the 2.7B tier, O13)
+
+The static operators of a 2.7B-class model (d=2560, ff=10240, 32 layers)
+exceed one die; the residency tiler splits them by output columns over
+4/2/5/5 dies, and the attention scores, softmax and weighting share one die.
+One block's five die-sets (17 dies) are seated DISJOINTLY on the 24-die
+package in data-flow order (three styles: nearest the attach point / in
+order / spread), every operator's input is routed from the dies owning the
+previous operator's output over the die mesh, and what crosses a die-to-die
+wire is **the tensor once** (the receiving die's buffer holds it; the layer
+hand-off convention). At the measured D2D anchor (12.5 GB/s): one 4-die
+operator reads 1.00× at every seating (zero-overlap end 1.03–1.06×), 0–35 µJ
+extra (against its own 2.24 mJ); the whole-model prefill reads 1.02× at every
+seating (the on-die network's share; zero-overlap 1.26–1.28×) with 27–31 mJ
+of D2D surplus = 1.2–1.3% of the model's 2297 mJ; offloaded decode
+1.00–1.01×. **The previously published 3.10–6.20× / +58% (one operator) and
+1.22–2.14× / +34–36% (whole model) are retired**: that accounting took
+Timeloop's row-driver / ADC counters as die-edge words (14× the input tensor,
+48× the output piece, the latter at 16-bit partial-sum width) and routed
+everything through the attach point; decomposed, the volume basis did almost
+all of it and the routing only cut the energy by another third
+(`scale_tiers.json` keeps the v1 and the tensor-once-but-hub-routed
+comparisons). Reading: at the measured anchor, the die-set seating of a
+spanning model is a ~1% energy lever and no latency lever; the 2.7B latency
+lever stays on the die (1.33× at the Simba NoC anchor). Not done: the joint
+seating of all 32 layers (O16), which can only lengthen the hand-offs.
+Test group 22.
+
 ## 4. GPT-2 system-level three scenarios (whole model, S=512, ×24 layers)
 
 - **(C) baseline** — unmodified CiMLoop, no overlays;
@@ -837,46 +938,46 @@ row; latency: compute, write, busiest-wire occupancy, network exposed at
 both O7 ends, propagation, D2D hand-off, unmodeled rows). Categories are
 deliberately not merged. Conservation pinned in group 19; whole-model totals
 equal the system script's. Attention on chip, prefill, operator-type shares
-(mesh-centre, 16,384 w/c):
+(mesh-centre, 16,384 w/c; value units v5 — the on-die occupancy hides behind compute, so the perfect-overlap latency is compute + write):
 
 | operator type | model energy (mJ) | energy share | model latency (ms, perfect-overlap end) | latency share |
 |---|---|---|---|---|
-| Q/K/V projection | 49.70 | 16.7% | 124.6 | 9.9% |
-| attention scores QKᵀ (incl. K write) | 63.35 | 21.2% | 333.5 | 26.6% |
-| attention AV (incl. V write) | 34.28 | 11.5% | 177.0 | 14.1% |
-| output projection | 19.02 | 6.4% | 124.6 | 9.9% |
-| FFN layer 1 | 64.09 | 21.5% | 160.2 | 12.8% |
-| FFN layer 2 | 58.92 | 19.7% | 320.4 | 25.6% |
-| softmax (digital unit) | 4.84 | 1.6% | 6.29 | 0.5% |
-| GELU (digital unit) | 1.70 | 0.6% | 4.72 | 0.4% |
+| Q/K/V projection | 49.70 | 16.7% | 124.6 | 15.1% |
+| attention scores QKᵀ (incl. K write) | 63.35 | 21.2% | 137.7 | 16.7% |
+| attention AV (incl. V write) | 34.28 | 11.5% | 177.0 | 21.4% |
+| output projection | 19.02 | 6.4% | 124.6 | 15.1% |
+| FFN layer 1 | 64.09 | 21.5% | 124.6 | 15.1% |
+| FFN layer 2 | 58.92 | 19.7% | 124.6 | 15.1% |
+| softmax (digital unit) | 4.84 | 1.6% | 6.29 | 0.8% |
+| GELU (digital unit) | 1.70 | 0.6% | 4.72 | 0.6% |
 | LayerNorm ×2 (digital unit) | 1.20 | 0.4% | 1.97 | 0.2% |
-| residual adds ×2 (digital unit) | 1.17 | 0.4% | 0.39 | 0.03% |
+| residual adds ×2 (digital unit) | 1.17 | 0.4% | 0.39 | 0.05% |
 | embedding lookup (off-chip read, once per model) | 0.03 | 0.0% | priced, not timed (no off-chip bandwidth set) | — |
-| LM head (8-die matmul, last token, once per model) | 0.08 | 0.0% | 0.03 | 0.0% |
-| **counted total** | **298.38** | 100% | **1,253.7** | 100% |
+| LM head (8-die matmul, last token, once per model) | 0.08 | 0.0% | 0.01 | 0.0% |
+| **counted total** | **298.38** | 100% | **826.4** | 100% |
 
 Attention offloaded (end to end: die + external unit at the generic defaults,
 link priced at the die placement's mean 3.5 hops), prefill:
 
 | operator type | model energy (mJ) | energy share | model latency (ms, perfect-overlap end) | latency share |
 |---|---|---|---|---|
-| Q/K/V projection | 49.70 | 23.3% | 124.6 | 16.6% |
-| output projection | 19.02 | 8.9% | 124.6 | 16.6% |
-| FFN layer 1 | 64.09 | 30.0% | 160.2 | 21.4% |
-| FFN layer 2 | 58.92 | 27.6% | 320.4 | 42.7% |
-| GELU (digital unit) | 1.70 | 0.8% | 4.72 | 0.6% |
-| LayerNorm ×2 (digital unit) | 1.20 | 0.6% | 1.97 | 0.3% |
+| Q/K/V projection | 49.70 | 23.3% | 124.6 | 24.0% |
+| output projection | 19.02 | 8.9% | 124.6 | 24.0% |
+| FFN layer 1 | 64.09 | 30.0% | 124.6 | 24.0% |
+| FFN layer 2 | 58.92 | 27.6% | 124.6 | 24.0% |
+| GELU (digital unit) | 1.70 | 0.8% | 4.72 | 0.9% |
+| LayerNorm ×2 (digital unit) | 1.20 | 0.6% | 1.97 | 0.4% |
 | residual adds ×2 (digital unit) | 1.17 | 0.5% | 0.39 | 0.1% |
 | embedding lookup (off-chip read, once per model) | 0.03 | 0.0% | priced, not timed (no off-chip bandwidth set) | — |
-| attention on the external unit (QKᵀ + softmax + AV, K/V in the unit's memory) | 17.57 | 8.2% | 12.64 | 1.7% |
-| LM head (8-die matmul, last token, once per model) | 0.08 | 0.0% | 0.03 | 0.0% |
-| **counted total** | **213.48** | 100% | **749.6** | 100% |
+| attention on the external unit (QKᵀ + softmax + AV, K/V in the unit's memory) | 17.57 | 8.2% | 12.64 | 2.4% |
+| LM head (8-die matmul, last token, once per model) | 0.08 | 0.0% | 0.01 | 0.0% |
+| **counted total** | **213.48** | 100% | **518.1** | 100% |
 
 The external-unit row decomposes (whole model) as energy = unit compute 13.29
 + K/V memory 2.52 + link 1.76 mJ; latency = link out 3.02 + unit compute 6.64
 + K/V memory 1.97 + link back 1.01 ms. Decode (one token) under the same
-condition: 1.755 mJ / 2.48 ms per model, of which the external unit is
-1.290 mJ (73.5%) / 1.01 ms (40.5%), almost all of it K/V memory (the layer's
+condition: 1.755 mJ / 2.02 ms per model, of which the external unit is
+1.290 mJ (73.5%) / 1.01 ms (49.9%), almost all of it K/V memory (the layer's
 whole K/V is read back per token: 1.26 mJ / 0.99 ms); the die side keeps
 0.465 mJ / 1.48 ms.
 
@@ -953,9 +1054,10 @@ volumes — not a bottleneck:
 9. **Contention-model coarseness (identical on-die and die-to-die)**: the
    overlap assumption is closed out (O7, C16) — both the perfect-overlap
    and zero-overlap ends are published, the truth lies inside the bracket;
-   what remains missing is queueing: only the busiest wire counts, so
-   equal-peak load vectors are equivalent (the full per-wire vector is
-   exposed). Bus energy is charged by distance-to-driver and understated
+   the busiest-wire occupancy is the lower bound of any schedule for the
+   given routing (O26); what remains missing is queueing in the NoC
+   paradigm: only the busiest wire counts, so equal-peak load vectors are
+   equivalent (the full per-wire vector is exposed). Bus energy is charged by distance-to-driver and understated
    (O8).
 10. **Pipelined-mode assumptions (all optimistic)**: perfect microbatch
     pipelining, no bubbles, transfer/compute double-buffered, weights
@@ -967,8 +1069,13 @@ volumes — not a bottleneck:
     streams or host I/O sharing the die links would add contention — not
     modeled.
 
-**Relaxation route**: ① capacity packing → ② giant layers across dies (`meshX>1`) → ③ a queueing model (the overlap bracket is published; O7 closed).
-(`meshX>1`).
+12. **Anchor identity and tiers**: all four bandwidth anchors are
+    digital-ecosystem links; the analog-reality tier (DMA / bus fabrics,
+    board-level die links) is not in the registry (O25) and the device-speed
+    axis is not drawn (O17) — every "hidden" in §2–§4 is the reading of that
+    one cell (§2.5).
+
+**Relaxation route**: ① capacity packing → ② giant layers across dies (`meshX>1`) → ③ a queueing model for the NoC paradigm (the overlap bracket is published; O7 closed; scheduled fabrics use `schedule_slack`, O26) → ④ the analog-reality tier and the device axis (O25 / O17).
 
 ---
 
@@ -984,8 +1091,8 @@ volumes — not a bottleneck:
 
 | DR | Data requested | Numbers it moves | Direction |
 |---|---|---|---|
-| **DR-1** | per-hop/per-word energy of core- and crossbar-level links | network energy share; the 3.58× map and the 17.8% | network share ↑; rankings become joules |
-| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive. **The knee is now located at ~20 GB/s per macro link (§2.2) and real NoCs can sit on either side — this request is decisive, not a formality** |
+| **DR-1** | per-hop/per-word energy of core- and crossbar-level links | network energy share; the 3.69×/1.70× maps and the 17.8% | network share ↑; rankings become joules (ceiling ~2% of an operator after C25) |
+| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive. **The knee is located at 0.35–1.4 GB/s per macro link (§2.2, C25 value units), an order of magnitude below the published on-die NoCs — in the digital-ecosystem column this request decides the zero-overlap margin, not a multiplier. If the chip's fabric is DMA / bus or a board-level die link (analog-reality tier, §2.5) it returns to first order: the 2.7B die chain's busiest link meets its compute near 0.5 GB/s [est, pending O25]** |
 | **DR-3** | D2D topology/routing/latency/bandwidth/energy | network energy share; whole-package placement spread | network share ↑; unlocks the go/no-go experiment |
 | **DR-4** | what the router's calibrated per-word energy represents: one hop or an average multi-hop transfer | the router term; the **sign** of the +0.2% re-pricing | resolves the one open sign |
 | **DR-5** | SET pulse width, cells programmable in parallel, incremental programming, write-verify, endurance | the write term: 21%, 90%, 10.12×, 93% | **these stand or fall with it** |
@@ -1008,7 +1115,7 @@ direction only: **toward underestimation**.
 | `HOP_LATENCY_NS` | 1–5 ns/hop | placeholder | on-die propagation | rel. DR-2 |
 | `slot_pitch_um` (per-level grid step, µm) | crossbar 100 / core 300–400 / macro 600–800 / die 25,000 | example (derived consistently from the nesting) | no consumer yet; declares the physical meaning of a hop so ns_per_hop / hop_scale can later be derived (delay ∝ length, energy ∝ wire capacitance ∝ length) | DR-1/2 related |
 | `DIE_HOP_LATENCY_NS` | 20 ns/hop | placeholder | inter-die latency | DR-3 |
-| per-level `bandwidth` (T2 links / T1 hubs) | unset (= unlimited) | — | stalls; knee at ~2.9e4 w/c ≈ 20 GB/s (§2.2) | DR-2 |
+| per-level `bandwidth` (T2 links / T1 hubs) | unset (= unlimited) | — | stalls; knee at 512–2,048 w/c ≈ 0.35–1.4 GB/s (C25) (§2.2) | DR-2 |
 | `reference_hops` | 1.0 | placeholder | distance-energy scale/sign | DR-4 |
 | histogram source | `gpt2_medium` | real workload | value energy | DR-6 |
 | weight bits / layer→die | 4-bit / 1 layer per die | placeholder | die count, inter-die volume | — |
@@ -1099,7 +1206,7 @@ they go through `tests/compare_baseline.py`, which diffs a fresh
 acceptance gate for re-plumbing work; model upgrades re-freeze with
 `--freeze v1` plus a changelog entry).
 
-There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op values under the physical accounting (3.43×–27.68×) are pinned in the same file's v3 group. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point).
+There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point).
 
 Note: all-green does **not** mean physically correct. It only guarantees "the
 code equals the documented model"; whether the model is right waits for the

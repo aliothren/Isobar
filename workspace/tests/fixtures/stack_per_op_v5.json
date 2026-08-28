@@ -1,0 +1,1049 @@
+{
+ "_provenance": "frozen from analysis/contention_system.json after C25 (value units): the structured traffic model's leaf volumes are VALUES -- row-driver reads / input bit slices (7), ADC reads / output bits (8) / cell columns per weight (2) -- instead of Timeloop's 'Total scalar accesses' taken as 8-bit words (14x inputs, 48x outputs in v1-v4). Compute, write and digital-unit rows are bit-identical to v4; every serial_s / latency_s / network_bound moved.",
+ "basis": "co-residency shares (48-die seating)",
+ "wire_accounting": "direction-split full-duplex links (bus shared); partial sums 2 words; leaf volumes in values (C25)",
+ "digital_unit": {
+  "lanes": 64,
+  "clock_hz": 1000000000.0,
+  "pj_add": 0.05,
+  "pj_mul": 0.6,
+  "pj_lut": 1.0,
+  "intermediate_bits": 16,
+  "calibration": "DR-8: generic example values (Horowitz ISSCC 2014; sized to array output rate)"
+ },
+ "ref_words_per_cycle": 16384.0,
+ "phases": {
+  "prefill": {
+   "stall_free_s": 0.8264248320000002,
+   "elementwise_s": 0.013369728,
+   "per_op": {
+    "star (private links)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 4.635428571428571e-05,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005238170285714286,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.005737096,
+      "latency_sum_s": 0.005829804571428571,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 4.635428571428571e-05,
+      "latency_s": 0.007372936,
+      "latency_sum_s": 0.007419290285714286,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 2.3177142857142855e-05,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005214993142857143,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 4.635428571428571e-05,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005238170285714286,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005284524571428572,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb centre": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00013906285714285714,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005330878857142857,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0002781257142857143,
+      "latency_s": 0.005737096,
+      "latency_sum_s": 0.006015221714285714,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00013906285714285714,
+      "latency_s": 0.007372936,
+      "latency_sum_s": 0.007511998857142857,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 6.953142857142857e-05,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005261347428571429,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00013906285714285714,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005330878857142857,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0002781257142857143,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005469941714285715,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb corner": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00023177142857142854,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005423587428571429,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.00046354285714285707,
+      "latency_s": 0.005737096,
+      "latency_sum_s": 0.006200638857142857,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00023177142857142854,
+      "latency_s": 0.007372936,
+      "latency_sum_s": 0.007604707428571429,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00011588571428571427,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.0053077017142857145,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00023177142857142854,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005423587428571429,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00046354285714285707,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005655358857142857,
+      "network_bound": false
+     }
+    ],
+    "h-tree (k=4)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005377233142857143,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.005737096,
+      "latency_sum_s": 0.006107930285714286,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.007372936,
+      "latency_sum_s": 0.007558353142857143,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005284524571428572,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005377233142857143,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005562650285714286,
+      "network_bound": false
+     }
+    ],
+    "bus (shared medium)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00064896,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005840776,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0007880228571428571,
+      "latency_s": 0.005737096,
+      "latency_sum_s": 0.006525118857142857,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00046354285714285707,
+      "latency_s": 0.007372936,
+      "latency_sum_s": 0.007836478857142856,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005562650285714286,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0007416685714285714,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.005933484571428571,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0009270857142857141,
+      "latency_s": 0.005191816,
+      "latency_sum_s": 0.006118901714285714,
+      "network_bound": false
+     }
+    ]
+   }
+  },
+  "decode": {
+   "stall_free_s": 0.014797056749999999,
+   "elementwise_s": 2.611275e-05,
+   "per_op": {
+    "star (private links)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 9.053571428571428e-08,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0366535714285714e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 0.0005555559999999999,
+      "latency_sum_s": 0.0005557370714285713,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 9.053571428571428e-08,
+      "latency_s": 1.8796e-05,
+      "latency_sum_s": 1.8886535714285715e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 4.526785714285714e-08,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0321267857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 9.053571428571428e-08,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0366535714285714e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0457071428571428e-05,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb centre": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.7160714285714286e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0547607142857143e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 5.432142857142857e-07,
+      "latency_s": 0.0005555559999999999,
+      "latency_sum_s": 0.0005560992142857142,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 2.7160714285714286e-07,
+      "latency_s": 1.8796e-05,
+      "latency_sum_s": 1.9067607142857144e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.3580357142857143e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0411803571428571e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.7160714285714286e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0547607142857143e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 5.432142857142857e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0819214285714286e-05,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb corner": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 4.5267857142857136e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0728678571428571e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 9.053571428571427e-07,
+      "latency_s": 0.0005555559999999999,
+      "latency_sum_s": 0.000556461357142857,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 4.5267857142857136e-07,
+      "latency_s": 1.8796e-05,
+      "latency_sum_s": 1.9248678571428573e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 2.2633928571428568e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0502339285714285e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 4.5267857142857136e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0728678571428571e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 9.053571428571427e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.1181357142857141e-05,
+      "network_bound": false
+     }
+    ],
+    "h-tree (k=4)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0638142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 0.0005555559999999999,
+      "latency_sum_s": 0.0005562802857142856,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.8796e-05,
+      "latency_sum_s": 1.915814285714286e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0457071428571428e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.0638142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.1000285714285714e-05,
+      "network_bound": false
+     }
+    ],
+    "bus (shared medium)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.2675e-06,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.1543499999999999e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 1.5391071428571428e-06,
+      "latency_s": 0.0005555559999999999,
+      "latency_sum_s": 0.000557095107142857,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 9.053571428571427e-07,
+      "latency_s": 1.8796e-05,
+      "latency_sum_s": 1.9701357142857145e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.1000285714285714e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.4485714285714284e-06,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.1724571428571428e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142854e-06,
+      "latency_s": 1.0276e-05,
+      "latency_sum_s": 1.2086714285714285e-05,
+      "network_bound": false
+     }
+    ]
+   }
+  }
+ }
+}

@@ -297,6 +297,141 @@ def unit_link_hops(fabric=None, assignment="snake", n_layers: int = None):
     return sum(m.hops(ic.HUB, d) for d in adies) / len(adies)
 
 
+# ---------------------------------------------------------------------------
+# O13: a spanning model's block as a CHAIN of die-sets. Every operator's input
+# arrives from the dies that own the previous operator's output (producer ->
+# consumer over the die grid), not from the package attach point; what crosses
+# a die-to-die wire is the tensor ONCE (the consumer's glb holds it; the
+# re-reads Timeloop counts at the row drivers are on-die traffic) -- the same
+# convention as the layer hand-offs (die_to_die_activation). Under an
+# output-column split every consumer die needs the whole input, i.e. every
+# owner's piece; under an input-row split the owners hold partial sums of the
+# whole output and every consumer receives all of them at partial-sum width
+# (the reduction happens at the consumer). qk^t, softmax and av share one
+# die (the attention die); offloaded, that die is the external unit at the
+# attach point. Elementwise operators and the residual stream are not routed
+# (O24: they move through the glb only). The last die-set feeds the next
+# layer's first (a loop -- the joint seating of many layers is O16).
+
+ATTENTION_DIE = "attention"
+
+
+def block_chain(cfg: GptConfig, S: int, phase: str = "prefill", on_chip: bool = True):
+    """Data-flow order of one block's die-sets: [{name, kind, n_dies, split,
+    in_words, out_words, ops}]. Static ops take their die count and split
+    dim from plan_spatial; the attention die is one die consuming the whole
+    Q/K/V projection output; with on_chip=False it is the external unit
+    (n_dies 0 -> routed to/from the attach point)."""
+    Pq = S if phase == "prefill" else 1
+    ops = {o.name: o for o in block_ops(cfg, S, phase)}
+    chain = []
+    for name in ("qkv_proj", ATTENTION_DIE, "out_proj", "ffn1", "ffn2"):
+        if name == ATTENTION_DIE:
+            chain.append({"name": name, "kind": "attention" if on_chip else "unit",
+                          "n_dies": 1 if on_chip else 0, "split": None,
+                          "in_words": Pq * 3 * cfg.d_model,
+                          "out_words": Pq * cfg.d_model,
+                          "ops": ["qk^t", "softmax", "av"]})
+            continue
+        op = ops[name]
+        n, dim, _ = plan_spatial(op)
+        chain.append({"name": name, "kind": "static", "n_dies": n, "split": dim,
+                      "in_words": op.P * op.C, "out_words": op.P * op.M,
+                      "ops": [name]})
+    return chain
+
+
+def seat_block(fabric, chain, style: str = "clustered", placement=None):
+    """DISJOINT die slots for every die-set of the chain, seated in data-flow
+    order. clustered: the nearest free slots to the attach point; row-fill:
+    the placement's slot order; spread: farthest-point sampling (every new
+    die as far as possible from every seated die). Returns {name: [die node
+    indices]} (indices into placement.slots['die'])."""
+    from scripts import interconnect as ic_mod, placement as placement_mod
+    pl = placement or placement_mod.sequential_fill(fabric)
+    slots = pl.slots["die"]
+    hub = ic_mod.build(fabric, "die", pl).hub_coord()
+    need = sum(e["n_dies"] for e in chain)
+    if need > len(slots):
+        raise ValueError(f"the block needs {need} dies, the package has {len(slots)}")
+    if style not in ("clustered", "row-fill", "spread"):
+        raise ValueError(f"unknown seating style '{style}'")
+
+    def manh(a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+    free = list(range(len(slots)))
+    if style == "clustered":
+        free.sort(key=lambda i: (manh(slots[i], hub), i))
+    seating, taken = {}, []
+    for e in chain:
+        mine = []
+        for _ in range(e["n_dies"]):
+            if style == "spread" and taken:
+                pick = max(free, key=lambda i: (min(manh(slots[i], slots[t]) for t in taken), -i))
+            else:
+                pick = free[0]
+            free.remove(pick)
+            taken.append(pick)
+            mine.append(pick)
+        seating[e["name"]] = mine
+    return seating
+
+
+def block_die_flows(chain, seating, fabric, psum_bytes=None):
+    """Node-to-node die flows of every die-set's INPUT, from the previous
+    die-set's owners (the first die-set's input comes from the last: the next
+    layer's copy). {name: [flows]} for link_occupancy; each flow carries
+    `width` (1.0 for activations; the fabric's partial-sum width when the
+    producer split its input rows)."""
+    from scripts import interconnect as ic_mod
+    lv = fabric.level("die")
+    psum = (getattr(fabric, "psum_word_bytes", 2.0) if psum_bytes is None
+            else float(psum_bytes))
+    out, n = {}, len(chain)
+    for i, e in enumerate(chain):
+        p = chain[(i - 1) % n]
+        prod = seating.get(p["name"]) or [ic_mod.HUB]      # the unit sits at the attach point
+        cons = seating.get(e["name"]) or [ic_mod.HUB]
+        if p["out_words"] != e["in_words"]:
+            raise ValueError(f"{p['name']} -> {e['name']}: {p['out_words']} words "
+                             f"produced, {e['in_words']} consumed")
+        if p["split"] == "C":          # partial sums of the whole output, reduced at the consumer
+            piece, width = float(p["out_words"]), psum
+        else:                          # column split / one die / the unit: disjoint pieces of the tensor
+            piece, width = p["out_words"] / len(prod), 1.0
+        flows = []
+        for a in prod:
+            for b in cons:
+                if a == b:
+                    continue
+                flows.append({"level": lv.link.name, "level_name": "die",
+                              "nodes": (a, b), "src": f"{p['name']}@{a}",
+                              "dst": f"{e['name']}@{b}", "volume": float(piece),
+                              "width": width, "distance": 0.0})
+        out[e["name"]] = flows
+    return out
+
+
+def die_flow_surplus_energy(flows, fabric, placement=None, pj_per_word=None,
+                            reference_hops=None):
+    """Energy of node-to-node die flows beyond the flat charge: volume x
+    width x max(hops - reference, 0) x pJ per word -- the rule of
+    die_to_die_activation."""
+    from scripts import interconnect as ic_mod, placement as placement_mod
+    lv = fabric.level("die")
+    pl = placement or placement_mod.sequential_fill(fabric)
+    m = ic_mod.build(fabric, "die", pl)
+    pj = lv.link.pj_per_word if pj_per_word is None else pj_per_word
+    ref = ((lv.link.reference_hops if lv.link.reference_hops is not None else 1.0)
+           if reference_hops is None else reference_hops)
+    tot = 0.0
+    for f in flows:
+        a, b = f["nodes"]
+        tot += (f["volume"] * float(f.get("width", 1.0))
+                * max(m.hops(a, b) - ref, 0.0) * (pj or 0.0) * 1e-12)
+    return tot
+
+
 def attention_dies_of_chain(n_layers: int, assignment=None):
     """In the two-dies-per-layer seating, unit 2L is layer L's attention die;
     `assignment` maps unit index -> die slot."""

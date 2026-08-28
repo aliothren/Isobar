@@ -48,14 +48,15 @@ def test_per_level_volume_conservation_v1():
     assert totals["macro<->core"] <= totals["core<->crossbar"] + 1e-6
 
 
-def test_position_spread_golden_v1():
-    """max/min per-crossbar cost over ACTIVE crossbars -- v1 (structured)
-    golden (v0 uniform golden retired at the B re-baseline; see CHANGELOG)."""
+def test_position_spread_golden_v2():
+    """max/min per-crossbar cost over ACTIVE crossbars -- v2 golden (value
+    units, C25; the v1 structured golden read the same 1.25, the v0 uniform
+    golden was retired at the B re-baseline; see CHANGELOG)."""
     import numpy as np
 
     _, per_xb, _, _ = cc.build_flows(_run()["output_dir"], verbose=False)
     act = per_xb[np.asarray(per_xb) > 0]
-    g = golden("slow_golden_v1.json")
+    g = golden("slow_golden_v2.json")
     assert len(act) == g["tiny2x2_n_active"]
     approx(act.max() / act.min(), g["tiny2x2_max_over_min_active"], 5e-3)
 

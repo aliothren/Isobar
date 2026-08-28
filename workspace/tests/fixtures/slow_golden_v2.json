@@ -1,0 +1,5 @@
+{
+ "tiny2x2_max_over_min_active": 1.25,
+ "tiny2x2_n_active": 32,
+ "_provenance": "v2: value units (C25); v1 read 3.579 max/min under the counter units"
+}

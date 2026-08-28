@@ -20,8 +20,9 @@ stats counters, so a disagreement between our derivation and Timeloop's own
 accounting raises instead of passing silently.
 """
 import os
+import re
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple
 
 from scripts import crossbar_stats as cbs
 
@@ -60,8 +61,21 @@ class LevelSplit:
 @dataclass(frozen=True)
 class TrafficStructure:
     splits: List[LevelSplit]   # ordered top (macro) -> bottom (crossbar)
-    in_leaf: float             # unique input words RECEIVED per active leaf
-    out_leaf: float            # output words PRODUCED per active leaf
+    in_leaf: float             # unique input VALUES (8-bit words) received per active leaf
+    out_leaf: float            # output VALUES (partial sums) produced per active leaf
+    # Units (C25): Timeloop counts the Inputs dataspace in input bit slices
+    # (X, e.g. 7 per 8-bit word) and the Outputs dataspace in output bits
+    # (Z, 8 per word), and every physical cell column of a weight (Y at the
+    # column level, 2 under differential encoding) converts on its own ADC;
+    # "Total scalar accesses" further adds reads + fills (+ updates). The
+    # leaf volumes above are VALUES: row-driver READS / X, ADC READS / Z / Y.
+    x_slices: int = 1          # input bit slices per value (product of the X loops)
+    z_bits: int = 1            # output bits per value (product of the Z loops)
+    y_columns: int = 1         # cell columns per weight (Y factor at the column level)
+    in_reads_total: int = 0    # row-driver scalar reads, all instances (counter units)
+    out_reads_total: int = 0   # ADC scalar reads, all instances (counter units)
+    tensor_in: Optional[int] = None    # P*C*N of the problem (values), when derivable
+    tensor_out: Optional[int] = None   # P*M*N of the problem (values), when derivable
 
     @property
     def n_active(self) -> int:
@@ -196,18 +210,86 @@ def extract(output_dir=None, fabric=None, mapping_text=None, stats_text=None):
             raise ValueError(f"mapping uses {s.fanout} {lv.name} instances but "
                              f"the fabric has {lv.per_parent}")
 
-    in_total = cbs._per_tensor_volume(stats_text, "row_drivers")
-    out_total = cbs._per_tensor_volume(stats_text, "adc")
+    # Leaf counters in VALUE units (C25). Timeloop's Inputs dataspace is in
+    # input bit slices (the X loops, 7 for 8-bit signed inputs) and its
+    # Outputs dataspace in output bits (the Z loops, 8); every physical cell
+    # column of a weight (Y at the column level) has its own ADC. The
+    # counters therefore read X x (values) at the row drivers and
+    # Z x Y_col x (values) at the ADCs -- and "Total scalar accesses" would
+    # further add fills and updates on top of the reads. Take READS only and
+    # divide the units out.
+    in_reads = _component_reads(stats_text, "row_drivers")
+    out_reads = _component_reads(stats_text, "adc")
+    x_slices = _loop_product(mapping_text, "X")
+    z_bits = _loop_product(mapping_text, "Z")
+    y_columns = 1
+    for lname, loops in parsed.items():
+        if lname == "inter_column_spatial":
+            for dim, factor, _axis in loops:
+                if dim == "Y":
+                    y_columns *= factor
     n_active = _prod(s.fanout for s in splits)
 
-    # consistency guard: the leaf counters must split EVENLY over the active
-    # instances the mapping declares. A remainder means the parsed factors and
-    # Timeloop's own accounting disagree -- raise, don't smear it uniformly.
-    for name, total in (("row_drivers", in_total), ("adc", out_total)):
-        if total % n_active:
+    # consistency guards: the leaf counters must split EVENLY over the active
+    # instances the mapping declares AND over the unit factors. A remainder
+    # means the parsed factors and Timeloop's own accounting disagree --
+    # raise, don't smear it uniformly.
+    for name, total, unit in (("row_drivers", in_reads, n_active * x_slices),
+                              ("adc", out_reads, n_active * z_bits * y_columns)):
+        if total % unit:
             raise ValueError(
-                f"{name} total {total} does not divide over {n_active} active "
-                "leaves -- mapping factors and stats counters disagree")
+                f"{name} reads {total} do not divide over {n_active} active "
+                f"leaves x unit factor {unit // n_active} -- mapping factors and "
+                "stats counters disagree")
+    in_leaf = in_reads // (n_active * x_slices)
+    out_leaf = out_reads // (n_active * z_bits * y_columns)
 
-    return TrafficStructure(splits=splits, in_leaf=in_total // n_active,
-                            out_leaf=out_total // n_active)
+    # tensor guard: the union of the leaves' distinct slices must be the
+    # operand ONCE (P x C x N in, P x M x N out) -- the check that catches a
+    # unit mistake at the source. Skipped for problems with other dims.
+    dims = _all_loop_products(mapping_text)
+    tensor_in = tensor_out = None
+    if set(dims) <= {"P", "C", "M", "N", "X", "Y", "Z"}:
+        P, C, M, N = (dims.get(d, 1) for d in ("P", "C", "M", "N"))
+        tensor_in, tensor_out = P * C * N, P * M * N
+        union_in = in_leaf * _prod(s.in_distinct for s in splits)
+        union_out = out_leaf * _prod(s.out_distinct for s in splits)
+        if union_in != tensor_in or union_out != tensor_out:
+            raise ValueError(
+                f"leaf slices do not reassemble the operands once: inputs "
+                f"{union_in} vs P*C*N {tensor_in}, outputs {union_out} vs "
+                f"P*M*N {tensor_out} (x_slices {x_slices}, z_bits {z_bits}, "
+                f"y_columns {y_columns})")
+
+    return TrafficStructure(splits=splits, in_leaf=in_leaf, out_leaf=out_leaf,
+                            x_slices=x_slices, z_bits=z_bits, y_columns=y_columns,
+                            in_reads_total=in_reads, out_reads_total=out_reads,
+                            tensor_in=tensor_in, tensor_out=tensor_out)
+
+
+def _component_reads(stats_text: str, comp: str) -> int:
+    """Scalar READS of one component over all utilized instances (the first
+    dataspace block of the component's main section)."""
+    m = re.search(rf"=== {comp} ===(.*?)(?=\n=== )", stats_text, re.S)
+    if not m:
+        return 0
+    body = m.group(1)
+    inst = re.search(r"Utilized instances \(max\)\s*:\s*(\d+)", body)
+    reads = re.search(r"Scalar reads \(per-instance\)\s*:\s*(\d+)", body)
+    if not inst or not reads:
+        return 0
+    return int(inst.group(1)) * int(reads.group(1))
+
+
+def _loop_product(mapping_text: str, dim: str) -> int:
+    prod = 1
+    for m in re.finditer(rf"for {dim} in \[0:(\d+)\)", mapping_text):
+        prod *= int(m.group(1))
+    return prod
+
+
+def _all_loop_products(mapping_text: str) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    for m in re.finditer(r"for (\w+) in \[0:(\d+)\)", mapping_text):
+        out[m.group(1)] = out.get(m.group(1), 1) * int(m.group(2))
+    return out
