@@ -208,7 +208,7 @@ def offload_streams(cfg: GptConfig, S: int, phase: str = "prefill"):
 
 
 def attention_unit_cost(cfg: GptConfig, S: int, phase: str, unit,
-                        context: int = None, cycle_seconds: float = 1.449e-6,
+                        context: int = None, cycle_seconds: float = None,
                         hops: float = None):
     """Per-layer cost of the offloaded attention on the external unit.
 
@@ -222,7 +222,11 @@ def attention_unit_cost(cfg: GptConfig, S: int, phase: str, unit,
     flat charge exists to replace -- the full path is billed). Die-side
     quantities carry the die placement: every script passes
     `unit_link_hops()` (the mean over the attention dies under the seating);
-    `hops=None` falls back to the interface's reference hop count."""
+    `hops=None` falls back to the interface's reference hop count.
+    `cycle_seconds=None` = the fabric's device cycle (O17a)."""
+    if cycle_seconds is None:
+        from scripts import fabric as fabric_mod
+        cycle_seconds = fabric_mod.default().device.cycle_seconds
     Pq = S if phase == "prefill" else 1
     ctx = S if context is None else context
     st = offload_streams(cfg, S, phase)
@@ -316,7 +320,8 @@ def unit_link_hops(fabric=None, assignment="snake", n_layers: int = None):
 ATTENTION_DIE = "attention"
 
 
-def block_chain(cfg: GptConfig, S: int, phase: str = "prefill", on_chip: bool = True):
+def block_chain(cfg: GptConfig, S: int, phase: str = "prefill", on_chip: bool = True,
+                max_dies: int = 24, dims=("M", "C")):
     """Data-flow order of one block's die-sets: [{name, kind, n_dies, split,
     in_words, out_words, ops}]. Static ops take their die count and split
     dim from plan_spatial; the attention die is one die consuming the whole
@@ -334,7 +339,7 @@ def block_chain(cfg: GptConfig, S: int, phase: str = "prefill", on_chip: bool = 
                           "ops": ["qk^t", "softmax", "av"]})
             continue
         op = ops[name]
-        n, dim, _ = plan_spatial(op)
+        n, dim, _ = plan_spatial(op, max_dies=max_dies, dims=dims)
         chain.append({"name": name, "kind": "static", "n_dies": n, "split": dim,
                       "in_words": op.P * op.C, "out_words": op.P * op.M,
                       "ops": [name]})
@@ -475,7 +480,7 @@ def lm_head_op(cfg: GptConfig, S: int = 512, phase: str = "prefill") -> Op:
 
 
 def embedding_cost(cfg: GptConfig, S: int, phase: str, fabric=None,
-                   e_dram=None, cycle_seconds: float = 1.449e-6):
+                   e_dram=None, cycle_seconds: float = None):
     """Embedding lookup: S x d_model words read from off-chip (decode: 1 x
     d_model), priced at the DRAM per-word energy; TIMED only if the fabric
     sets an off-chip port bandwidth (otherwise reported as not timed)."""
@@ -484,9 +489,10 @@ def embedding_cost(cfg: GptConfig, S: int, phase: str, fabric=None,
     e = E_DRAM_PER_WORD_J if e_dram is None else e_dram
     words = (S if phase == "prefill" else 1) * cfg.d_model
     bw = fab.offchip_bandwidth_words_per_cycle
+    cyc = fab.device.cycle_seconds if cycle_seconds is None else cycle_seconds
     return {"name": "embedding", "kind": "offchip_read", "words": words,
             "energy_J": words * e,
-            "latency_s": (words / bw * cycle_seconds) if bw else None,
+            "latency_s": (words / bw * cyc) if bw else None,
             "timed": bool(bw)}
 
 
@@ -593,16 +599,18 @@ def _die_tiling(c_res: int, m_res: int):
     return best[1] if best else None
 
 
-def plan_spatial(op: Op):
+def plan_spatial(op: Op, max_dies: int = 24, dims=("M", "C")):
     """How many dies the op ACTUALLY needs under the residency constraint,
     with the split dim and per-die tiling. May exceed dies_for_op (the raw
     capacity ceiling): the power-of-two fanout grid cannot always realise a
     non-power-of-two slice even when the cells would fit. Returns
-    (n_dies, split_dim_or_None, tiles) or raises if nothing up to the
-    package size works."""
+    (n_dies, split_dim_or_None, tiles) or raises if nothing up to `max_dies`
+    works. `dims=("M",)` restricts the die split to the column split (input
+    multicast) -- the scaling-law probes (O17c) run in that regime only; the
+    row split is the O15 branch and stays unexercised."""
     lo = dies_for_op(op)
-    for n in range(lo, 25):
-        for dim in ("M", "C") if n > 1 else (None,):
+    for n in range(lo, max_dies + 1):
+        for dim in dims if n > 1 else (None,):
             if dim is not None and getattr(op, dim) % n:
                 continue
             c = op.C // n if dim == "C" else op.C
@@ -610,8 +618,8 @@ def plan_spatial(op: Op):
             t = _die_tiling(c, m)
             if t is not None:
                 return n, dim, t
-    raise ValueError(f"{op.name}: no residency tiling up to 24 dies "
-                     f"(C={op.C}, M={op.M})")
+    raise ValueError(f"{op.name}: no residency tiling up to {max_dies} dies "
+                     f"(C={op.C}, M={op.M}, dims={dims})")
 
 
 def _temporal_weight_loads(mapping_text: str) -> int:
@@ -665,6 +673,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
            placement=None, overcapacity: str = "reject",
            share_plan=None,
+           spatial_dims=("M", "C"), spatial_max_dies=24,
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
            hist_source=DEFAULT_HIST_SOURCE,
            value_mode="uniform", value_source="synthetic",
@@ -684,7 +693,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         # a fitting-but-untilable shape (e.g. C=2560 on the power-of-two
         # fanout grid) would otherwise fall through to the greedy default and
         # reload silently.
-        spatial_plan = plan_spatial(op)
+        spatial_plan = plan_spatial(op, max_dies=spatial_max_dies, dims=spatial_dims)
         if spatial_plan[0] != n_dies_op:
             print(f"    [O10 spatial: capacity says {n_dies_op} die(s) but "
                   f"the power-of-two fanout grid needs {spatial_plan[0]} -- "
@@ -826,6 +835,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         write_J += rewrite["energy_J"]
 
     # ---- latency (critical path) ----
+    mlx.FABRIC.verify_cycle(res.cycle_seconds)   # O17a: the run's CiMLoop cycle IS the fabric's device
     compute_lat = res.cycles * res.cycle_seconds                 # Timeloop native
     level_hops = cc.level_max_hops(mlx.FABRIC, pl)   # placement-aware geometry
     dist = pa.position_aware_latency(level_hops,
@@ -1045,7 +1055,7 @@ def die_pipeline_interval(cfg: GptConfig, S: int, phase: str, stage_s: float,
     pl = placement or placement_mod.sequential_fill(fab)
     d = die_to_die_activation(cfg, S, phase, fabric=fab, placement=pl,
                               assignment=assignment)
-    cyc = cycle_seconds if cycle_seconds is not None else 1.449e-6
+    cyc = cycle_seconds if cycle_seconds is not None else fab.device.cycle_seconds   # O17a
     occ = cc.link_occupancy(d["flows"], fab, cyc, pl,
                             duplex=duplex, psum_bytes=psum_bytes)
     net = occ["serialization_s"]

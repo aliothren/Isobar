@@ -41,6 +41,7 @@ import scripts.crossbar_comm as cc
 from scripts import fabric as fabric_mod
 from scripts import llm_workload as lw
 from scripts import placement as placement_mod
+from scripts import anchors as an
 
 OUT = "/home/workspace/analysis"
 # Feasible 355M assignment at the honest capacity (2 cells/weight): a layer
@@ -50,7 +51,7 @@ OUT = "/home/workspace/analysis"
 # (S x d_model words), within a layer (attn->ffn) and across layers alike.
 MULTI = "/home/workspace/models/fabric/mlx300_multidie48.yaml"
 UNITS = 48
-CYC = 1.449e-6
+CYC = an.CYCLE_S
 S = 512
 BW_SWEEP = [float(2 ** k) for k in range(0, 19)]   # top covers the zero-overlap knees
 BW_POINT = 256.0
@@ -289,7 +290,8 @@ def main():
     print(f"PNG -> {p3}")
 
     with open(os.path.join(OUT, "d2d_impact.json"), "w") as f:
-        json.dump({"S": S, "n_dies": base.level("die").per_parent,
+        json.dump({"fabric": fabric_mod.provenance(base),
+                   "S": S, "n_dies": base.level("die").per_parent,
                    "stage_s": stage, "stall_free_s": sf,
                    "example_bw": BW_POINT, "bw_sweep": BW_SWEEP,
                    "assignments": [{k: v for k, v in r.items() if k != "asg"}

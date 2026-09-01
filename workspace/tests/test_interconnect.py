@@ -13,7 +13,11 @@ import scripts.crossbar_comm as cc
 from scripts import fabric, interconnect as ic, placement
 from scripts import placement_aware as pa
 
-F = fabric.default()
+# The legacy priors these tests reproduce bit for bit (place_grid, the 1.3125
+# mean hops, the nested floorplan) ARE the 3x3 grids -- the default fabric up
+# to C27. Since C27 the default is the fill-exact 2x4 (`test_fabric` checks it);
+# the comparison variant is loaded here explicitly.
+F = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")
 SEQ = placement.sequential_fill(F)
 
 
@@ -29,7 +33,7 @@ def test_star_reproduces_the_legacy_hop_constants():
         s = ic.build(F, lvl, SEQ)
         approx(s.max_hops(), want_max, 1e-12)
         approx(s.max_hops() * F.pitch(lvl), want_max * want_pitch, 1e-12)
-    hops = cc.level_max_hops()
+    hops = cc.level_max_hops(F)                 # the 3x3 legacy geometry (C27: the default is the 2x4)
     approx(hops["glb<->macro"], 12.0, 1e-12)
     approx(hops["macro<->core"], 3.0, 1e-12)
     approx(hops["core<->crossbar"], 2.0, 1e-12)

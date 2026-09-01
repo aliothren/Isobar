@@ -14,9 +14,32 @@ publishes an on-die link bandwidth (survey and registry mapping in "What
 analog CIM systems publish" below). Every readout against these anchors is
 therefore the digital-ecosystem column of the phase diagram (model scale x
 device speed x transfer paradigm x link tier); the analog-reality column is
-open item O25 and enters no external document until its rows exist.
+the registry's estimated band (C26), read out beside the digital columns in
+every sweep. **The registry is `scripts/anchors.py`** -- the only place a
+bandwidth anchor, the device cycle or a chip point is defined; the tables
+below are its rendering.
 
-## On-die NoC, per link, one direction
+## The registry grid (paradigm x level), `python3 scripts/anchors.py`
+
+| level | paradigm | anchor | value | words/cycle | status |
+|---|---|---|---|---|---|
+| on-die | digital-ecosystem | Simba 8.75 | 8.75 GB/s | 12,675 | measured |
+| on-die | digital-ecosystem | ESP 32 | 32 GB/s | 46,354 | secondary |
+| on-die | digital-ecosystem | FlooNoC 80.6 | 80.6 GB/s | 116,755 | post-layout |
+| die-to-die | digital-ecosystem | GRS 12.5 | 12.5 GB/s | 18,107 | measured |
+| on-die | analog-reality | analog on-die 0.4-8 | 0.4-8 GB/s (band) | 579 .. 11,589 | estimated |
+| die-to-die | analog-reality | analog D2D 0.1-2 | 0.1-2 GB/s (band) | 145 .. 2,897 | estimated |
+
+Every readout column set is the level's digital anchors followed by the two
+ends of its analog-reality band (`anchors.columns(level)`); a sweep that
+prints one column prints all of them. The estimated band's derivation:
+on die, a 32-128-bit datapath at 100-500 MHz (65-130 nm digital periphery)
+= 0.4 .. 8 GB/s; die to die, GPIO / LVDS-class or short SerDes-free
+parallel links = 0.1 .. 2 GB/s per direction. It is an ESTIMATE of where
+fabricated analog CIM fabrics sit (survey below), not an anchor; the chip's
+own values (DR-2) replace it.
+
+## Digital-ecosystem anchors (upper bound): on-die NoC, per link, one direction
 
 | tier | value | system | provenance | notes |
 |---|---|---|---|---|
@@ -31,8 +54,16 @@ Citation discipline: the ESP figure is a SECONDARY citation (FlooNoC's
 comparison table). Before any external submission, either replace it with
 the primary ESP publication's own number or keep the transitive citation
 with an explicit "as reported in [FlooNoC]" footnote — do not cite it bare.
+Status 2026-08-28 (C26): the primary publication is identified -- Jia et
+al., "A 12nm Agile-Designed SoC for Swarm-Based Perception with
+Heterogeneous IP Blocks, a Reconfigurable Memory Hierarchy, and an 800MHz
+Multi-Plane NoC", ESSCIRC 2022 -- but its per-link, one-direction figure
+was not verified from the paper itself (a secondary summary quotes 310
+Gb/s tile-to-tile over six physical planes, which is not the same
+quantity as FlooNoC's 256 Gb/s entry); the anchor keeps `status =
+secondary` and the transitive citation until the ESSCIRC text is read.
 
-## Die-to-die (package), per link, one direction
+## Digital-ecosystem anchors: die-to-die (package), per link, one direction
 
 | value | system | provenance | notes |
 |---|---|---|---|
@@ -44,7 +75,7 @@ with an explicit "as reported in [FlooNoC]" footnote — do not cite it bare.
 |---|---|---|---|
 | NeuRRAM (Wan et al., Nature 2022) | inter-core buffers and partial-sum accumulation on the board FPGA; no on-chip core network | none (chip IO, 130 nm) | hub-IO upper bound |
 | TetraMem MX100 (arXiv 2410.14882) | 10 NPUs + RISC-V + DMA engine + shared SRAM (512 KB + 1 MB), 65 nm | none (shared medium) | bus, bandwidth at the T1 hub (`hub_bandwidth_words_per_cycle`) |
-| HERMES 64-core (Le Gallo et al., Nat. Electron. 2023; arXiv 2212.02872) | on-chip network with per-core link controllers | not in the main text (supplement to check) | star (compile-time scheduled) |
+| HERMES 64-core (Le Gallo et al., Nat. Electron. 2023; arXiv 2212.02872) | on-chip network with per-core link controllers | not in the main text; the supplement was not retrieved (2026-08-28, paywall redirect) -- stays estimated | star (compile-time scheduled) |
 | Mythic AMP M1076 / M1108 | per-tile 64 KB SRAM + NoC router | none (product material only) | star (compile-time scheduled) |
 | Tsinghua multi-chip (Nat. Commun. 2025; Yao et al., Nature 2020) | 8 chips + FPGA hub, no chip-to-chip direct links | none (everything through the FPGA) | hub-IO / bus |
 | Simba, ESP, FlooNoC, GRS (the anchors above) | digital NoCs and package links, 12-16 nm | 8.75 / 32 / 80.6 GB/s; 12.5 GB/s | mesh (digital ecosystem) |
@@ -52,13 +83,62 @@ with an explicit "as reported in [FlooNoC]" footnote — do not cite it bare.
 Mapping rule: a DMA engine with shared SRAM is a shared medium whose
 bandwidth is a T1 (hub) number in this model, not a T2 link; a compile-time
 scheduled point-to-point fabric is the star scheme; a NoC is the mesh
-scheme.
+scheme. What the model's max end means per tier (C29): for star and bus the
+busiest-wire occupancy is EXACT (nothing shared / one resource); for mesh
+and tree it is the least serialisation any schedule can reach for the
+given routing, the missing piece being arbitration on shared segments;
+`schedule_slack` (fabric input, >= 1, default 1) expresses a schedule that
+cannot reach the bound.
 
-Structural estimate of the analog-reality tier -- `status = estimated`, NOT
-an anchor, not read out anywhere until O25 adds the rows: on die 0.4-8 GB/s
-(32-128 bit x 100-500 MHz), die to die 0.1-2 GB/s (board-level or older-node
-direct links) -- 2-20x below the digital anchors on die, 1-2 orders below
-GRS.
+The analog-reality tier is in the registry as the estimated band above
+(2-20x below the digital anchors on die, 1-2 orders below GRS).
+
+## Chip points (the phase diagram, O29)
+
+A real system is a point with a device-speed coordinate (seconds per MVM
+row through one crossbar) and a bandwidth coordinate per level, each with
+its own status. Digital NoCs are NOT chip points -- they have no honest
+compute coordinate in this model -- and are drawn as horizontal bandwidth
+lines (the anchors above). `anchors.CHIPS`:
+
+| chip | tier | t_MVM | status / derivation | on-die bandwidth | status |
+|---|---|---|---|---|---|
+| NeuRRAM (2022) | hub-io | 10.14 us | measured: 7 encoded input slices x 1.4486 us (this model's calibrated macro) | -- | not published (board FPGA hub; hub-IO bound) |
+| HERMES 64-core (2023) | star | 0.133 us | derived: 63.1 TOPS / 64 cores / (2 x 256 x 256) per row | 0.4-8 GB/s | estimated (width / clock not in the main text) |
+| ISAAC (2016) | mesh | 1.6 us | design point: 16 one-bit slices x 100 ns | 0.4-8 GB/s | estimated (32 nm c-mesh sized, no per-link figure) |
+| TetraMem MX100 | bus-T1 | -- | pending: derive from published TOPS and array size (P2) | 0.4-8 GB/s | estimated (SRAM port width x clock; a T1 number here) |
+| Mythic AMP M1076 | star | -- | pending: derive from 25 TOPS peak and the tile array size (P2) | 0.4-8 GB/s | estimated (router width / clock not published) |
+| Tsinghua multi-chip (2025) | hub-io | -- | pending | -- | D2D 0.1-2 GB/s estimated (board-level links through the FPGA hub) |
+
+**Device marks vs the swept surface (O17b / C31).** The three chip points
+with a t_MVM value are the SILICON MARKS of the (t_MVM x bandwidth) plane,
+served by `anchors.device_marks()` -- the only source a plane figure may
+draw device marks from (group 27 checks). Each carries its own status:
+NeuRRAM 10.14 us **measured**, ISAAC 1.6 us **design point**, HERMES 0.133
+us **derived** (63.1 TOPS / 64 cores / 2*256*256). Everything between and
+beyond the marks on the device grid (0.05-100 us) is a closed-form surface
+of the model -- like the analog-reality band, an estimate to be read as
+such, not a measurement.
+
+## Per-axis sweeps (O25 / C26): `python3 scripts/sweep_axes.py`
+
+Closed-form re-scoring of the stored per-operator components on a log grid
+(8 points per decade plus the anchor values and the 2^k words/cycle
+points), both overlap ends, read at both paradigms' columns; figures
+`analysis/sweep_axis_*.png`, data `analysis/phase_sweep.json`, pins in
+`tests/test_anchor_registry.py` (group 23). Axes A-H are the NeuRRAM tier;
+the plane below sweeps the device (O17b / C31). Headline readouts:
+
+| axis | digital column | analog-reality band (estimated) |
+|---|---|---|
+| A on-die link (355M, prefill on chip; 2x4 default grid, C27) | 1.00x at Simba / ESP / FlooNoC, every scheme | 0.4 GB/s: star 1.00x, the three routed schemes 1.31x (mesh centre, mesh corner and the tree tie on the fill-exact grid), bus 3.33x; 8 GB/s: all 1.00x. Exact 1% crossings 0.195 / 0.782 / 0.782 / 0.782 / 1.89 GB/s, doubling 0.061 / 0.243 / 0.243 / 0.243 / 0.68 GB/s (on the 3x3 comparison grid the centred / corner rows read 0.586 / 0.977 and 0.182 / 0.304 GB/s). Knee operator: qk^T on the point-to-point schemes (ffn2 on the bus); ffn2 everywhere once the attention is offloaded |
+| B1 die-to-die (355M, 48-die pipelined) | GRS: 1.00x every ordering, both conditions | on chip at 0.1 GB/s: mesh orderings 1.00x, bus 10.4x; offloaded at 0.1 GB/s: 12-19x (mesh), 70.5x (bus); at 2 GB/s: mesh 1.00x, bus 3.5x. The offload dividend needs > 1.2-1.9 GB/s (mesh 1% crossings) |
+| B2 die-to-die (2.7B chain, O13) | GRS: 1.00x every seating | 1% crossings 1.02-1.72 GB/s, doubling 0.26-0.40 GB/s; 0.1 GB/s: 4.9-7.0x; 2 GB/s: 1.00x. ffn2's entry sets the busiest die link; with the on-die link at 0.4 GB/s the stack adds 1.19x on top |
+| B3 die-to-die (4-die probe) | GRS: 1.00x | 1% at 0.40-0.81 GB/s, doubling at 0.20-0.40 GB/s |
+| C die<->unit link (offload, end to end) | GRS: 1.01x prefill (518.1 ms = the ledger), 1.00x decode | 1% at 9.8 (prefill) / 5.0 (decode) GB/s; doubling at 0.098 / 0.050 GB/s; at 0.1 GB/s prefill 1.98x, decode 1.50x |
+| H partial-sum width (1 vs 2 words) | -- | the 1% and doubling crossings roughly halve at 1 word (bus 1.17 vs 1.89 GB/s) |
+| plane: (t_MVM x bandwidth), O17b (C31) | at HERMES (76.3x) the on-die r=1 boundary (prefill offloaded, busiest op ffn2) is 15.4 / 61.6 / 154 GB/s (star / routed / bus): Simba and ESP fall below the routed line, FlooNoC alone stays above; the 2.7B chain's boundary is 77 GB/s, 6.2x past GRS | boundary = closed form 0.202 / 0.808 / 2.02 GB/s x (10.14 us / t_MVM); the analog band 0.4-8 GB/s crosses the routed line at t_MVM ~ 1-20 us -- the swept thresholds land on the closed form to 1e-9 (group 27). Fixed: K/V write, digital unit, attention unit, link GB/s (a 76.3x device speeds decode 1.11x -- `device_fixed_terms.png`). Since C33 both panels carry the d FAMILY (one line per width tier, d = 1024 the production base; die level = tiler closed form, the d = 2560 line through the measured B2 mark; routed x4 verified d-independent) |
+
 
 ## Conversion into the simulator's unit
 
@@ -77,10 +157,14 @@ values (C25): CiMLoop's bit-slice / bit / access counters are divided out in
 
 The unit carries the device (O17): a threshold in words/cycle is fixed by
 the traffic; its GB/s value scales as 1/t_MVM -- one MVM per input row is 7
-slices x 1.4486 us = 10.1 us here; ISAAC-class ~1.6 us (16 one-bit slices x
+slices x 1.4486 us = 10.14 us here; ISAAC-class ~1.6 us (16 one-bit slices x
 100 ns, 6x), HERMES-class ~130 ns (63.1 TOPS / 64 cores / 2*256*256, derived;
-~76x). The words/cycle fields in the fabric configs (18,112 = 12.5 GB/s at
-the 1.449 us rounding) are this cycle's conversion and move with it.
+~76x). Since C30 (O17a) the device is the fabric's `device` block and the
+registry's CYCLE_S / T_MVM_S ARE its values; bandwidths in the fabric configs
+are declared in GB/s (`*_gbps`) and converted at load with that cycle (the
+unit link 12.5 GB/s = 18,107 words/cycle), so a fabric with another device
+re-labels every anchor consistently; every run checks the CiMLoop macro's
+`GLOBAL_CYCLE_SECONDS` against the declaration.
 
 **What is and is not substituted.** An anchor substitutes exactly ONE
 number — the per-link bandwidth. The workload (GPT-2 medium, our mapper
@@ -113,7 +197,7 @@ dedicated softmax / LayerNorm engines). Until the company supplies its own:
 | per-op energy, 16-bit add | 0.05 pJ | Horowitz, "Computing's energy problem", ISSCC 2014, 45 nm table (8-bit add 0.03, 16-bit 0.05, 32-bit 0.1 pJ) |
 | per-op energy, 16-bit multiply | 0.6 pJ | same table (8-bit mult 0.2 pJ; 32-bit 3.1 pJ) -- interpolated example |
 | table lookup (exp / tanh / rsqrt) | 1.0 pJ | small-SRAM read order of magnitude (same table: 8 KB SRAM 10 pJ per 64-bit word) -- example |
-| lanes x clock | 64 x 1 GHz | sized to the die's array output rate: 256 arrays x 128 outputs per 1.449 us = 22.6 G results/s; 3-op softmax needs ~70 G ops/s |
+| lanes x clock | 64 x 1 GHz | sized to the die's array output rate: 256 arrays x 128 outputs per device cycle (1.4486 us) = 22.6 G results/s; 3-op softmax needs ~70 G ops/s |
 | glb access energy | 15.47 pJ/word | CiMLoop-calibrated, ffn1 prefill fixture (892 uJ / 57.67 M scalar accesses) -- not an example |
 
 `analyze_digital_sensitivity.py` sweeps lanes x clock so the real chip's

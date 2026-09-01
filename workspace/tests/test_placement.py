@@ -15,7 +15,11 @@ from scripts import placement_aware as pa
 from scripts.fabric import Level
 
 
-F = fabric.default()
+# The legacy priors these tests reproduce bit for bit (place_grid, the 1.3125
+# mean hops, the nested floorplan) ARE the 3x3 grids -- the default fabric up
+# to C27. Since C27 the default is the fill-exact 2x4 (`test_fabric` checks it);
+# the comparison variant is loaded here explicitly.
+F = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")
 SEQ = placement.sequential_fill(F)
 
 

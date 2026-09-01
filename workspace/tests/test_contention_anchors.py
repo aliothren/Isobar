@@ -23,10 +23,15 @@ from _util import approx
 import scripts.crossbar_comm as cc
 from scripts import fabric, interconnect as ic, placement
 
-F = fabric.default()
+# The mechanism anchors below are pinned on the 3x3 grid (one empty slot) --
+# the default fabric up to C27; since C27 the default is the fill-exact 2x4,
+# kept in models/fabric/mlx300_3x3.yaml as the comparison variant. Rows with
+# mesh=(2, 4) override the grid explicitly, so they read the same either way.
+F = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")
 # frozen ffn1 constants (same provenance as test_contention_scope)
 VOL = 51_249_152.0            # one macro edge, v1 structured traffic
-CYC = 1.449e-6                # device cycle, CiMLoop-calibrated macro model
+from scripts import anchors as an
+CYC = an.CYCLE_S              # device cycle, CiMLoop-calibrated macro model (one source: the registry)
 COMPUTE_S = 2.59584e-3        # ffn1 prefill compute latency
 BW = 16_384.0                 # the tables' operating point
 
@@ -207,3 +212,42 @@ def test_v5_single_op_table():
            / ser[("star", "{}", "None")], 8.27, 5e-3)
     approx(ser[("mesh", "{'routing': 'xy', 'hub': 'corner'}", "None")]
            / ser[("mesh", "{'routing': 'xy', 'hub': 'center'}", "None")], 1.67, 5e-3)
+
+def _with_on(base, topology, params=None, bw=BW, mesh=None):
+    """`_with` on an explicit base fabric (the default is the 2x4 since C27)."""
+    levels = []
+    for lv in base.levels:
+        if lv.name == "macro":
+            link = dataclasses.replace(lv.link, topology=topology,
+                                       params=params or {},
+                                       bandwidth_words_per_cycle=bw)
+            lv = dataclasses.replace(lv, link=link, mesh=mesh if mesh else lv.mesh)
+        levels.append(lv)
+    return dataclasses.replace(base, name=f"t-{topology}", levels=levels).validate()
+
+
+def test_v6_single_op_table_on_the_2x4_default():
+    """C27: the published single-op readout on the fill-exact 2x4 default,
+    ffn1 prefill at 16,384 words/cycle. Perfect-overlap end 1.00x at every
+    scheme; zero-overlap end star 1.071x, mesh centre 1.286x, mesh corner
+    1.286x, h-tree 1.286x, bus 1.589x; scheme alone (bus / star) 8.27x;
+    layout alone (corner / centre) 1.00x -- the 3x3's 1.67x lever does not
+    exist on the elongated grid (see test_layout_lever_depends_on_the_grid_shape)."""
+    base = fabric.default()
+    assert base.level("macro").mesh == (2, 4)
+    flows = _flows_v3()
+    want_sum = {("star", "{}"): 1.071,
+                ("mesh", "{'routing': 'xy', 'hub': 'center'}"): 1.286,
+                ("mesh", "{'routing': 'xy', 'hub': 'corner'}"): 1.286,
+                ("h_tree", "{'branching': 4}"): 1.286,
+                ("bus", "{'driver': 'center'}"): 1.589}
+    ser = {}
+    for (topo, ps), v in want_sum.items():
+        params = eval(ps)
+        fab = _with_on(base, topo, params)
+        ser[(topo, ps)] = cc.link_occupancy(flows, fab, CYC, placement.sequential_fill(fab))["serialization_s"]
+        approx(max(COMPUTE_S, ser[(topo, ps)]) / COMPUTE_S, 1.00, 1e-9)
+        approx((COMPUTE_S + ser[(topo, ps)]) / COMPUTE_S, v, 5e-3)
+    approx(ser[("bus", "{'driver': 'center'}")] / ser[("star", "{}")], 8.27, 5e-3)
+    approx(ser[("mesh", "{'routing': 'xy', 'hub': 'corner'}")]
+           / ser[("mesh", "{'routing': 'xy', 'hub': 'center'}")], 1.00, 1e-9)

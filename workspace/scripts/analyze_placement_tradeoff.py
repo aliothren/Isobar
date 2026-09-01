@@ -43,17 +43,18 @@ from scripts import llm_workload as lw
 from scripts import mlx_system as mlx
 from scripts import placement as placement_mod
 from scripts import placement_aware as pa
+from scripts import figstyle as fs
 
 OUT = "/home/workspace/analysis"
 BW_POINT = 16384.0
 
 # (key, topology, params, mesh, pretty label)
 VARIANTS = [
-    ("star/3x3",     "star",   {},                                  None,   "star, 3x3"),
-    ("mesh/3x3c",    "mesh",   {"routing": "xy", "hub": "center"},  None,   "mesh, 3x3 centre"),
-    ("mesh/3x3corner", "mesh", {"routing": "xy", "hub": "corner"},  None,   "mesh, 3x3 corner"),
-    ("mesh/2x4c",    "mesh",   {"routing": "xy", "hub": "center"},  (2, 4), "mesh, 2x4 centre"),
-    ("htree/3x3",    "h_tree", {"branching": 4},                    None,   "h-tree k=4"),
+    ("star/2x4",     "star",   {},                                  None,   "star, 2x4"),
+    ("mesh/2x4c",    "mesh",   {"routing": "xy", "hub": "center"},  None,   "mesh, 2x4 centre"),
+    ("mesh/2x4corner", "mesh", {"routing": "xy", "hub": "corner"},  None,   "mesh, 2x4 corner"),
+    ("mesh/3x3c",    "mesh",   {"routing": "xy", "hub": "center"},  (3, 3), "mesh, 3x3 centre (comparison)"),
+    ("htree/2x4",    "h_tree", {"branching": 4},                    None,   "h-tree k=4"),
     ("bus/centre",   "bus",    {"driver": "center"},                None,   "bus, centre driver"),
     ("bus/corner",   "bus",    {"driver": "corner"},                None,   "bus, corner driver"),
 ]
@@ -62,7 +63,7 @@ VARIANTS = [
 # CONTENTION LOWER BOUND, not a realizable design at this radix (its area /
 # wiring cost is not modelled here). Keep it on the plot as the bound, but do
 # not let it define the Pareto front for the realizable schemes.
-IDEALIZED = {"star/3x3"}
+IDEALIZED = {"star/2x4"}
 
 
 def variant(base, topology, params, bw, mesh=None):
@@ -183,8 +184,9 @@ def main():
     for d in rows:
         ax.plot(d["latency_s"] * 1e3, d["energy_J"] * 1e3, "o", ms=11, zorder=3,
                 mfc="#2a9d8f" if d["pareto"] else "#dfe6ee", mec="k", mew=1.1)
-        ax.annotate(d["label"], (d["latency_s"] * 1e3, d["energy_J"] * 1e3),
-                    textcoords="offset points", xytext=(9, 5), fontsize=9)
+    # coincident points get ONE merged label (figstyle rule), never a pile of overprinted names
+    for label, xx, yy in fs.merge_point_labels([(d["label"], d["latency_s"] * 1e3, d["energy_J"] * 1e3) for d in rows]):
+        ax.annotate(label, (xx, yy), textcoords="offset points", xytext=(9, 5), fontsize=8.5)
     ax.set_xscale("log")
     ax.set_xlim(min(d["latency_s"] for d in rows) * 1e3 * 0.82,
                 max(d["latency_s"] for d in rows) * 1e3 * 1.75)
@@ -241,7 +243,8 @@ def main():
     print(f"PNG -> {p2}")
 
     with open(os.path.join(OUT, "placement_tradeoff.json"), "w") as f:
-        json.dump({"operating_point_words_per_cycle": BW_POINT,
+        json.dump({"fabric": fabric_mod.provenance(fabric_mod.default()),
+                   "operating_point_words_per_cycle": BW_POINT,
                    "stall_free_latency_s": stall_free,
                    "position_blind_energy_J": res.energy,
                    "macro_edge_words": unit,

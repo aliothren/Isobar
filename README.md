@@ -33,8 +33,9 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   N-level generic (per-level counts, grid meshes, link params with DR
   calibration tags), the single source of truth for physical structure; stats
   parsing is demoted to a consistency sentinel. `CIMSIM_FABRIC=<yaml>` selects a
-  variant for a whole run (e.g. the 2x4 macro-layout study ran with zero code
-  changes).
+  variant for a whole run (e.g. the 2x4 macro-layout study first ran as a variant with zero code
+  changes; since C27 the fill-exact 2x4 macro / 4x2 crossbar grids ARE the default and
+  `mlx300_3x3.yaml` keeps the earlier 3x3 grids for comparison).
 - **`placement.py`** — the explicit, JSON-serializable Placement (per-level slot
   tables + verify()); `sequential_fill` reproduces the legacy floorplan bit for
   bit; `run_op(op, placement=p)` swaps a whole layout.
@@ -85,6 +86,14 @@ energy correction — plus a corrected **resident multi-die** hardware hierarchy
   device×workload per-crossbar-value case studies (charts to `analysis/`; every
   figure in the writeup has one of these as its committed source, and
   `make_figures.py` drives them all).
+- **`analyze_grid_gating.py`** / **`figstyle.py`** — what gates the hub-position
+  lever (grid x hub x filling on the same traffic; the corner rule) and the
+  figure rule that merges identical series instead of stacking them.
+- **`anchors.py`** / **`sweep_axes.py`** — the anchor registry (digital anchors
+  with a status, the estimated analog-reality band, chip points for the phase
+  diagram, one device-cycle constant) and the closed-form per-axis bandwidth
+  sweeps read at both paradigms' columns (`analysis/sweep_axis_*.png`,
+  `analysis/phase_sweep.json`).
 - **`analyze_contention_system.py`** / **`analyze_anchored_sweep.py`** /
   **`analyze_d2d.py`** / **`analyze_offload_contention.py`** /
   **`analyze_scale_tiers.py`** — the system-level contention study (whole-stack
@@ -153,6 +162,7 @@ python3 scripts/analyze_position_aware.py resnet18    # placement × pattern com
 python3 scripts/analyze_contention_system.py 512 --shares   # contention at the system denominator
 python3 scripts/analyze_anchored_sweep.py && python3 scripts/analyze_d2d.py \
   && python3 scripts/analyze_offload_contention.py && python3 scripts/analyze_scale_tiers.py
+python3 scripts/sweep_axes.py                        # per-axis bandwidth sweeps (both anchor columns)
 CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml python3 scripts/op_breakdown.py   # per-operator ledger
 python3 scripts/analyze_offload_unit_sensitivity.py   # external attention unit interface sweep
 ```
@@ -160,7 +170,7 @@ python3 scripts/analyze_offload_unit_sensitivity.py   # external attention unit 
 ### Tests
 
 ```bash
-python3 tests/run_tests.py            # fast guardrail suite (185 tests, ~4 min)
+python3 tests/run_tests.py            # fast guardrail suite (223 tests, ~4 min)
 python3 tests/run_tests.py --slow     # plus one real mapper run
 ```
 

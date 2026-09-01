@@ -336,3 +336,185 @@ document until O25 / O17 run (P0 gate).
 
 **What stayed pinned:** everything -- 185 passed / 1 xfail on the v5
 fixtures.
+
+## C26: the anchor registry, the analog-reality tier and the per-axis sweeps -- v5, 2026-08-28
+
+**What changed:** `scripts/anchors.py` is the single source of every
+bandwidth anchor (with `status`), of the estimated analog-reality band, of
+the chip points and of ONE device-cycle constant (10.14 us / 7 = 1.4486 us);
+`analyze_anchored_sweep.py`, `analyze_scale_tiers.py`,
+`analyze_corner_flip.py` (v1 -> v5 fixture), `analyze_d2d.py`,
+`analyze_offload_contention.py`, `test_anchored_findings.py` and
+`test_contention_anchors.py` import from it. `anchored_sweep.json` keys are
+registry keys and carry five columns (three digital anchors + the band
+ends); `offload_contention.json` gains the analog columns under a separate
+key. New: `scripts/sweep_axes.py` -> `analysis/phase_sweep.json` +
+`sweep_axis_{ondie,d2d_355m,d2d_2p7b,d2d_probe,unit_link}.png`; group 23
+(`tests/test_anchor_registry.py`, 15 tests).
+
+**Goldens:** none moved. The cycle rounding in `analyze_d2d.py` /
+`analyze_offload_contention.py` (1.449 -> 1.4486 us) shifts their JSON
+readouts by 0.03% (words/cycle knees unchanged: 16 / 16 / 64 / 1,024 w/c);
+every pinned assertion holds. Suite: 200 passed / 1 xfail.
+
+**What stayed pinned:** every energy, compute, write and multiplier of v5;
+the group-17 anchored table is reproduced from the sweep's digital columns.
+
+## C27: the fill-exact 2x4 / 4x2 die grids become the default -- v5 -> v6, 2026-08-28
+
+**What changed:** `mlx300.yaml`, `mlx300_multidie.yaml`,
+`mlx300_multidie48.yaml`, `mlx300_mesh.yaml`: macro mesh [3,3] -> [2,4]
+(pitch 800 um), crossbar mesh [3,3] -> [4,2], core pitch 400 um; the
+earlier grids are `mlx300_3x3.yaml` (comparison only); `mlx300_2x4.yaml`
+removed. `fabric.provenance()` recorded in every result JSON. Every result
+regenerated on the new default (`analysis/regen_v6.sh`). Geometry only:
+star and bus serializations, compute, write, every energy except the
+router distance term, D2D and the unit are bit-identical to v5.
+
+**Goldens moved:** `stack_per_op_v6.json` frozen (mesh centre / corner
+rows moved, 24 of them; tree, star, bus rows identical; the stall-free
+stack +6 us of propagation). Readouts: single op zero-overlap star 1.071 /
+routed 1.286 x3 / bus 1.589 (was 1.071 / 1.214 / 1.286 / 1.357 / 1.589);
+corner / centre 1.67x -> 1.00x; Simba zero-overlap 1.01 / 1.05 / 1.05 /
+1.05 / 1.15; 1% crossings 0.195 / 0.782 x3 / 1.89 GB/s; 2^k knees 256 /
+1,024 x3 / 2,048 w/c; analog low end routed 1.31x (was 1.16 / 1.58 /
+1.31); prefill energy 298.77 mJ (+0.13%, distance term at mean 1.5 hops);
+line-vs-grid router lever 1.33x / 0.25% of a block. Groups 14 and 17
+gained v6 blocks; the 3x3 mechanism anchors (groups 13 / 14 / 4 geometry)
+load `mlx300_3x3.yaml` explicitly and keep their numbers; group 23
+re-pinned; `test_fabric` checks both grids.
+
+**What stayed pinned:** every v1-v5 assertion (frozen fixtures), the D2D
+integers and knees, the O9 unit numbers, the O13 flows and surplus
+energies, the 2.7B tier readouts, the O25 D2D / unit-link / probe
+readouts.
+
+## C28: the hub-lever gate and the identical-series figure rule -- doc + figures, 2026-08-28
+
+**What changed:** `scripts/analyze_grid_gating.py` (new; closed-form on
+the frozen ffn1 flows): 3x3 / 2x4 / 4x4 / 2x8 x hub centre / corner,
+two fillings for the 16-slot grids, plus the heaviest-talker sweep;
+`analysis/grid_gating.{png,json}`; group 24 (`tests/test_grid_gating.py`,
+6 tests). `scripts/figstyle.py` (new) merges identical series and brackets
+tied bars; six plotting scripts use it, their figures regenerated with no
+numeric change. No golden moved.
+
+**Finding:** corner busiest = N - macros in the hub's column (xy routing),
+so the hub-position lever is gated by the grid's width along the routing's
+first axis: 2-wide grids 1.00x in any filling, 3x3 1.67x, 4x4 1.50x in
+both fillings; the soft-placement lever is 1.75x on the 2x4.
+
+## C29: the busiest-wire occupancy stated as the bound it is; `schedule_slack` -- 2026-08-28
+
+**What changed:** `Fabric.schedule_slack` (>= 1, default 1.0) in every
+YAML, validated, in `provenance()`; `link_occupancy` multiplies every
+occupancy by it and returns it; the hand-rolled beat formulas
+(`analyze_offload_contention.py`, `die_serial`) carry it; the ledger and
+the sweep header state it. Group 25 (`tests/test_schedule_slack.py`, 5
+tests). No golden moved: slack = 1 everywhere, the numbers are the bound.
+
+**Statement:** for a given routing the busiest wire's occupancy is the
+least serialisation any schedule can reach -- exact for star and bus, a
+lower bound for routed grids; the max end is the exact ideal of a
+compile-time scheduled fabric and the optimistic bound of a NoC. Suite:
+216 passed / 1 xfail.
+
+## C30: the device as a fabric input -- 2026-08-28
+
+**What changed:** `fabric.Device` (`cycle_seconds`, `input_slices_per_mvm`
+-> `t_mvm_s`) declared as the `device` block of every config, validated, in
+`provenance()`; bandwidths declared in GB/s (`*_gbps`) and converted at load
+with the fabric's device (unit link 12.5 GB/s = 18,107 words/cycle, was
+18,112); the registry's constants are the default fabric's device;
+`Fabric.verify_cycle` in `run_op` checks the CiMLoop macro's cycle against
+the declaration; the four literal sites read the fabric. Group 26
+(`tests/test_device_input.py`, 7 tests); `test_d2d` identities read the
+device. Goldens: none moved beyond -0.03% on the unit-link times (the
+rounding unification). Suite: 223 passed / 1 xfail.
+
+## C31: the (t_MVM x bandwidth) plane -- the device becomes an axis (O17b), 2026-08-31
+
+**What changed:** `scripts/sweep_axes.py`: the serialization scoring is
+rewritten in GB/s form (`ser_at`: ser_ref x 11.310 GB/s / g -- numerically
+identical at the NeuRRAM tier, and device-free when crossed with t_MVM,
+which is exactly the group 26 identity); new `axis_device_plane` (device
+grid 0.05-100 us, 8 points per decade, plus the three silicon marks from
+`anchors.device_marks()` -- the registry is the only source a plane mark
+may come from; crossed with axes A, B1, B3 and C; B2 is read at the marks
+only, having already been crossed with axis A) and three figures
+(`device_plane.png`, `device_plane_collapse.png`, `device_fixed_terms.png`);
+the sweep header states what does NOT scale with t_MVM (K/V write DR-5,
+digital unit DR-8, attention unit DR-9, every link's GB/s).
+`phase_sweep.json` gains a `plane` block (device grid, r surfaces,
+closed-form coefficients, mark readouts, the collapse and the fixed-term
+decomposition). Group 27 (`tests/test_device_plane.py`, 5 tests); group
+23's schema check requires `plane`. No golden moved (the GB/s rewrite is an
+identity; every v1-v6 pin reproduced).
+
+**Finding:** the plane's metric is the busiest operator's network / compute
+ratio r(g, t) -- the whole-stack multiplier is not device-scalable because
+the K/V write and the digital unit do not scale with t_MVM. r = 1 is the
+closed form g = 11.310 x (ser_ref / mm_ref) x (10.14 us / t): a slope -1
+line in log-log, and the bisection-swept thresholds land on it to 1e-9.
+Boundaries (prefill, attention offloaded; knee ffn2 on every scheme): star
+0.202 / routed 0.808 x3 / bus 2.02 GB/s at NeuRRAM -> 15.4 / 61.6 / 154
+GB/s at HERMES (76.3x): Simba 8.75 and ESP 32 fall BELOW the routed line
+(network exposed), FlooNoC 80.6 alone stays above it; the 2.7B chain's
+boundary moves 1.01 -> 77 GB/s, 6.2x past GRS -- both stories flip inside
+the analog family, now as measured plane readings. The die<->unit link's
+boundary is 0.101 GB/s x (10.14 us / t) in BOTH phases (S cancels in
+net / compute there). Fixed terms: the same 76.3x device speeds prefill
+9.33x (826.4 -> 88.6 ms) and decode only 1.11x (14.78 -> 13.34 ms --
+corrects the "1.3x" once written in FIXLIST): the matrix part collapses
+exactly in g x t_MVM, the whole stack does not -- the finding, not a bug.
+Suite: 228 passed / 1 xfail.
+
+## C32: the mapper-measured V(d, S) -- the d law settled (O17c), 2026-08-31
+
+**What changed:** `scripts/run_scaling_probes.py` (new): 48 mapper runs,
+single core, resumable -- d in {1024, 2560, 4096, 5120, 6144, 8192} at
+S = 512 (5120 / 6144 added to pin the predicted crossing) and S in
+{128..2048} at d = 1024 (3 ops); residency tiler, column split only
+(`plan_spatial` gains `max_dies` and `dims` -- d = 8192's ffn needs 32
+dies on the 48-die fabric; the O15 row split stays unexercised), full die
+per piece, dh = 64, prefill. Records per (d, S, op): busiest macro edge
+volume + direction, serialization at 16,384 w/c, compute, die split ->
+`analysis/scaling_probes.json`. `scripts/analyze_scaling_law.py` (new) ->
+`scaling_law_vds.png` + `scaling_law_summary.json`. Group 28
+(`tests/test_scaling_law.py`, 5 tests). No golden moved.
+
+**Findings:** (1) above the flip the busiest on-die wire is the INPUT
+TRUNK: down = S x d words per macro edge exactly, ratio = d / 114,688
+(16,384 w/c x 7 slices) -- "knee ~ d" with slope exactly 1, the closed
+form the O29 boundary family draws; (2) the flip d* = 1,220-1,350
+measured (qkv 1,224 / out_proj 1,288 / ffn1 1,349; ffn2 down everywhere)
+-- the ideal-capacity prediction 5,793 is FALSIFIED, 4.3x off (macro
+fanout + exact die fill); below d* the mapper replicates weights in
+underfull dies (compute halves at d = 1024); (3) ffn2 steps with the
+tiler's macro C split (0.0714 at 4096 -> 0.0446 at 5120): mapper-dependent
+exactly where the tiler steps; (4) every probed ratio is S-independent,
+attention included (qk^t: volume ~ S^2, compute ~ S^2, ratio 1/14); the
+d = 2560 probes reproduce the 2.7B block's ratios on a different package.
+Suite: 233 passed / 1 xfail.
+
+## C33: the d family on the plane; scheme multipliers verified -- 2026-08-31
+
+**What changed:** `sweep_axes.py`: the plane gains the O29 boundary FAMILY
+(`d_family` in the JSON; both panels of `device_plane.png`): on die
+(routed) one line per width tier -- d = 1024 the production base
+(co-residency C14; its knee ffn2 sits x2 above the trunk line, the same
+C-split mechanism as ffn2's step), 2560 / 4096 / 8192 the trunk law x4;
+ffn2's tiler step is an annotation, not a kinked line. Die level: the
+tiler closed form (tensor once; ffn2's S x 4d entry from `block_chain`,
+which gains `max_dies` / `dims`; d = 1024 = the C13 half-layer hand-off) --
+the d = 2560 line passes exactly through the measured B2 mark, asserted at
+build time. `analyze_scaling_law.py`: the probes' stored macro edges
+re-scored under mesh / bus (closed form, zero mapper): routed x4.00 EXACTLY
+at every d and op (the family is measured, not extrapolated); the bus
+multiplier drifts x13.3 -> x8.25 with the up share (the O17b "x10" is
+basis-specific); star re-scoring reproduces the stored serialization to
+1e-9. Figure hygiene: out_proj = ffn1 merged under the C28 rule in
+`scaling_law_vds.png`. Family at t_ref: 0.808 / 1.010 / 1.616 / 3.232 GB/s
+on die, 0.101 / 1.010 / 1.616 / 3.232 GB/s at the die level (the levels
+coincide for d >= 2560: mesh's x4 multicast = ffn2's 4d-wide tensor).
+Groups 27 / 28 gain one test each. Suite: 235 passed / 1 xfail.

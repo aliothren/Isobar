@@ -4,9 +4,9 @@ Usage (inside the container, from /home/workspace/scripts):
 
     python3 make_figures.py all                    # every stage, sequential
     python3 make_figures.py heatmap system         # just these stages
-    python3 make_figures.py --tag 2x4 system evl heatmap
-    CIMSIM_FABRIC=/home/workspace/models/fabric/mlx300_2x4.yaml \\
-        python3 make_figures.py --tag 2x4 system evl heatmap
+    python3 make_figures.py --tag 3x3 system evl heatmap
+    CIMSIM_FABRIC=/home/workspace/models/fabric/mlx300_3x3.yaml \\
+        python3 make_figures.py --tag 3x3 system evl heatmap
 
 Stages and what they produce (all under /home/workspace/analysis):
 
@@ -74,6 +74,32 @@ STAGES = {
         "cmds": [["python3", "analyze_position_aware.py", "resnet18"]],
         "outputs": ["resnet18_settings_compare.png",
                     "resnet18_settings_compare.csv"],
+    },
+    "anchored": {
+        "cmds": [["python3", "analyze_anchored_sweep.py"]],
+        "outputs": ["anchored_sweep.png", "anchored_band.png", "anchored_sweep.json"],
+    },
+    "d2d": {
+        "cmds": [["python3", "analyze_d2d.py"]],
+        "outputs": ["d2d_assignment_impact.png", "d2d_regimes.png", "d2d_segment_map.png", "d2d_impact.json"],
+    },
+    "offload": {
+        "cmds": [["python3", "analyze_offload_contention.py"]],
+        "outputs": ["offload_contention.png", "offload_contention.json"],
+    },
+    "scale_tiers": {
+        "cmds": [["python3", "analyze_scale_tiers.py"]],
+        "outputs": ["scale_tier_probe.png", "scale_tier_2p7b.png", "scale_combined.png", "scale_tiers.json"],
+    },
+    "gating": {
+        "cmds": [["python3", "analyze_grid_gating.py"]],
+        "outputs": ["grid_gating.png", "grid_gating.json"],
+    },
+    "sweep": {
+        "cmds": [["python3", "sweep_axes.py"]],
+        "outputs": ["sweep_axis_ondie.png", "sweep_axis_d2d_355m.png", "sweep_axis_d2d_2p7b.png",
+                    "sweep_axis_d2d_probe.png", "sweep_axis_unit_link.png", "device_plane.png",
+                    "device_plane_collapse.png", "device_fixed_terms.png", "phase_sweep.json"],
     },
     "bandwidth": {
         "cmds": [["python3", "analyze_bandwidth_sweep.py"]],

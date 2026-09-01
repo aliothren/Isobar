@@ -47,7 +47,8 @@ sys.path.insert(0, "/home/workspace")
 
 UNMODELED = "未建模故未统计"
 OFFLOADED = "已卸载至片外单元(见\"attention 在片外单元\"行)"
-CYC_DEFAULT = 1.449e-6
+from scripts import fabric as _fabric_mod   # noqa: E402
+CYC_DEFAULT = _fabric_mod.default().device.cycle_seconds   # O17a: the fabric's device, not a literal
 ATTN_OPS = ("qk^t", "av")                 # leave the chip under offload (with their K/V write)
 CONDITIONS = {"on_chip": "attention 在片上", "offloaded": "attention 卸载(端到端:片上 + 片外单元)"}
 # the model's operator TYPES the platform does not simulate (whole-model view)
@@ -154,6 +155,11 @@ def energy_items(levels, overlay_rows, cimloop_J, write_J=0.0, rewrite_J=0.0,
     return items, residual
 
 
+def _slack():
+    from scripts import fabric as _fm
+    return _fm.default().schedule_slack
+
+
 def latency_items(compute_s, write_s, serial_s, prop_s, d2d_s=0.0,
                   d2d_note=""):
     """Every latency item of one op. Exposed amounts follow the critical
@@ -169,7 +175,8 @@ def latency_items(compute_s, write_s, serial_s, prop_s, d2d_s=0.0,
          "value": write_s, "unit": "s", "note": "" if write_s else "静态算子不写"},
         {"group": "片上网络", "item": "最忙线占用(串行化)",
          "en": "busiest-wire occupancy", "value": serial_s, "unit": "s",
-         "note": "占用量,不是暴露量"},
+         "note": "占用量,不是暴露量;= 给定路由下任意调度的下界 × 调度松弛因子(平台输入 schedule_slack,当前 "
+                 f"{_slack():g};O26)"},
         {"group": "片上网络", "item": "网络暴露量(完美重叠端 = max(计算,占用) − 计算)",
          "en": "network exposed (perfect overlap)", "value": exposed_max,
          "unit": "s", "note": "此前发表口径"},
@@ -419,11 +426,14 @@ def _num(v, unit):
 def write_outputs(result, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "op_breakdown.json"), "w") as f:
+        from scripts import fabric as _fm
+        result["fabric"] = _fm.provenance(_fm.default())
         json.dump(result, f, indent=1, ensure_ascii=False)
     md = ["# 按算子的开销账本", "",
           f"模型 {result['model']},S={result['S']},{result['n_layers']} 层;"
           f"基线:{result['basis']};走线方案 {result['scheme']},链路带宽 "
-          f"{result['bw_words_per_cycle']:,.0f} 词/周期(平台输入);记账:{result['wire_accounting']}。",
+          f"{result['bw_words_per_cycle']:,.0f} 词/周期(平台输入);记账:{result['wire_accounting']};"
+          f"最忙线占用 = 给定路由下任意调度的下界 × 调度松弛 {result.get('schedule_slack', 1.0):g}(O26)。",
           "每行一项,不合并;标 **" + UNMODELED + "** 的项平台未建模。", ""]
     for phase, ph in result["phases"].items():
         n = result["n_layers"]
@@ -614,6 +624,7 @@ def main(argv=None):
               "basis": ("exclusive die per op" if args.no_shares
                         else "co-residency shares (48-die seating)"),
               "scheme": args.scheme, "bw_words_per_cycle": args.bw,
+              "schedule_slack": _slack(),
               "wire_accounting": ("direction-split full-duplex links (bus shared); "
                                   f"partial sums {base.psum_word_bytes:g} words; "
                                   "O7 bracket both ends"),

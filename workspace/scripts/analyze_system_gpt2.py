@@ -194,6 +194,7 @@ import json  # noqa: E402
 tj = os.path.join(OUT, f"gpt2_system_totals_{PHASE}.json")
 with open(tj, "w") as f:
     json.dump({
+        "fabric": fabric_mod.provenance(fabric_mod.default()),
         "S": S, "phase": PHASE, "n_layers": NL,
         "scenarios": {k: (None if v is None else float(v)) for k, v in scen.items()},
         "per_op": [{

@@ -40,7 +40,7 @@ def _alt_macro_placement():
     import dataclasses
 
     from scripts import fabric, placement
-    f = fabric.default()
+    f = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")   # the 3x3 grid this geometry test is written for
     seq = placement.sequential_fill(f)
     tbl = [(x, y) for y in range(3) for x in range(3) if (x, y) != (1, 0)]
     return f, dataclasses.replace(seq, slots={**seq.slots, "macro": tbl}).verify(f)
@@ -50,7 +50,7 @@ def test_propagation_latency_depends_on_placement():
     """promoted from xfail when A-3 landed: the propagation term must follow
     the actual layout, not a fixed worst-case geometry."""
     f, alt = _alt_macro_placement()
-    default = cc.level_max_hops()
+    default = cc.level_max_hops(f)
     moved = cc.level_max_hops(f, alt)
     assert moved["glb<->macro"] != default["glb<->macro"], \
         "a different macro slot set must change the top-level worst-case hops"
@@ -68,7 +68,9 @@ def test_energy_overlay_placement_equals_place_fn_priors():
     levels = {"router": {"fanout": 8, "unit_pJ": 48.3, "volume": 10,
                          "energy_J": 2.668e-5}}
     layout = {"router": {"pattern": "to_center", "reference_hops": 1.0}}
-    f = fabric.default()
+    # the legacy prior `place_grid` IS the 3x3 grid; since C27 the default is
+    # the 2x4, so the bit-for-bit identity is checked on the 3x3 variant
+    f = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")
 
     old = pa.position_aware_cost(levels, layout, pa.place_grid)
     new = pa.position_aware_cost(levels, layout, placement=placement.

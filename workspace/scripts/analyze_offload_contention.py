@@ -29,12 +29,18 @@ import sys
 sys.path.insert(0, "/home/workspace")
 
 OUT = "/home/workspace/analysis"
+from scripts import anchors as an
+from scripts import fabric as _fabric_mod
+# O26: the hand-rolled beat formulas below carry the same schedule_slack that
+# link_occupancy applies (the 48-die package fabric's value, 1.0 = the bound)
+SLACK = _fabric_mod.from_yaml("/home/workspace/models/fabric/mlx300_multidie48.yaml").schedule_slack
+from scripts import figstyle as fs
 from scripts import llm_workload as lw
 STAYS = lw.stays_on_chip_under_offload     # scenario B: what remains on chip
 N_LAYERS = 24
 WORDS = 512 * 1024                      # one boundary, prefill (S x d_model)
 WORDS_DEC = 1024                        # decode boundary (d_model)
-CYC = 1.449e-6
+CYC = an.CYCLE_S
 
 BWS = [64.0, 256.0, 1024.0]
 
@@ -157,7 +163,7 @@ def main():
     for label, busiest in D2D:
         cells, cells_sum = [], []
         for bw in BWS:
-            wirebeat = busiest * WORDS / bw * CYC
+            wirebeat = busiest * WORDS / bw * CYC * SLACK
             cells.append(max(stage_B, wirebeat) / stage_B)
             cells_sum.append((stage_B + wirebeat) / stage_B)
         d2d_out[label] = dict(zip((str(int(b)) for b in BWS), cells))
@@ -184,7 +190,7 @@ def main():
     stage_B_e2e = max(stage_B, unit_stage)
     print(f"\n=== O9: attention on the external unit ({uv['unit']['mac_per_second']/1e12:g} T MAC/s, "
           f"K/V {uv['unit']['kv_words_per_second']/1e9:g} GB/s, link "
-          f"{uv['unit']['link_bandwidth_words_per_cycle']/1449:.1f} GB/s, {n_units} unit(s)) ===")
+          f"{an.gbps_of(uv['unit']['link_bandwidth_words_per_cycle']):.1f} GB/s, {n_units} unit(s)) ===")
     print(f"  prefill per layer: unit {cp['unit_s']*1e3:.3f} ms (compute {cp['compute_s']*1e3:.3f}, "
           f"K/V {cp['kv_s']*1e3:.3f}) + link {1e3*(cp['link_out_s']+cp['link_back_s']):.3f} ms "
           f"= chain {cp['chain_s']*1e3:.3f} ms; energy {cp['energy_J']*1e6:.1f} uJ "
@@ -212,15 +218,24 @@ def main():
     print("  busiest die wire with the offload streams (boundary-words): " +
           ", ".join(f"{lab.split(' ')[0]} {b:.1f}" for lab, b in uv["busiest_with_streams"]))
     # pipelined beat with the streams on the die wires, at the example bandwidths
-    anchor_bw = uv["unit"]["link_bandwidth_words_per_cycle"]        # GRS-class die links, 12.5 GB/s
+    anchor_bw = uv["unit"]["link_bandwidth_words_per_cycle"]        # GRS-class die links (the digital D2D anchor)
     bws = list(BWS) + [anchor_bw]
     print(f"  {'pipelined beat / die stage B, end-to-end':26}" + "".join(
-        f"{f'@{b:,.0f} w/c':>14}" for b in BWS) + f"{'@anchor 12.5GB/s':>18}")
+        f"{f'@{b:,.0f} w/c':>14}" for b in BWS) + f"{'@' + an.by_key('grs').label + ' GB/s':>18}")
     beats = {}
     for lab, bz in uv["busiest_with_streams"]:
-        cells = [max(stage_B_e2e, bz * WORDS / bw * CYC) / stage_B for bw in bws]
+        cells = [max(stage_B_e2e, bz * WORDS / bw * CYC * SLACK) / stage_B for bw in bws]
         beats[lab] = dict(zip((str(int(b)) for b in bws), cells))
         print(f"  {lab:26}" + "".join(f"{c:>13.2f}x" for c in cells[:-1]) + f"{cells[-1]:>17.2f}x")
+    # O25: the same beat read in the analog-reality D2D column (estimated band ends)
+    aband = an.band(an.D2D).band
+    analog_wc = [an.words_per_cycle(g) for g in aband]
+    beats_analog = {}
+    print(f"  {'-- analog-reality D2D band (est.)':26}" + "".join(f"{f'@{g:g} GB/s':>14}" for g in aband))
+    for lab, bz in uv["busiest_with_streams"]:
+        cells = [max(stage_B_e2e, bz * WORDS / bw * CYC * SLACK) / stage_B for bw in analog_wc]
+        beats_analog[lab] = dict(zip((f"{g:g}" for g in aband), cells))
+        print(f"  {lab:26}" + "".join(f"{c:>13.2f}x" for c in cells))
 
     out["offload_unit"] = {"unit": uv["unit"], "per_layer": uv["costs"],
                            "unit_stage_s": unit_stage, "beat_B_e2e_s": stage_B_e2e,
@@ -229,9 +244,12 @@ def main():
                            "busiest_with_streams": uv["busiest_with_streams"],
                            "beat_with_streams": beats,
                            "anchor_bw_words_per_cycle": anchor_bw,
+                           "anchor_label": an.by_key("grs").label,
+                           "beat_with_streams_analog_gbps": beats_analog,
                            "e2e": e2e}
 
     with open(os.path.join(OUT, "offload_contention.json"), "w") as f:
+        out["fabric"] = sysd.get("fabric")
         json.dump(out, f, indent=1)
     print("\nJSON -> offload_contention.json")
     make_figure(sysd, out)
@@ -275,6 +293,8 @@ def make_figure(sysd, out):
            label="attention on chip")
     ax.bar(x + 0.19, [v * 1e3 for v in off], 0.36, color=C_OFF,
            label="attention offloaded")
+    fs.annotate_bar_ties(ax, x - 0.19, [v * 1e3 for v in on], dy=0.03, text="identical: network hidden at 16,384 w/c")
+    fs.annotate_bar_ties(ax, x + 0.19, [v * 1e3 for v in off], dy=0.03, text="identical: network hidden at 16,384 w/c")
     ax.set_xticks(x); ax.set_xticklabels(SHORT, fontsize=8.5)
     ax.set_ylabel("one prefill request (ms)")
     ax.set_title("Prefill: everything speeds up,\nthe scheme spread stays",
@@ -305,7 +325,7 @@ def make_figure(sysd, out):
 
     # ---- (3) pipelined throughput at 64 w/c
     ax = axes[2]
-    CYC, WORDS = 1.449e-6, 512 * 1024
+    CYC, WORDS = an.CYCLE_S, 512 * 1024
     # FEASIBLE 48-die configuration (two dies per layer): stage = the slower
     # half-layer; busiest-wire integers from the 6x8 chain (snake 1,
     # sequential 2, far pairs 8, bus 47). Read at a LOW example input
@@ -317,7 +337,7 @@ def make_figure(sysd, out):
                "bus"]
     busiest = [0] + [b for _, b in d2d_busiest()]
     def thr(stage, b):
-        net = b * WORDS / 64.0 * CYC
+        net = b * WORDS / 64.0 * CYC * SLACK
         return 1.0 / max(stage, net)
     on = [thr(stage_A, b) for b in busiest]
     off = [thr(stage_B, b) for b in busiest]
@@ -368,7 +388,7 @@ def make_placement_figures(sysd, out):
     from scripts import fabric as fabric_mod
     from scripts import llm_workload as lw
 
-    CYC, WORDS = 1.449e-6, 512 * 1024
+    CYC, WORDS = an.CYCLE_S, 512 * 1024
     # feasible 48-die configuration: same chain, fabric and assignments as
     # analyze_d2d (imported -- single source for the constructions)
     from scripts.analyze_d2d import assignments as d2d_assignments, UNITS

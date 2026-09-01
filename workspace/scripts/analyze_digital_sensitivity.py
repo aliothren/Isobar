@@ -32,7 +32,7 @@ from scripts import llm_workload as lw
 OUT = "/home/workspace/analysis"
 LANES = [8, 16, 32, 64, 128, 256]
 CLOCKS = [0.5e9, 1.0e9, 2.0e9]
-ARRAY_OUTPUT_RATE = 256 * 128 / 1.449e-6         # results/s: 256 arrays x 128 outputs per cycle
+ARRAY_OUTPUT_RATE = 256 * 128 / fabric_mod.default().device.cycle_seconds   # results/s: 256 arrays x 128 outputs per device cycle (O17a)
 
 
 def main():

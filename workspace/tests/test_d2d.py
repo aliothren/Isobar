@@ -177,7 +177,7 @@ def test_pipeline_interval_identities():
     assert d0["net_s"] == 0.0 and d0["interval_s"] == stage   # off by default
 
     words = 512.0 * CFG.d_model
-    cyc = 1.449e-6
+    cyc = fab.device.cycle_seconds          # the fabric's device (O17a)
     for bw in (256.0, 64.0):
         d = lw.die_pipeline_interval(CFG, 512, "prefill", stage,
                                      fabric=_bw(fab, bw))
@@ -219,7 +219,7 @@ def test_pipeline_bus_serializes_all_boundaries():
                 bandwidth_words_per_cycle=256.0))
         lvls.append(l)
     fab = dataclasses.replace(fab, levels=lvls).validate()
-    words, cyc = 512.0 * CFG.d_model, 1.449e-6
+    words, cyc = 512.0 * CFG.d_model, fab.device.cycle_seconds   # the fabric's device (O17a)
     for asg in (None, _snake(fab)):
         d = lw.die_pipeline_interval(CFG, 512, "prefill", 13.11e-3, fabric=fab,
                                      assignment=asg)

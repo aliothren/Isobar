@@ -35,11 +35,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 OUT = "/home/workspace/analysis"
-FIX = json.load(open("/home/workspace/tests/fixtures/stack_per_op_v1.json"))
+from scripts import anchors as an
+FIX = json.load(open("/home/workspace/tests/fixtures/stack_per_op_v6.json"))   # value units (C25), 2x4 default (C27)
 REF = FIX["ref_words_per_cycle"]
-CYC = 1.4485714285714284e-06
-WC_PER_GBPS = 1e9 * CYC
-BAND = (8.75, 80.6)
+CYC = an.CYCLE_S
+WC_PER_GBPS = an.WC_PER_GBPS
+BAND = (an.digital(an.ONDIE)[0].gbps, an.digital(an.ONDIE)[-1].gbps)   # the digital anchors' range
 STATIC = {"qkv_proj", "out_proj", "ffn1", "ffn2"}
 
 
@@ -59,7 +60,7 @@ def main():
     conds = [("decode, attention on chip", "decode", True),
              ("decode, attention offloaded", "decode", False),
              ("prefill, attention on chip", "prefill", True)]
-    g = np.geomspace(0.5, 300, 400)
+    g = np.geomspace(0.01, 300, 600)
     fig, ax = plt.subplots(figsize=(8.6, 5.2))
     flips = {}
     for title, phase, on_chip in conds:
@@ -89,13 +90,17 @@ def main():
     ax.axhline(1.0, color="0.3", lw=1)
     ax.axvspan(*BAND, color="#2a9d8f", alpha=0.12)
     ax.text(np.sqrt(BAND[0] * BAND[1]), ax.get_ylim()[0] * 1.001,
-            "published NoC range", fontsize=8.5, color="#1c6b60",
+            "digital anchors (upper bound)", fontsize=8.5, color="#1c6b60",
             ha="center", va="bottom")
+    ab = an.band(an.ONDIE)
+    ax.axvspan(*ab.band, color="#c9a227", alpha=0.16, lw=0)
+    ax.text(np.sqrt(ab.band[0] * ab.band[1]), ax.get_ylim()[0] * 1.001,
+            "analog-reality (est.)", fontsize=8.5, color="#7a5c00", ha="center", va="bottom")
     ax.set_xscale("log")
     ax.set_xlabel("per-link bandwidth (GB/s)")
     ax.set_ylabel("stack latency: corner / centre  (<1 = corner WINS)")
     ax.set_title("The best buffer position flips along the bandwidth axis\n"
-                 "(dashed lines: sign flips; shaded: published NoC range)",
+                 "(dashed lines: sign flips; green: digital anchors, gold: analog-reality band)",
                  fontsize=11)
     ax.grid(alpha=0.3, which="both")
     ax.legend(fontsize=9)

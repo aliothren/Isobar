@@ -254,8 +254,21 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
 
 
 def link_occupancy(flows, fabric, cycle_seconds, placement=None,
-                   duplex=None, psum_bytes=None):
+                   duplex=None, psum_bytes=None, schedule_slack=None):
     """T2 static contention: per-RESOURCE occupancy time from the structured flows.
+
+    What the number IS (O26 / C29): for the given routing -- which wires each
+    flow occupies is fixed by the scheme and the placement -- any schedule, a
+    compile-time one included, spends at least volume / bandwidth on each
+    wire. The busiest wire's occupancy is therefore the least serialization
+    ANY schedule can reach: exact for private links (nothing shared) and for
+    a shared bus (one resource, any work-conserving arbitration reaches it),
+    a lower bound for a routed grid or tree, where the missing piece is
+    queueing / arbitration of the flows that share a segment. Re-routing
+    changes the per-wire volumes and is a search move, not a refinement of
+    this number. A schedule that cannot reach the bound is expressed by the
+    fabric's `schedule_slack` (>= 1, platform input; `schedule_slack=`
+    overrides it), which multiplies every occupancy below.
 
     Direction and width (O22/O23): a flow's DOWN component (inputs, 8-bit
     activations) and UP component (outputs = partial sums) are routed
@@ -294,6 +307,8 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None,
     pl = placement or placement_mod.sequential_fill(fabric)
     psum = (getattr(fabric, "psum_word_bytes", 2.0) if psum_bytes is None
             else float(psum_bytes))
+    slack = (getattr(fabric, "schedule_slack", 1.0) if schedule_slack is None
+             else float(schedule_slack))
 
     bw, level_of = {}, {}
     for lv in fabric.levels:
@@ -344,12 +359,12 @@ def link_occupancy(flows, fabric, cycle_seconds, placement=None,
         lvl, src, dst, tag = witness[r]
         per_link.append({"level": lvl, "resource": r, "direction": tag,
                          "volume": vol,
-                         "seconds": vol / lv_bw * cycle_seconds,
+                         "seconds": vol / lv_bw * cycle_seconds * slack,
                          "src": src, "dst": dst})
     worst = max(per_link, key=lambda x: x["seconds"], default=None)
     return {"per_link": per_link,
             "serialization_s": worst["seconds"] if worst else 0.0,
-            "bottleneck": worst}
+            "bottleneck": worst, "schedule_slack": slack}
 
 
 # --------------------------------------------------------------------------

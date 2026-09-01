@@ -18,6 +18,34 @@ _DEFAULT_YAML = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 
 @dataclass(frozen=True)
+class Device:
+    """The analog device the die is built from (O17a / C30): the two numbers
+    that turn every words-per-cycle reading of this model into seconds -- the
+    cycle per input bit slice and the slices per MVM row (t_MVM = cycle x
+    slices). PLATFORM INPUT, declared in the fabric YAML; every latency and
+    every GB/s <-> words/cycle conversion reads it (the anchor registry
+    included), and a run's CiMLoop cycle (GLOBAL_CYCLE_SECONDS of the macro)
+    is checked against it (Fabric.verify_cycle). The shipped value is the
+    calibrated wan_nature_2022 macro: 10.14 us per MVM row over 7 slices."""
+    name: str = "wan_nature_2022 (NeuRRAM class, 130 nm RRAM)"
+    cycle_seconds: float = 10.14e-6 / 7        # per input bit slice
+    input_slices_per_mvm: int = 7              # signed 8-bit inputs, encoded
+    calibration: str = "CiMLoop calibration of the macro (Wan et al., Nature 2022)"
+
+    @property
+    def t_mvm_s(self) -> float:
+        """Seconds per MVM row through one crossbar: the device-speed axis."""
+        return self.cycle_seconds * self.input_slices_per_mvm
+
+    def words_per_cycle(self, gbps: float) -> float:
+        """GB/s -> words per device cycle (1 word = 8 bits)."""
+        return gbps * 1e9 * self.cycle_seconds
+
+    def gbps(self, wc: float) -> float:
+        return wc / (1e9 * self.cycle_seconds)
+
+
+@dataclass(frozen=True)
 class Link:
     """The network connecting a level's instances to their parent's hub."""
     name: str
@@ -63,7 +91,7 @@ class DigitalUnit:
     (softmax, GELU, LayerNorm, residual adds) run, next to the glb. Every
     field is a PLATFORM INPUT (DR-8); the shipped values are a generic
     configuration: lanes x clock sized to the die's array output rate
-    (256 arrays x 128 outputs per 1.449 us = 22.6 G results/s -> 32-64 lanes
+    (256 arrays x 128 outputs per device cycle, 1.4486 us = 22.6 G results/s -> 32-64 lanes
     at 1 GHz keep pace), per-op energies from the Horowitz ISSCC 2014 45 nm
     table at the 16-bit intermediate width (see ANCHORS.md)."""
     lanes: int = 64                     # elements processed per digital cycle
@@ -96,7 +124,9 @@ class AttentionUnit:
     kv_pj_per_word_read: float = 50.0
     kv_pj_per_word_write: float = 50.0
     kv_capacity_words: float = 2.0e9        # 2 GB
-    link_bandwidth_words_per_cycle: float = 18112.0   # 12.5 GB/s at the 1.449 us cycle
+    # 12.5 GB/s (Simba GRS) at the default device cycle; the YAML declares
+    # `link_bandwidth_gbps` and the loader converts at the fabric's device
+    link_bandwidth_words_per_cycle: float = 12.5e9 * (10.14e-6 / 7)
     link_pj_per_word: float = 10.0
     link_reference_hops: float = 1.0
     n_units: int = 1                        # units sharing the model's layers
@@ -110,6 +140,9 @@ class Fabric:
     cimloop: dict = field(default_factory=dict)
     # the digital vector unit (O24); None = the platform default configuration
     digital: DigitalUnit = field(default_factory=DigitalUnit)
+    # the analog device (O17a): cycle per input slice x slices per MVM row.
+    # Bandwidths declared in GB/s in the YAML are converted with THIS cycle.
+    device: Device = field(default_factory=Device)
     # off-chip port bandwidth for the model's embedding read (words/cycle at
     # the device cycle); None = not set -> the read is priced but not timed
     offchip_bandwidth_words_per_cycle: Optional[float] = None
@@ -122,6 +155,12 @@ class Fabric:
     # at 16 bits -> 2 words per element by default. Platform input (DR-7):
     # the real chip's ADC / accumulator width decides.
     psum_word_bytes: float = 2.0
+    # Schedule slack (O26 / C29, platform input): the busiest-wire occupancy is
+    # the least time ANY schedule can spend on that wire for the given routing
+    # -- exact for private links and a shared bus, optimistic for a routed
+    # grid. A schedule that cannot reach the bound is a factor >= 1 on every
+    # occupancy; 1.0 = the bound. `link_occupancy` applies it.
+    schedule_slack: float = 1.0
 
     # ------------------------------------------------------------- access
     def level(self, name: str) -> Level:
@@ -180,7 +219,23 @@ class Fabric:
         return [(i % mx, i // mx) for i in range(lv.per_parent)]
 
     # ------------------------------------------------------------- checks
+    def verify_cycle(self, cycle_seconds: float, rtol: float = 1e-9) -> None:
+        """The run's CiMLoop cycle (the macro's GLOBAL_CYCLE_SECONDS) must be
+        the fabric's device cycle: the fabric declares, CiMLoop is the
+        calibrated source it is checked against (O17a). Raises on mismatch."""
+        d = self.device.cycle_seconds
+        if abs(cycle_seconds - d) > rtol * d:
+            raise ValueError(
+                f"fabric {self.name} declares device.cycle_seconds = {d:.7g} s but the run's "
+                f"CiMLoop macro cycle is {cycle_seconds:.7g} s -- fabric device and CiMLoop macro diverged")
+
     def validate(self) -> "Fabric":
+        if not (self.device.cycle_seconds > 0):
+            raise ValueError(f"device.cycle_seconds must be > 0, got {self.device.cycle_seconds}")
+        if self.device.input_slices_per_mvm < 1:
+            raise ValueError(f"device.input_slices_per_mvm must be >= 1, got {self.device.input_slices_per_mvm}")
+        if not (self.schedule_slack >= 1.0):
+            raise ValueError(f"schedule_slack must be >= 1.0 (1.0 = the busiest-wire bound), got {self.schedule_slack}")
         for lv in self.levels:
             if lv.per_parent < 1:
                 raise ValueError(f"{lv.name}: per_parent must be >= 1")
@@ -244,6 +299,21 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
     import yaml
     with open(path) as f:
         raw = yaml.safe_load(f)["fabric"]
+    dv = raw.get("device") or {}
+    device = Device(name=str(dv.get("name", Device.name)),
+                    cycle_seconds=float(dv.get("cycle_seconds", Device.cycle_seconds)),
+                    input_slices_per_mvm=int(dv.get("input_slices_per_mvm", Device.input_slices_per_mvm)),
+                    calibration=str(dv.get("calibration", Device.calibration)))
+
+    def bw(obj, key_wc, key_gbps, where):
+        """A bandwidth declared EITHER in GB/s (converted at the device cycle)
+        or in words per cycle; both at once is an error; neither = None."""
+        a, b = obj.get(key_wc), obj.get(key_gbps)
+        if a is not None and b is not None:
+            raise ValueError(f"{path}: {where}: declare {key_gbps} or {key_wc}, not both")
+        if b is not None:
+            return device.words_per_cycle(float(b))
+        return None if a is None else float(a)
     levels = []
     for lv in raw["levels"]:
         link = lv.get("link")
@@ -259,14 +329,12 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
                       reference_hops=(None if link.get("reference_hops") is None
                                       else float(link["reference_hops"])),
                       calibration=link.get("calibration"),
-                      bandwidth_words_per_cycle=(
-                          None if link.get("bandwidth_words_per_cycle") is None
-                          else float(link["bandwidth_words_per_cycle"])),
+                      bandwidth_words_per_cycle=bw(link, "bandwidth_words_per_cycle",
+                                                   "bandwidth_gbps", lv["name"] + ".link"),
                       topology=link.get("topology", "star"),
                       params=dict(link.get("params") or {})) if link else None,
-            hub_bandwidth_words_per_cycle=(
-                None if lv.get("hub_bandwidth_words_per_cycle") is None
-                else float(lv.get("hub_bandwidth_words_per_cycle"))),
+            hub_bandwidth_words_per_cycle=bw(lv, "hub_bandwidth_words_per_cycle",
+                                             "hub_bandwidth_gbps", lv["name"]),
             slot_pitch_um=(None if lv.get("slot_pitch_um") is None
                            else float(lv.get("slot_pitch_um"))),
         ))
@@ -279,20 +347,40 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
         pj_lut=float(dg.get("pj_lut", DigitalUnit.pj_lut)),
         intermediate_bits=int(dg.get("intermediate_bits", DigitalUnit.intermediate_bits)),
         calibration=str(dg.get("calibration", DigitalUnit.calibration)))
-    ob = raw.get("offchip_bandwidth_words_per_cycle")
-    au = raw.get("attention_unit") or {}
+    ob = bw(raw, "offchip_bandwidth_words_per_cycle", "offchip_bandwidth_gbps", "fabric")
+    au = dict(raw.get("attention_unit") or {})
+    ulink = bw(au, "link_bandwidth_words_per_cycle", "link_bandwidth_gbps", "attention_unit")
+    au.pop("link_bandwidth_gbps", None); au.pop("link_bandwidth_words_per_cycle", None)
     unit = AttentionUnit(**{k: (int(v) if k == "n_units" else (str(v) if k == "calibration" else float(v)))
-                            for k, v in au.items()})
+                            for k, v in au.items()},
+                         **({} if ulink is None else {"link_bandwidth_words_per_cycle": ulink}))
     return Fabric(name=raw["name"], levels=levels,
                   cimloop=raw.get("cimloop", {}),
                   psum_word_bytes=float(raw.get("psum_word_bytes", 2.0)),
-                  digital=digital,
-                  offchip_bandwidth_words_per_cycle=(None if ob is None else float(ob)),
+                  schedule_slack=float(raw.get("schedule_slack", 1.0)),
+                  digital=digital, device=device,
+                  offchip_bandwidth_words_per_cycle=ob,
                   attention_unit=unit,
                   ).validate()
 
 
 _CACHE = {}
+
+
+def provenance(fab: "Fabric") -> dict:
+    """What the fabric IS, for every result JSON (C27: a whole chain of
+    results once carried no record of the macro grid they were computed on)."""
+    def mesh(name):
+        lv = next((l for l in fab.levels if l.name == name), None)
+        return list(lv.mesh) if (lv is not None and lv.mesh) else None
+    macro = next((l for l in fab.levels if l.name == "macro"), None)
+    return {"name": fab.name, "die_mesh": mesh("die"), "macro_mesh": mesh("macro"),
+            "core_mesh": mesh("core"), "crossbar_mesh": mesh("crossbar"),
+            "macro_scheme": macro.link.topology if (macro and macro.link) else None,
+            "schedule_slack": getattr(fab, "schedule_slack", 1.0),
+            "device": {"name": fab.device.name, "cycle_seconds": fab.device.cycle_seconds,
+                       "input_slices_per_mvm": fab.device.input_slices_per_mvm,
+                       "t_mvm_s": fab.device.t_mvm_s}}
 
 
 def default() -> Fabric:
@@ -301,7 +389,7 @@ def default() -> Fabric:
     Defaults to models/fabric/mlx300.yaml; the CIMSIM_FABRIC environment
     variable selects another config file for a whole process tree -- the lever
     for running the same experiments on a fabric variant, e.g.
-        CIMSIM_FABRIC=/home/workspace/models/fabric/mlx300_2x4.yaml python3 ...
+        CIMSIM_FABRIC=/home/workspace/models/fabric/mlx300_3x3.yaml python3 ...
     """
     path = os.path.abspath(os.environ.get("CIMSIM_FABRIC", _DEFAULT_YAML))
     if path not in _CACHE:

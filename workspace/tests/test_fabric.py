@@ -41,9 +41,13 @@ def test_bandwidth_fields_default_to_unlimited():
 
 
 def test_slots_row_major():
-    f = fabric.default()
-    assert f.slots("macro")[:4] == [(0, 0), (1, 0), (2, 0), (0, 1)]
-    assert len(f.slots("macro")) == 8          # 3x3 grid, one slot empty
+    f = fabric.default()                                   # C27: the fill-exact 2x4 / 4x2 grids
+    assert f.slots("macro")[:4] == [(0, 0), (1, 0), (0, 1), (1, 1)]
+    assert len(f.slots("macro")) == 8 and f.level("macro").mesh == (2, 4)
+    assert f.level("crossbar").mesh == (4, 2) and len(f.slots("crossbar")) == 8
+    f3 = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")   # the comparison variant
+    assert f3.slots("macro")[:4] == [(0, 0), (1, 0), (2, 0), (0, 1)]
+    assert len(f3.slots("macro")) == 8          # 3x3 grid, one slot empty
 
 
 def test_verify_against_frozen_stats():

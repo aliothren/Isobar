@@ -15,7 +15,10 @@ from _util import approx
 import scripts.crossbar_comm as cc
 from scripts import fabric, interconnect as ic, placement
 
-F = fabric.default()
+# Group 13's mechanics are hand-checked on the 3x3 grid (hub slot (1,1), one
+# empty slot); since C27 the default fabric is the fill-exact 2x4, so the 3x3
+# comparison variant is loaded explicitly here.
+F = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")
 CYC = 1.449e-6
 VOL = 51_249_152.0
 

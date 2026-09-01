@@ -19,6 +19,7 @@ os.environ.setdefault("CIMSIM_FABRIC",
                       "/home/workspace/models/fabric/mlx300_multidie.yaml")
 
 import scripts.crossbar_comm as cc
+from scripts import fabric as fabric_mod
 from scripts import llm_workload as lw
 from scripts import mlx_system as mlx
 from scripts import placement as pm
@@ -90,6 +91,7 @@ def main():
         out["phases"][phase] = recs
     out["hist_source"] = HIST
     with open(os.path.join(OUT, OUT_JSON), "w") as f:
+        out["fabric"] = fabric_mod.provenance(mlx.FABRIC)
         json.dump(out, f, indent=1)
     print(f"JSON -> {OUT_JSON}")
 

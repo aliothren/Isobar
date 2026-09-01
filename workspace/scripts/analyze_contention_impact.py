@@ -33,6 +33,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import scripts.crossbar_comm as cc
+from scripts import figstyle as fs
 from scripts import fabric as fabric_mod
 from scripts import interconnect as ic
 from scripts import llm_workload as lw
@@ -47,9 +48,9 @@ SCHEMES = [("star", {}, "star (private links)"),
            ("h_tree", {"branching": 4}, "h-tree (k=4)"),
            ("bus", {}, "bus (one shared medium)")]
 
-LAYOUTS = [("3x3, glb at centre", {"routing": "xy", "hub": "center"}, None),
-           ("3x3, glb at corner", {"routing": "xy", "hub": "corner"}, None),
-           ("2x4, glb at centre", {"routing": "xy", "hub": "center"}, (2, 4))]
+LAYOUTS = [("2x4, glb at centre", {"routing": "xy", "hub": "center"}, None),
+           ("2x4, glb at corner", {"routing": "xy", "hub": "corner"}, None),
+           ("3x3, glb at centre", {"routing": "xy", "hub": "center"}, (3, 3))]   # comparison: the earlier default
 
 
 def variant(base, topology, params, bw, mesh=None):
@@ -72,16 +73,16 @@ def serialization(flows, fab, cyc):
 
 
 def draw_segment_maps():
-    """Pure geometry -- no mapper run needed. The 2x4 pair is the MAIN figure
-    (the company-preferred fill-exact layout); the 3x3 pair exists for
-    comparison only."""
+    """Pure geometry -- no mapper run needed. The 2x4 pair (the default,
+    company-preferred fill-exact layout) is the MAIN figure; the 3x3 pair
+    (the earlier default, one empty slot) exists for comparison only (C27)."""
     base = fabric_mod.default()
-    figs = [("contention_segment_map_2x4.png",
-             [("2x4, glb at centre", {"routing": "xy", "hub": "center"}, (2, 4)),
-              ("2x4, glb at corner", {"routing": "xy", "hub": "corner"}, (2, 4))]),
-            ("contention_segment_map.png",       # 3x3, comparison use only
-             [("3x3, glb at centre", {"routing": "xy", "hub": "center"}, None),
-              ("3x3, glb at corner", {"routing": "xy", "hub": "corner"}, None)])]
+    figs = [("contention_segment_map.png",
+             [("2x4, glb at centre", {"routing": "xy", "hub": "center"}, None),
+              ("2x4, glb at corner", {"routing": "xy", "hub": "corner"}, None)]),
+            ("contention_segment_map_3x3.png",   # comparison use only
+             [("3x3, glb at centre", {"routing": "xy", "hub": "center"}, (3, 3)),
+              ("3x3, glb at corner", {"routing": "xy", "hub": "corner"}, (3, 3))])]
     for fname, pair in figs:
         fig, axes = plt.subplots(1, 2, figsize=(11, 4.8))
         for ax, (label, params, mesh) in zip(axes, pair):
@@ -192,8 +193,12 @@ def main():
     # ------------------------------------------------ figures
     def sweep_fig(curves, title, path, note):
         plt.figure(figsize=(7.8, 5.2))
-        for label, ys in curves.items():
-            plt.plot(BW_SWEEP, ys, "o-", ms=4, label=label)
+        for labels, ys in fs.group_identical(list(curves.items())):
+            line, = plt.plot(BW_SWEEP, ys, "o-", ms=4, label=fs.merged_label(labels))
+            if len(labels) > 1:
+                k = len(BW_SWEEP) // 3
+                plt.annotate(f"{len(labels)} curves identical", (BW_SWEEP[k], ys[k]), textcoords="offset points",
+                             xytext=(6, 7), fontsize=6.5, color=line.get_color())
         plt.axvline(BW_POINT, color="0.55", ls=":", lw=1.2)
         plt.xscale("log", base=2); plt.yscale("log")
         plt.xlabel("link bandwidth (words / cycle)  --  PLACEHOLDER axis, DR-2")
@@ -221,7 +226,8 @@ def main():
     draw_segment_maps()
 
     with open(os.path.join(OUT, "contention_impact.json"), "w") as f:
-        json.dump({"operating_point_words_per_cycle": BW_POINT,
+        json.dump({"fabric": fabric_mod.provenance(fabric_mod.default()),
+                   "operating_point_words_per_cycle": BW_POINT,
                    "stall_free_latency_s": stall_free, "compute_s": compute,
                    "write_s": write, "prop_s": prop, "macro_edge_words": unit,
                    "by_scheme": rowsA, "by_layout": rowsB,

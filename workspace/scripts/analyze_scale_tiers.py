@@ -34,10 +34,12 @@ import scripts.crossbar_comm as cc
 import dataclasses
 
 OUT = "/home/workspace/analysis"
-CYC = 1.4485714285714284e-06
-WC_PER_GBPS = 1e9 * CYC
-GRS = 12.5                        # GB/s, Simba package mesh (measured)
-NOC = [("Simba 8.75", 8.75), ("ESP 32", 32.0), ("FlooNoC 80.6", 80.6)]
+from scripts import anchors as an
+CYC = an.CYCLE_S
+WC_PER_GBPS = an.WC_PER_GBPS
+GRS_A = an.by_key("grs")
+GRS = GRS_A.gbps                  # GB/s, Simba package mesh (measured) -- the digital D2D anchor
+NOC = [(a.label, a.gbps) for a in an.digital(an.ONDIE)]   # the digital on-die anchors (registry)
 REF_WC = 16384.0
 PJ = 10.0e-12
 TEAL, SLATE, RED, GOLD = "#2a9d8f", "#8fa8bf", "#d1495b", "#e8a13c"
@@ -82,7 +84,8 @@ def die_serial(fab, slots_n, edge_words, wc, edge_down=None, edge_up=None):
             for r, tag in m.path_directed(a, b):
                 key = r + (f"/{tag}" if m.duplex and tag else "")
                 load[key] = load.get(key, 0.0) + vol * w
-    return (max(load.values()) / wc * CYC if load else 0.0), m, pl
+    slack = getattr(fab, "schedule_slack", 1.0)          # O26: the same factor link_occupancy applies
+    return (max(load.values()) / wc * CYC * slack if load else 0.0), m, pl
 
 
 def die_bw(fab, wc):
@@ -302,7 +305,7 @@ def main():
         axes[0].plot(g, ys, lw=1.7, label=label)
     axes[0].axvline(GRS, color="0.35", ls="--", lw=1.2)
     axes[0].text(GRS * 1.1, axes[0].get_ylim()[1] * 0.5,
-                 "Simba GRS 12.5 GB/s\n(measured)", fontsize=8.5)
+                 f"{GRS_A.label} GB/s\n({GRS_A.status}, digital)", fontsize=8.5)
     axes[0].set_xscale("log"); axes[0].set_yscale("log")
     axes[0].set_xlabel("die-to-die link bandwidth (GB/s)")
     axes[0].set_ylabel("operator latency (ms)")
@@ -417,7 +420,7 @@ def main():
     print(f"PNG -> {p3}")
 
     with open(os.path.join(OUT, "scale_tiers.json"), "w") as f:
-        json.dump({"tierM": tierM, "tierM_v1": tierM_v1,
+        json.dump({"fabric": fabric_mod.provenance(fab), "tierM": tierM, "tierM_v1": tierM_v1,
                    "tierL": tierL, "tierL_v1": tierL_v1, "tierL_hub_once": tierL_hub1,
                    "seatings": seatings,
                    "accounting": "O13: block die-sets seated disjointly, inputs routed "

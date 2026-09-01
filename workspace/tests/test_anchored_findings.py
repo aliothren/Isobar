@@ -23,9 +23,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIX = json.load(open(os.path.join(HERE, "fixtures", "stack_per_op_v1.json")))
 FIX2 = json.load(open(os.path.join(HERE, "fixtures", "stack_per_op_v2.json")))
 REF = FIX["ref_words_per_cycle"]
-CYC = 1.4485714285714284e-06
-WC_PER_GBPS = 1e9 * CYC                        # = 1448.57 words/cycle per GB/s
-ANCH = {"simba": 8.75, "esp": 32.0, "floonoc": 80.6}     # GB/s, ANCHORS.md
+from scripts import anchors as an
+CYC = an.CYCLE_S
+WC_PER_GBPS = an.WC_PER_GBPS                   # = 1448.57 words/cycle per GB/s
+ANCH = {"simba": an.by_key("simba_ondie").gbps, "esp": an.by_key("esp").gbps,
+        "floonoc": an.by_key("floonoc").gbps}     # GB/s, the registry (scripts/anchors.py)
 STATIC = {"qkv_proj", "out_proj", "ffn1", "ffn2"}
 N = 24
 
@@ -388,4 +390,115 @@ def test_v5_scheme_ordering_unchanged():
              "mesh, glb corner", "bus (shared medium)"]
     for g in ANCH.values():
         vals = [stack5("prefill", l, g, True, "sum") for l in order]
+        assert vals == sorted(vals), g
+
+
+# -------------------------------------------------- C27: the fill-exact 2x4 default (v6)
+FIX6 = json.load(open(os.path.join(HERE, "fixtures", "stack_per_op_v6.json")))
+MESHES = ["mesh, glb centre", "mesh, glb corner", "h-tree (k=4)"]
+
+
+def stack6(phase, label, gbps, attention_on_chip, overlap="max"):
+    per = FIX6["phases"][phase]["per_op"][label]
+    wc = gbps * WC_PER_GBPS
+    tot = base = 0.0
+    for o in per:
+        if not attention_on_chip and o["name"] not in STATIC:
+            continue
+        wr = o["write_s"] if attention_on_chip else 0.0
+        ser = o["serial_s"] * REF / wc
+        tot += wr + (max(o["compute_s"], ser) if overlap == "max"
+                     else o["compute_s"] + ser)
+        base += wr + o["compute_s"]
+    return tot / base
+
+
+def test_v6_is_a_geometry_change_only():
+    """C27 switched the default die from the 3x3-with-a-hole grids to the
+    fill-exact 2x4 macro / 4x2 crossbar grids. Compute, write and the
+    star / bus serializations are bit-identical to v5 (no geometry in them);
+    only the two routed-grid rows moved (2 schemes x 6 matmuls x 2 phases);
+    the tree carried 4 macros' traffic on its busiest wire on both grids, so
+    its rows did not move either."""
+    assert FIX6["fabric"]["macro_mesh"] == [2, 4] and FIX6["fabric"]["crossbar_mesh"] == [4, 2]
+    moved = 0
+    for phase in ("prefill", "decode"):
+        for label, per in FIX6["phases"][phase]["per_op"].items():
+            for a, b in zip(per, FIX5["phases"][phase]["per_op"][label]):
+                assert a["name"] == b["name"]
+                approx(a["compute_s"], b["compute_s"], 1e-12) if b["compute_s"] else None
+                assert a["write_s"] == b["write_s"]
+                if label in ("mesh, glb centre", "mesh, glb corner"):
+                    moved += a["serial_s"] != b["serial_s"]
+                elif b["serial_s"]:
+                    approx(a["serial_s"], b["serial_s"], 1e-9), (phase, label, a["name"])
+        # the stall-free stack carries the per-op PROPAGATION term, which reads
+        # the grids' worst-case paths (macro 2x4, crossbar 4x2): +6 us per pass
+        # (0.0008% of the 826 ms prefill stack, 0.04% of the 14.8 ms decode stack)
+        # -- the only non-wire number that moved
+        approx(FIX6["phases"][phase]["stall_free_s"], FIX5["phases"][phase]["stall_free_s"], 5e-4)
+        assert abs(FIX6["phases"][phase]["stall_free_s"] - FIX5["phases"][phase]["stall_free_s"]) < 1e-5
+        assert FIX6["phases"][phase]["stall_free_s"] != FIX5["phases"][phase]["stall_free_s"]
+    assert moved == 24
+
+
+def test_v6_hub_position_lever_vanishes_on_the_fill_exact_grid():
+    """On the 2x4 grid the routed schemes tie: mesh centre, mesh corner and
+    the tree all put 4 macros' traffic on the busiest wire (the elongated
+    grid funnels a full column either way), where the 3x3 read 3 / 5 / 4.
+    The buffer-position lever of v5 (corner / centre 1.67x) is a property
+    of the squarer grid, not of the chip."""
+    for phase in ("prefill", "decode"):
+        per = FIX6["phases"][phase]["per_op"]
+        star = {o["name"]: o["serial_s"] for o in per["star (private links)"]}
+        for label in MESHES:
+            for o in per[label]:
+                if star[o["name"]] > 0:
+                    approx(o["serial_s"], 4.0 * star[o["name"]], 1e-9), (phase, label, o["name"])
+        bus = {o["name"]: o["serial_s"] for o in per["bus (shared medium)"]}
+        assert all(bus[n] > 4.0 * star[n] for n in star if star[n] > 0)
+
+
+def test_v6_anchored_readout():
+    """The published anchored table on the 2x4 default: 1.00x at every
+    digital anchor and scheme (perfect-overlap end, both conditions); the
+    zero-overlap end at Simba reads star 1.013x, the three routed schemes
+    1.052x, bus 1.148x (prefill on chip) and bus 1.167x (offloaded decode);
+    at ESP the bus reads 1.040x, at FlooNoC 1.016x. At the analog-reality
+    band's low end (0.4 GB/s, estimated) the routed schemes read 1.31x and
+    the bus 3.33x at the perfect-overlap end; at 8 GB/s every scheme 1.00x."""
+    for phase, on_chip in (("prefill", True), ("decode", False)):
+        for label in FIX6["phases"][phase]["per_op"]:
+            for g in ANCH.values():
+                approx(stack6(phase, label, g, on_chip), 1.00, 1e-3)
+            approx(stack6(phase, label, 8.0, on_chip), 1.00, 5e-3)
+    Z = lambda label, g, ph="prefill", oc=True: stack6(ph, label, g, oc, "sum")
+    approx(Z("star (private links)", ANCH["simba"]), 1.013, 2e-3)
+    for label in MESHES:
+        approx(Z(label, ANCH["simba"]), 1.052, 2e-3)
+        approx(stack6("prefill", label, 0.4, True), 1.312, 5e-3)
+    approx(Z("bus (shared medium)", ANCH["simba"]), 1.148, 2e-3)
+    approx(Z("bus (shared medium)", ANCH["simba"], "decode", False), 1.167, 2e-3)   # matmul rows only (STATIC)
+    approx(Z("bus (shared medium)", ANCH["esp"]), 1.040, 2e-3)
+    approx(Z("bus (shared medium)", ANCH["floonoc"]), 1.016, 2e-3)
+    approx(stack6("prefill", "bus (shared medium)", 0.4, True), 3.331, 5e-3)
+
+
+def test_v6_thresholds_on_the_grid():
+    """2^k-grid knees (prefill on chip, perfect-overlap end), the largest
+    2^k words/cycle at which the stack is >= 1.01x / >= 2x: star 256 / 64,
+    the routed schemes 1,024 / 256, the bus 2,048 / 512 -- the centred grid
+    moved up from 512 (v5) and the corner grid stayed, because both now
+    carry 4 macros' traffic on the busiest wire."""
+    def knee(label, level):
+        hit = [wc for wc in (2 ** k for k in range(3, 24))
+               if stack6("prefill", label, wc / WC_PER_GBPS, True) >= level]
+        return max(hit) if hit else None
+    assert knee("star (private links)", 1.01) == 256 and knee("star (private links)", 2.0) == 64
+    for label in MESHES:
+        assert knee(label, 1.01) == 1024 and knee(label, 2.0) == 256, label
+    assert knee("bus (shared medium)", 1.01) == 2048 and knee("bus (shared medium)", 2.0) == 512
+    order = ["star (private links)", "mesh, glb centre", "bus (shared medium)"]
+    for g in ANCH.values():
+        vals = [stack6("prefill", l, g, True, "sum") for l in order]
         assert vals == sorted(vals), g

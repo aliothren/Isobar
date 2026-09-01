@@ -20,6 +20,7 @@ os.environ.setdefault("CIMSIM_FABRIC",
                       "/home/workspace/models/fabric/mlx300_multidie.yaml")
 
 import scripts.crossbar_comm as cc
+from scripts import fabric as fabric_mod
 from scripts import interconnect as ic
 from scripts import llm_workload as lw
 from scripts import mlx_system as mlx
@@ -108,7 +109,8 @@ def main():
                            "multidie_placement.json"), "w") as f:
         act0 = next(f for f in flows
                     if f["level_name"] == "die" and f["volume"] > 0)
-        json.dump({"op": {"C": 2048, "M": 16384, "dies": lw.dies_for_op(big)},
+        json.dump({"fabric": fabric_mod.provenance(fab),
+                   "op": {"C": 2048, "M": 16384, "dies": lw.dies_for_op(big)},
                    "compute_s": comp, "die_edge_words": dvol,
                    "die_edge_down": act0.get("down", dvol),
                    "die_edge_up": act0.get("up", 0.0),
@@ -119,7 +121,7 @@ def main():
 
 
 def _loads(flows, fab, pl):
-    occ = cc.link_occupancy(flows, fab, 1.449e-6, pl)
+    occ = cc.link_occupancy(flows, fab, fab.device.cycle_seconds, pl)
     return {e["resource"]: e["volume"] for e in occ["per_link"]
             if e["resource"].startswith("die/")}
 

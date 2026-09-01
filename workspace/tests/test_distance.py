@@ -43,12 +43,23 @@ def test_hop_latency_monotone_up_the_tree():
 
 
 def test_propagation_latency_golden():
-    """default placement must reproduce the legacy worst-case geometry."""
+    """The legacy worst-case geometry (12 / 3 / 2 hops -> 136 ns per operator)
+    is the 3x3 grids' -- the default fabric up to C27, kept as the comparison
+    variant. The fill-exact 2x4 / 4x2 default (C27) has longer worst-case
+    paths: 16 / 4 / 2 hops -> 180 ns per operator, the +6 us of propagation
+    on the 826 ms prefill stack between the v5 and v6 fixtures."""
     import scripts.crossbar_comm as cc
-    hops = cc.level_max_hops()
+    from scripts import fabric
+    f3 = fabric.from_yaml("/home/workspace/models/fabric/mlx300_3x3.yaml")
+    hops = cc.level_max_hops(f3)
     assert set(hops) == {"glb<->macro", "macro<->core", "core<->crossbar"}
     approx(hops["glb<->macro"], 12.0, 1e-9)
     approx(hops["macro<->core"], 3.0, 1e-9)
     approx(hops["core<->crossbar"], 2.0, 1e-9)
     lat = pa.position_aware_latency(hops, mlx.HOP_LATENCY_NS)
     approx(lat["total_ns"], 136.0, 1e-9)
+    hops24 = cc.level_max_hops(fabric.default())
+    approx(hops24["glb<->macro"], 16.0, 1e-9)
+    approx(hops24["macro<->core"], 4.0, 1e-9)
+    approx(hops24["core<->crossbar"], 2.0, 1e-9)
+    approx(pa.position_aware_latency(hops24, mlx.HOP_LATENCY_NS)["total_ns"], 180.0, 1e-9)

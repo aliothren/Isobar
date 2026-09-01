@@ -1,0 +1,2260 @@
+{
+ "S": 512,
+ "n_layers": 24,
+ "bw_sweep": [
+  512.0,
+  1024.0,
+  2048.0,
+  4096.0,
+  8192.0,
+  16384.0,
+  32768.0,
+  65536.0,
+  131072.0,
+  262144.0,
+  524288.0,
+  1048576.0,
+  2097152.0,
+  4194304.0,
+  8388608.0
+ ],
+ "operating_point_words_per_cycle": 16384.0,
+ "phases": {
+  "prefill": {
+   "stall_free_s": 0.826431168,
+   "compute_s": 0.74760192,
+   "write_s": 0.0654336,
+   "elementwise_s": 0.013369728,
+   "rows": [
+    {
+     "scheme": "star",
+     "label": "star (private links)",
+     "latency_s": 0.826431168,
+     "mult": 1.0,
+     "latency_sum_s": 0.8347749394285713,
+     "mult_sum": 1.0100961480540038,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "mesh",
+     "label": "mesh, glb centre",
+     "latency_s": 0.826431168,
+     "mult": 1.0,
+     "latency_sum_s": 0.8598062537142857,
+     "mult_sum": 1.0403845922160158,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "mesh",
+     "label": "mesh, glb corner",
+     "latency_s": 0.826431168,
+     "mult": 1.0,
+     "latency_sum_s": 0.8598062537142857,
+     "mult_sum": 1.0403845922160158,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "h_tree",
+     "label": "h-tree (k=4)",
+     "latency_s": 0.826431168,
+     "mult": 1.0,
+     "latency_sum_s": 0.8598062537142857,
+     "mult_sum": 1.0403845922160158,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "bus",
+     "label": "bus (shared medium)",
+     "latency_s": 0.826431168,
+     "mult": 1.0,
+     "latency_sum_s": 0.9209939108571428,
+     "mult_sum": 1.1144230112787115,
+     "network_bound_ops": []
+    }
+   ],
+   "per_op": {
+    "star (private links)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 4.635428571428571e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005238214285714285,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.005737139999999999,
+      "latency_sum_s": 0.005829848571428571,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 4.635428571428571e-05,
+      "latency_s": 0.0073729799999999995,
+      "latency_sum_s": 0.007419334285714285,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 2.3177142857142855e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005215037142857142,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 4.635428571428571e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005238214285714285,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005284568571428571,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb centre": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0053772771428571425,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.005737139999999999,
+      "latency_sum_s": 0.006107974285714285,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0073729799999999995,
+      "latency_sum_s": 0.0075583971428571425,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005284568571428571,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0053772771428571425,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0055626942857142855,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb corner": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0053772771428571425,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.005737139999999999,
+      "latency_sum_s": 0.006107974285714285,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0073729799999999995,
+      "latency_sum_s": 0.0075583971428571425,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005284568571428571,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0053772771428571425,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0055626942857142855,
+      "network_bound": false
+     }
+    ],
+    "h-tree (k=4)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0053772771428571425,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.005737139999999999,
+      "latency_sum_s": 0.006107974285714285,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0073729799999999995,
+      "latency_sum_s": 0.0075583971428571425,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 9.270857142857142e-05,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005284568571428571,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00018541714285714284,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0053772771428571425,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0055626942857142855,
+      "network_bound": false
+     }
+    ],
+    "bus (shared medium)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 0.000262144,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000262144,
+      "latency_sum_s": 0.000262144,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 0.000196608,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 0.000196608,
+      "latency_sum_s": 0.000196608,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 8.1936e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 8.1936e-05,
+      "latency_sum_s": 8.1936e-05,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 1.6384e-05,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6384e-05,
+      "latency_sum_s": 1.6384e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.00064896,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005840819999999999,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00054528,
+      "serial_s": 0.0007880228571428571,
+      "latency_s": 0.005737139999999999,
+      "latency_sum_s": 0.006525162857142856,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 0.00519168,
+      "write_s": 0.00218112,
+      "serial_s": 0.00046354285714285707,
+      "latency_s": 0.0073729799999999995,
+      "latency_sum_s": 0.007836522857142857,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0003708342857142857,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.0055626942857142855,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0007416685714285714,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.005933528571428571,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 0.00519168,
+      "write_s": 0.0,
+      "serial_s": 0.0009270857142857141,
+      "latency_s": 0.0051918599999999995,
+      "latency_sum_s": 0.006118945714285714,
+      "network_bound": false
+     }
+    ]
+   },
+   "curves": {
+    "star (private links)": [
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "mesh, glb centre": [
+     1.4523074328193777,
+     1.0430768983637504,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "mesh, glb corner": [
+     1.4523074328193777,
+     1.0430768983637504,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "h-tree (k=4)": [
+     1.4523074328193777,
+     1.0430768983637504,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "bus (shared medium)": [
+     3.7569214952800167,
+     1.9261533148206305,
+     1.1184614705003133,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   "curves_sum": {
+    "star (private links)": [
+     1.323076737728127,
+     1.1615383688640635,
+     1.0807691844320315,
+     1.0403845922160158,
+     1.0201922961080077,
+     1.0100961480540038,
+     1.0050480740270018,
+     1.002524037013501,
+     1.0012620185067505,
+     1.000631009253375,
+     1.0003155046266876,
+     1.0001577523133438,
+     1.0000788761566721,
+     1.0000394380783357,
+     1.000019719039168
+    ],
+    "mesh, glb centre": [
+     2.2923069509125082,
+     1.6461534754562541,
+     1.323076737728127,
+     1.1615383688640635,
+     1.0807691844320315,
+     1.0403845922160158,
+     1.0201922961080077,
+     1.0100961480540038,
+     1.0050480740270018,
+     1.002524037013501,
+     1.0012620185067505,
+     1.000631009253375,
+     1.0003155046266876,
+     1.0001577523133438,
+     1.0000788761566721
+    ],
+    "mesh, glb corner": [
+     2.2923069509125082,
+     1.6461534754562541,
+     1.323076737728127,
+     1.1615383688640635,
+     1.0807691844320315,
+     1.0403845922160158,
+     1.0201922961080077,
+     1.0100961480540038,
+     1.0050480740270018,
+     1.002524037013501,
+     1.0012620185067505,
+     1.000631009253375,
+     1.0003155046266876,
+     1.0001577523133438,
+     1.0000788761566721
+    ],
+    "h-tree (k=4)": [
+     2.2923069509125082,
+     1.6461534754562541,
+     1.323076737728127,
+     1.1615383688640635,
+     1.0807691844320315,
+     1.0403845922160158,
+     1.0201922961080077,
+     1.0100961480540038,
+     1.0050480740270018,
+     1.002524037013501,
+     1.0012620185067505,
+     1.000631009253375,
+     1.0003155046266876,
+     1.0001577523133438,
+     1.0000788761566721
+    ],
+    "bus (shared medium)": [
+     4.661536360918772,
+     2.830768180459386,
+     1.9153840902296932,
+     1.4576920451148467,
+     1.2288460225574234,
+     1.1144230112787115,
+     1.0572115056393558,
+     1.028605752819678,
+     1.0143028764098387,
+     1.0071514382049191,
+     1.0035757191024595,
+     1.0017878595512295,
+     1.000893929775615,
+     1.0004469648878074,
+     1.0002234824439036
+    ]
+   },
+   "thresholds": {
+    "star (private links)": {
+     "bw_1pct": null,
+     "bw_2x": null,
+     "bw_1pct_sum": 16384.0,
+     "bw_2x_sum": null
+    },
+    "mesh, glb centre": {
+     "bw_1pct": 1024.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 65536.0,
+     "bw_2x_sum": 512.0
+    },
+    "mesh, glb corner": {
+     "bw_1pct": 1024.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 65536.0,
+     "bw_2x_sum": 512.0
+    },
+    "h-tree (k=4)": {
+     "bw_1pct": 1024.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 65536.0,
+     "bw_2x_sum": 512.0
+    },
+    "bus (shared medium)": {
+     "bw_1pct": 2048.0,
+     "bw_2x": 512.0,
+     "bw_1pct_sum": 131072.0,
+     "bw_2x_sum": 1024.0
+    }
+   },
+   "accounting_variants": {
+    "shared-direction, 8-bit partial sums (pre-O22/O23)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.0099278789197705,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 6.373714285714285e-05,
+       "qk^t": 5.214857142857142e-05,
+       "av": 5.214857142857142e-05,
+       "out_proj": 3.4765714285714286e-05,
+       "ffn1": 6.953142857142857e-05,
+       "ffn2": 6.953142857142857e-05
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0397115156790822,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.0002549485714285714,
+       "qk^t": 0.0002085942857142857,
+       "av": 0.0002085942857142857,
+       "out_proj": 0.00013906285714285714,
+       "ffn1": 0.0002781257142857143,
+       "ffn2": 0.0002781257142857143
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0397115156790822,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.0002549485714285714,
+       "qk^t": 0.0002085942857142857,
+       "av": 0.0002085942857142857,
+       "out_proj": 0.00013906285714285714,
+       "ffn1": 0.0002781257142857143,
+       "ffn2": 0.0002781257142857143
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0397115156790822,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.0002549485714285714,
+       "qk^t": 0.0002085942857142857,
+       "av": 0.0002085942857142857,
+       "out_proj": 0.00013906285714285714,
+       "ffn1": 0.0002781257142857143,
+       "ffn2": 0.0002781257142857143
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.0794230313581643,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.0005098971428571428,
+       "qk^t": 0.0004171885714285714,
+       "av": 0.0004171885714285714,
+       "out_proj": 0.0002781257142857143,
+       "ffn1": 0.0005562514285714286,
+       "ffn2": 0.0005562514285714286
+      }
+     }
+    },
+    "direction-split only (O22)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.0074038419062694,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 4.635428571428571e-05,
+       "qk^t": 4.635428571428571e-05,
+       "av": 4.635428571428571e-05,
+       "out_proj": 2.3177142857142855e-05,
+       "ffn1": 4.635428571428571e-05,
+       "ffn2": 4.635428571428571e-05
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.029615367625078,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00018541714285714284,
+       "qk^t": 0.00018541714285714284,
+       "av": 0.00018541714285714284,
+       "out_proj": 9.270857142857142e-05,
+       "ffn1": 0.00018541714285714284,
+       "ffn2": 0.00018541714285714284
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.029615367625078,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00018541714285714284,
+       "qk^t": 0.00018541714285714284,
+       "av": 0.00018541714285714284,
+       "out_proj": 9.270857142857142e-05,
+       "ffn1": 0.00018541714285714284,
+       "ffn2": 0.00018541714285714284
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.029615367625078,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00018541714285714284,
+       "qk^t": 0.00018541714285714284,
+       "av": 0.00018541714285714284,
+       "out_proj": 9.270857142857142e-05,
+       "ffn1": 0.00018541714285714284,
+       "ffn2": 0.00018541714285714284
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.0794230313581643,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.0005098971428571428,
+       "qk^t": 0.0004171885714285714,
+       "av": 0.0004171885714285714,
+       "out_proj": 0.0002781257142857143,
+       "ffn1": 0.0005562514285714286,
+       "ffn2": 0.0005562514285714286
+      }
+     }
+    },
+    "16-bit partial sums only (O23)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.0143028764098387,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 8.112e-05,
+       "qk^t": 9.850285714285714e-05,
+       "av": 5.7942857142857134e-05,
+       "out_proj": 4.635428571428571e-05,
+       "ffn1": 9.270857142857142e-05,
+       "ffn2": 0.00011588571428571427
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0572115056393558,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00032448,
+       "qk^t": 0.00039401142857142856,
+       "av": 0.00023177142857142854,
+       "out_proj": 0.00018541714285714284,
+       "ffn1": 0.0003708342857142857,
+       "ffn2": 0.00046354285714285707
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0572115056393558,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00032448,
+       "qk^t": 0.00039401142857142856,
+       "av": 0.00023177142857142854,
+       "out_proj": 0.00018541714285714284,
+       "ffn1": 0.0003708342857142857,
+       "ffn2": 0.00046354285714285707
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0572115056393558,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00032448,
+       "qk^t": 0.00039401142857142856,
+       "av": 0.00023177142857142854,
+       "out_proj": 0.00018541714285714284,
+       "ffn1": 0.0003708342857142857,
+       "ffn2": 0.00046354285714285707
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.1144230112787115,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00064896,
+       "qk^t": 0.0007880228571428571,
+       "av": 0.00046354285714285707,
+       "out_proj": 0.0003708342857142857,
+       "ffn1": 0.0007416685714285714,
+       "ffn2": 0.0009270857142857141
+      }
+     }
+    },
+    "direction-split + 16-bit partial sums (current)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.0100961480540038,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 4.635428571428571e-05,
+       "qk^t": 9.270857142857142e-05,
+       "av": 4.635428571428571e-05,
+       "out_proj": 2.3177142857142855e-05,
+       "ffn1": 4.635428571428571e-05,
+       "ffn2": 9.270857142857142e-05
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0403845922160158,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00018541714285714284,
+       "qk^t": 0.0003708342857142857,
+       "av": 0.00018541714285714284,
+       "out_proj": 9.270857142857142e-05,
+       "ffn1": 0.00018541714285714284,
+       "ffn2": 0.0003708342857142857
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0403845922160158,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00018541714285714284,
+       "qk^t": 0.0003708342857142857,
+       "av": 0.00018541714285714284,
+       "out_proj": 9.270857142857142e-05,
+       "ffn1": 0.00018541714285714284,
+       "ffn2": 0.0003708342857142857
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0403845922160158,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00018541714285714284,
+       "qk^t": 0.0003708342857142857,
+       "av": 0.00018541714285714284,
+       "out_proj": 9.270857142857142e-05,
+       "ffn1": 0.00018541714285714284,
+       "ffn2": 0.0003708342857142857
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.1144230112787115,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 0.00064896,
+       "qk^t": 0.0007880228571428571,
+       "av": 0.00046354285714285707,
+       "out_proj": 0.0003708342857142857,
+       "ffn1": 0.0007416685714285714,
+       "ffn2": 0.0009270857142857141
+      }
+     }
+    }
+   }
+  },
+  "decode": {
+   "stall_free_s": 0.014803392749999995,
+   "compute_s": 0.00146016,
+   "write_s": 0.0132912,
+   "elementwise_s": 2.611275e-05,
+   "rows": [
+    {
+     "scheme": "star",
+     "label": "star (private links)",
+     "latency_s": 0.014803392749999995,
+     "mult": 1.0,
+     "latency_sum_s": 0.014819689178571429,
+     "mult_sum": 1.001100857678145,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "mesh",
+     "label": "mesh, glb centre",
+     "latency_s": 0.014803392749999995,
+     "mult": 1.0,
+     "latency_sum_s": 0.014868578464285713,
+     "mult_sum": 1.0044034307125789,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "mesh",
+     "label": "mesh, glb corner",
+     "latency_s": 0.014803392749999995,
+     "mult": 1.0,
+     "latency_sum_s": 0.014868578464285713,
+     "mult_sum": 1.0044034307125789,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "h_tree",
+     "label": "h-tree (k=4)",
+     "latency_s": 0.014803392749999995,
+     "mult": 1.0,
+     "latency_sum_s": 0.014868578464285713,
+     "mult_sum": 1.0044034307125789,
+     "network_bound_ops": []
+    },
+    {
+     "scheme": "bus",
+     "label": "bus (shared medium)",
+     "latency_s": 0.014803392749999995,
+     "mult": 1.0,
+     "latency_sum_s": 0.014988085607142859,
+     "mult_sum": 1.0124763870189732,
+     "network_bound_ops": []
+    }
+   ],
+   "per_op": {
+    "star (private links)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 9.053571428571428e-08,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0410535714285714e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 0.0005556,
+      "latency_sum_s": 0.0005557810714285714,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 9.053571428571428e-08,
+      "latency_s": 1.8840000000000003e-05,
+      "latency_sum_s": 1.8930535714285717e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 4.526785714285714e-08,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0365267857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 9.053571428571428e-08,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0410535714285714e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0501071428571428e-05,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb centre": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0682142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 0.0005556,
+      "latency_sum_s": 0.0005563242857142856,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.8840000000000003e-05,
+      "latency_sum_s": 1.920214285714286e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0501071428571428e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0682142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.1044285714285714e-05,
+      "network_bound": false
+     }
+    ],
+    "mesh, glb corner": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0682142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 0.0005556,
+      "latency_sum_s": 0.0005563242857142856,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.8840000000000003e-05,
+      "latency_sum_s": 1.920214285714286e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0501071428571428e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0682142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.1044285714285714e-05,
+      "network_bound": false
+     }
+    ],
+    "h-tree (k=4)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0682142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 0.0005556,
+      "latency_sum_s": 0.0005563242857142856,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.8840000000000003e-05,
+      "latency_sum_s": 1.920214285714286e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142855e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0501071428571428e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 3.621428571428571e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.0682142857142857e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.1044285714285714e-05,
+      "network_bound": false
+     }
+    ],
+    "bus (shared medium)": [
+     {
+      "name": "softmax",
+      "kind": "elementwise",
+      "compute_s": 5.12e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 5.12e-07,
+      "latency_sum_s": 5.12e-07,
+      "network_bound": false
+     },
+     {
+      "name": "gelu",
+      "kind": "elementwise",
+      "compute_s": 3.84e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.84e-07,
+      "latency_sum_s": 3.84e-07,
+      "network_bound": false
+     },
+     {
+      "name": "layernorm",
+      "kind": "elementwise",
+      "compute_s": 1.6003125e-07,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 1.6003125e-07,
+      "latency_sum_s": 1.6003125e-07,
+      "network_bound": false
+     },
+     {
+      "name": "residual",
+      "kind": "elementwise",
+      "compute_s": 3.2e-08,
+      "write_s": 0.0,
+      "serial_s": 0.0,
+      "latency_s": 3.2e-08,
+      "latency_sum_s": 3.2e-08,
+      "network_bound": false
+     },
+     {
+      "name": "qkv_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.2675e-06,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.1587499999999999e-05,
+      "network_bound": false
+     },
+     {
+      "name": "qk^t",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 0.00054528,
+      "serial_s": 1.5391071428571428e-06,
+      "latency_s": 0.0005556,
+      "latency_sum_s": 0.0005571391071428571,
+      "network_bound": false
+     },
+     {
+      "name": "av",
+      "kind": "dynamic",
+      "compute_s": 1.014e-05,
+      "write_s": 8.52e-06,
+      "serial_s": 9.053571428571427e-07,
+      "latency_s": 1.8840000000000003e-05,
+      "latency_sum_s": 1.9745357142857146e-05,
+      "network_bound": false
+     },
+     {
+      "name": "out_proj",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 7.242857142857142e-07,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.1044285714285714e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn1",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.4485714285714284e-06,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.1768571428571427e-05,
+      "network_bound": false
+     },
+     {
+      "name": "ffn2",
+      "kind": "static",
+      "compute_s": 1.014e-05,
+      "write_s": 0.0,
+      "serial_s": 1.8107142857142854e-06,
+      "latency_s": 1.032e-05,
+      "latency_sum_s": 1.2130714285714285e-05,
+      "network_bound": false
+     }
+    ]
+   },
+   "curves": {
+    "star (private links)": [
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "mesh, glb centre": [
+     1.0493184239808813,
+     1.0046969927600842,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "mesh, glb corner": [
+     1.0493184239808813,
+     1.0046969927600842,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "h-tree (k=4)": [
+     1.0493184239808813,
+     1.0046969927600842,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ],
+    "bus (shared medium)": [
+     1.3006075366453702,
+     1.1009853443418043,
+     1.0129167300902309,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   "curves_sum": {
+    "star (private links)": [
+     1.0352274457006294,
+     1.017613722850315,
+     1.0088068614251575,
+     1.0044034307125789,
+     1.0022017153562897,
+     1.001100857678145,
+     1.0005504288390727,
+     1.0002752144195364,
+     1.0001376072097683,
+     1.0000688036048844,
+     1.0000344018024423,
+     1.0000172009012214,
+     1.0000086004506106,
+     1.0000043002253054,
+     1.000002150112653
+    ],
+    "mesh, glb centre": [
+     1.1409097828025174,
+     1.0704548914012586,
+     1.0352274457006294,
+     1.017613722850315,
+     1.0088068614251575,
+     1.0044034307125789,
+     1.0022017153562897,
+     1.001100857678145,
+     1.0005504288390727,
+     1.0002752144195364,
+     1.0001376072097683,
+     1.0000688036048844,
+     1.0000344018024423,
+     1.0000172009012214,
+     1.0000086004506106
+    ],
+    "mesh, glb corner": [
+     1.1409097828025174,
+     1.0704548914012586,
+     1.0352274457006294,
+     1.017613722850315,
+     1.0088068614251575,
+     1.0044034307125789,
+     1.0022017153562897,
+     1.001100857678145,
+     1.0005504288390727,
+     1.0002752144195364,
+     1.0001376072097683,
+     1.0000688036048844,
+     1.0000344018024423,
+     1.0000172009012214,
+     1.0000086004506106
+    ],
+    "h-tree (k=4)": [
+     1.1409097828025174,
+     1.0704548914012586,
+     1.0352274457006294,
+     1.017613722850315,
+     1.0088068614251575,
+     1.0044034307125789,
+     1.0022017153562897,
+     1.001100857678145,
+     1.0005504288390727,
+     1.0002752144195364,
+     1.0001376072097683,
+     1.0000688036048844,
+     1.0000344018024423,
+     1.0000172009012214,
+     1.0000086004506106
+    ],
+    "bus (shared medium)": [
+     1.3992443846071325,
+     1.1996221923035661,
+     1.099811096151783,
+     1.0499055480758916,
+     1.024952774037946,
+     1.0124763870189732,
+     1.0062381935094868,
+     1.0031190967547434,
+     1.0015595483773718,
+     1.0007797741886861,
+     1.0003898870943433,
+     1.000194943547172,
+     1.000097471773586,
+     1.000048735886793,
+     1.0000243679433967
+    ]
+   },
+   "thresholds": {
+    "star (private links)": {
+     "bw_1pct": null,
+     "bw_2x": null,
+     "bw_1pct_sum": 1024.0,
+     "bw_2x_sum": null
+    },
+    "mesh, glb centre": {
+     "bw_1pct": 512.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 4096.0,
+     "bw_2x_sum": null
+    },
+    "mesh, glb corner": {
+     "bw_1pct": 512.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 4096.0,
+     "bw_2x_sum": null
+    },
+    "h-tree (k=4)": {
+     "bw_1pct": 512.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 4096.0,
+     "bw_2x_sum": null
+    },
+    "bus (shared medium)": {
+     "bw_1pct": 2048.0,
+     "bw_2x": null,
+     "bw_1pct_sum": 16384.0,
+     "bw_2x_sum": null
+    }
+   },
+   "accounting_variants": {
+    "shared-direction, 8-bit partial sums (pre-O22/O23)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.001082510050176,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 1.2448660714285713e-07,
+       "qk^t": 1.0185267857142856e-07,
+       "av": 1.0185267857142856e-07,
+       "out_proj": 6.790178571428571e-08,
+       "ffn1": 1.3580357142857143e-07,
+       "ffn2": 1.3580357142857143e-07
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0043300402007025,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 4.979464285714285e-07,
+       "qk^t": 4.0741071428571423e-07,
+       "av": 4.0741071428571423e-07,
+       "out_proj": 2.7160714285714286e-07,
+       "ffn1": 5.432142857142857e-07,
+       "ffn2": 5.432142857142857e-07
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0043300402007025,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 4.979464285714285e-07,
+       "qk^t": 4.0741071428571423e-07,
+       "av": 4.0741071428571423e-07,
+       "out_proj": 2.7160714285714286e-07,
+       "ffn1": 5.432142857142857e-07,
+       "ffn2": 5.432142857142857e-07
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0043300402007025,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 4.979464285714285e-07,
+       "qk^t": 4.0741071428571423e-07,
+       "av": 4.0741071428571423e-07,
+       "out_proj": 2.7160714285714286e-07,
+       "ffn1": 5.432142857142857e-07,
+       "ffn2": 5.432142857142857e-07
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.0086600804014052,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 9.95892857142857e-07,
+       "qk^t": 8.148214285714285e-07,
+       "av": 8.148214285714285e-07,
+       "out_proj": 5.432142857142857e-07,
+       "ffn1": 1.0864285714285714e-06,
+       "ffn2": 1.0864285714285714e-06
+      }
+     }
+    },
+    "direction-split only (O22)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.00080729563064,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 9.053571428571428e-08,
+       "qk^t": 9.053571428571428e-08,
+       "av": 9.053571428571428e-08,
+       "out_proj": 4.526785714285714e-08,
+       "ffn1": 9.053571428571428e-08,
+       "ffn2": 9.053571428571428e-08
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0032291825225579,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 3.621428571428571e-07,
+       "qk^t": 3.621428571428571e-07,
+       "av": 3.621428571428571e-07,
+       "out_proj": 1.8107142857142855e-07,
+       "ffn1": 3.621428571428571e-07,
+       "ffn2": 3.621428571428571e-07
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0032291825225579,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 3.621428571428571e-07,
+       "qk^t": 3.621428571428571e-07,
+       "av": 3.621428571428571e-07,
+       "out_proj": 1.8107142857142855e-07,
+       "ffn1": 3.621428571428571e-07,
+       "ffn2": 3.621428571428571e-07
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0032291825225579,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 3.621428571428571e-07,
+       "qk^t": 3.621428571428571e-07,
+       "av": 3.621428571428571e-07,
+       "out_proj": 1.8107142857142855e-07,
+       "ffn1": 3.621428571428571e-07,
+       "ffn2": 3.621428571428571e-07
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.0086600804014052,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 9.95892857142857e-07,
+       "qk^t": 8.148214285714285e-07,
+       "av": 8.148214285714285e-07,
+       "out_proj": 5.432142857142857e-07,
+       "ffn1": 1.0864285714285714e-06,
+       "ffn2": 1.0864285714285714e-06
+      }
+     }
+    },
+    "16-bit partial sums only (O23)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.0015595483773718,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 1.584375e-07,
+       "qk^t": 1.9238839285714285e-07,
+       "av": 1.1316964285714284e-07,
+       "out_proj": 9.053571428571428e-08,
+       "ffn1": 1.8107142857142855e-07,
+       "ffn2": 2.2633928571428568e-07
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0062381935094868,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 6.3375e-07,
+       "qk^t": 7.695535714285714e-07,
+       "av": 4.5267857142857136e-07,
+       "out_proj": 3.621428571428571e-07,
+       "ffn1": 7.242857142857142e-07,
+       "ffn2": 9.053571428571427e-07
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0062381935094868,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 6.3375e-07,
+       "qk^t": 7.695535714285714e-07,
+       "av": 4.5267857142857136e-07,
+       "out_proj": 3.621428571428571e-07,
+       "ffn1": 7.242857142857142e-07,
+       "ffn2": 9.053571428571427e-07
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0062381935094868,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 6.3375e-07,
+       "qk^t": 7.695535714285714e-07,
+       "av": 4.5267857142857136e-07,
+       "out_proj": 3.621428571428571e-07,
+       "ffn1": 7.242857142857142e-07,
+       "ffn2": 9.053571428571427e-07
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.0124763870189732,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 1.2675e-06,
+       "qk^t": 1.5391071428571428e-06,
+       "av": 9.053571428571427e-07,
+       "out_proj": 7.242857142857142e-07,
+       "ffn1": 1.4485714285714284e-06,
+       "ffn2": 1.8107142857142854e-06
+      }
+     }
+    },
+    "direction-split + 16-bit partial sums (current)": {
+     "star (private links)": {
+      "mult": 1.0,
+      "mult_sum": 1.001100857678145,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 9.053571428571428e-08,
+       "qk^t": 1.8107142857142855e-07,
+       "av": 9.053571428571428e-08,
+       "out_proj": 4.526785714285714e-08,
+       "ffn1": 9.053571428571428e-08,
+       "ffn2": 1.8107142857142855e-07
+      }
+     },
+     "mesh, glb centre": {
+      "mult": 1.0,
+      "mult_sum": 1.0044034307125789,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 3.621428571428571e-07,
+       "qk^t": 7.242857142857142e-07,
+       "av": 3.621428571428571e-07,
+       "out_proj": 1.8107142857142855e-07,
+       "ffn1": 3.621428571428571e-07,
+       "ffn2": 7.242857142857142e-07
+      }
+     },
+     "mesh, glb corner": {
+      "mult": 1.0,
+      "mult_sum": 1.0044034307125789,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 3.621428571428571e-07,
+       "qk^t": 7.242857142857142e-07,
+       "av": 3.621428571428571e-07,
+       "out_proj": 1.8107142857142855e-07,
+       "ffn1": 3.621428571428571e-07,
+       "ffn2": 7.242857142857142e-07
+      }
+     },
+     "h-tree (k=4)": {
+      "mult": 1.0,
+      "mult_sum": 1.0044034307125789,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 3.621428571428571e-07,
+       "qk^t": 7.242857142857142e-07,
+       "av": 3.621428571428571e-07,
+       "out_proj": 1.8107142857142855e-07,
+       "ffn1": 3.621428571428571e-07,
+       "ffn2": 7.242857142857142e-07
+      }
+     },
+     "bus (shared medium)": {
+      "mult": 1.0,
+      "mult_sum": 1.0124763870189732,
+      "per_op_serial_s": {
+       "softmax": 0.0,
+       "gelu": 0.0,
+       "layernorm": 0.0,
+       "residual": 0.0,
+       "qkv_proj": 1.2675e-06,
+       "qk^t": 1.5391071428571428e-06,
+       "av": 9.053571428571427e-07,
+       "out_proj": 7.242857142857142e-07,
+       "ffn1": 1.4485714285714284e-06,
+       "ffn2": 1.8107142857142854e-06
+      }
+     }
+    }
+   }
+  }
+ },
+ "elementwise": true,
+ "digital_unit": {
+  "lanes": 64,
+  "clock_hz": 1000000000.0,
+  "pj_add": 0.05,
+  "pj_mul": 0.6,
+  "pj_lut": 1.0,
+  "intermediate_bits": 16,
+  "calibration": "DR-8: generic example values (Horowitz ISSCC 2014; sized to array output rate)"
+ },
+ "basis": "co-residency shares (48-die seating)",
+ "wire_accounting": "direction-split full-duplex links (bus shared); partial sums 2 words",
+ "fabric": {
+  "name": "mlx300",
+  "die_mesh": [
+   1,
+   1
+  ],
+  "macro_mesh": [
+   2,
+   4
+  ],
+  "core_mesh": [
+   2,
+   2
+  ],
+  "crossbar_mesh": [
+   4,
+   2
+  ],
+  "macro_scheme": "star"
+ },
+ "ref_words_per_cycle": 16384.0,
+ "_provenance": "frozen from analysis/contention_system.json after C27: the default fabric is the fill-exact 2x4 macro grid / 4x2 crossbar grid (the company-preferred layout); v5 was the 3x3-with-a-hole grids, kept as models/fabric/mlx300_3x3.yaml. Value units (C25), co-residency basis (C14), direction-split full-duplex wires and 16-bit partial sums (C17). Compute, write and digital-unit rows are bit-identical to v5; the mesh / h-tree serial_s rows moved with the geometry, star and bus rows did not."
+}

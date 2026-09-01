@@ -43,6 +43,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import scripts.crossbar_comm as cc
+from scripts import figstyle as fs
 from scripts import fabric as fabric_mod
 from scripts import llm_workload as lw
 from scripts import placement as placement_mod
@@ -242,6 +243,7 @@ def main():
     out["wire_accounting"] = ("direction-split full-duplex links (bus shared); "
                               f"partial sums {base.psum_word_bytes:g} words")
     with open(os.path.join(OUT, "contention_system.json"), "w") as f:
+        out["fabric"] = fabric_mod.provenance(fabric_mod.default())
         json.dump(out, f, indent=1)
     print("JSON -> contention_system.json")
 
@@ -252,11 +254,15 @@ def make_figure(out, name, n_layers, S_):
     for ax, phase in zip(axes, ("prefill", "decode")):
         d = out["phases"][phase]
         sums = d.get("curves_sum", {})
-        for label, ys in d["curves"].items():
-            line, = ax.plot(BW, ys, "o-", ms=3.5, lw=1.6, label=label)
-            if label in sums:            # O7 bracket: max..sum overlap band
-                ax.fill_between(BW, ys, sums[label],
+        for labels, ys in fs.group_identical(list(d["curves"].items())):
+            line, = ax.plot(BW, ys, "o-", ms=3.5, lw=1.6, label=fs.merged_label(labels))
+            if labels[0] in sums:        # O7 bracket: max..sum overlap band
+                ax.fill_between(BW, ys, sums[labels[0]],
                                 color=line.get_color(), alpha=0.13, lw=0)
+            if len(labels) > 1:
+                k = len(BW) // 3
+                ax.annotate(f"{len(labels)} curves identical", (BW[k], ys[k]), textcoords="offset points",
+                            xytext=(6, 7), fontsize=6.5, color=line.get_color())
         ax.axvline(BW_POINT, color="0.55", ls=":", lw=1.2)
         ax.axhline(1.01, color="#b33f2b", ls="--", lw=1.0)
         ax.set_xscale("log", base=2); ax.set_yscale("log")
