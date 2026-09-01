@@ -1,3 +1,27 @@
+## This fork: the system-level CIM study (workspace/)
+
+This fork carries a system-level study of communication on analog CIM LLM
+inference on top of CiMLoop. Start here:
+
+- `workspace/analysis/SUMMARY.en.md` — features & results, level by level
+  (the reading-position section §2.5 carries the device axis, the measured
+  scaling law, the T1 axis and the phase diagram).
+- `workspace/analysis/PROGRESS.md` — the narrative progress report.
+- `workspace/analysis/ANCHORS.md` — the bandwidth-anchor registry rendering
+  (published link specs with provenance and statuses; chip points).
+- `workspace/analysis/FIXLIST.en.md` — every known modeling gap, its status,
+  and the worklist (the single authority on what is done and what remains).
+- `workspace/tests/` — the guardrail suite (`python3 tests/run_tests.py`
+  inside the container); `tests/CHANGELOG.md` logs every numbered change
+  (C1..C40) with what moved.
+
+Key scripts (run inside the container, from `workspace/`): the anchor
+registry `scripts/anchors.py`; the per-axis sweeps + the (t_MVM x
+bandwidth) device plane `scripts/sweep_axes.py`; the scaling-law probes
+`scripts/run_scaling_probes.py` (+ `analyze_scaling_law.py`); the phase
+diagram `scripts/analyze_phase_diagram.py`; the whole-model regeneration
+list `analysis/regen_v6.sh`. Figures land in `workspace/analysis/*.png`.
+
 ## Tutorials and Examples
 
 Prior to running any tutorials or examples, please complete the [Timeloop and

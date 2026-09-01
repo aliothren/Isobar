@@ -66,3 +66,42 @@ def test_component_sum_matches_op_total():
     s = sum(i["energy_J"] for i in lv.values())
     total = g["op_energy_J"]
     assert 0.985 <= s / total <= 1.005, f"sum {s} vs op total {total}"
+
+def test_exact_total_energy_closes_the_summary_rounding():
+    """Hygiene 22 (C40): `tl_output_parsing.exact_total_energy_J` sums the
+    per-component 'Energy (total)' lines -- on the frozen ffn1 fixture
+    2697.92 uJ, where the rounded per-compute summary path (pytimeloop's
+    parse) gives 2699.48 uJ: a +0.058% overcount from print precision.
+    run_mlx_layer now ships the exact value (the rounded one stays on
+    `energy_summary_J`); published JSON energies move by <= 0.5% at the
+    next regeneration and the ledger's residual row closes then."""
+    import os
+    import re
+    from scripts import tl_output_parsing as tlp
+    here = os.path.dirname(os.path.abspath(__file__))
+    txt = open(os.path.join(here, "fixtures", "ffn1_prefill_stats.txt")).read()
+    exact = tlp.exact_total_energy_J(txt)
+    approx(exact, 2697.92e-6, 1e-4)
+    i = txt.find("Computes =")
+    computes = int(txt[i:].splitlines()[0].split()[-1])
+    rounded = 0.0
+    for l in txt[i:].splitlines()[1:]:
+        if "=" in l:
+            e, v = l.rsplit("=", 1)
+            if e.strip() != "Total":
+                try:
+                    rounded += float(v.strip()) * computes / 1e15
+                except ValueError:
+                    pass
+    approx(rounded / exact, 1.00058, 1e-4)
+    # IDENTITY, not just a golden (C40-r): the sum must agree with the
+    # stats file's OWN Summary 'Energy:' line within its print precision
+    # (3 significant digits) -- this re-validates at every regeneration
+    m = re.search(r"^Energy:\s*([\d.eE+]+) uJ", txt, re.M)
+    approx(exact, float(m.group(1)) * 1e-6, 2.5e-3)
+    # the temporal-reduction / address-generation adders are separate line
+    # items in Timeloop's account and are INCLUDED in the sum; under this
+    # architecture's ERTs they are all zero today (so they add nothing) --
+    # a future ERT pricing them cannot be silently dropped
+    assert not re.search(r"Temporal Reduction Energy \(total\)\s*:\s*[1-9]", txt)
+    assert not re.search(r"Address Generation Energy \(total\)\s*:\s*[1-9]", txt)

@@ -5,8 +5,14 @@ and of the real-system CHIP POINTS the phase diagram (O29) draws.
 Identity. Every measured / post-layout bandwidth here is a DIGITAL
 accelerator's link (Simba, ESP and FlooNoC NoCs on die; Simba's GRS package
 mesh die to die): the upper bound of what fabricated interconnects deliver,
-not the operating point of an analog CIM chip -- no fabricated analog CIM
-system publishes an on-die link bandwidth. A readout against these anchors is
+not the operating point of an analog CIM chip (UCIe-S 64 is one step
+further out: an interconnect STANDARD's ceiling, status `spec`, C40).
+One analog system DOES now
+publish a link rate (C36, 2026-09-01): HERMES's chip spec table gives a
+maximum link data-rate of 3.2 Gbit/s = 0.4 GB/s per link -- landing exactly
+on the analog-reality band's LOW end; the band stays the CLASS estimate,
+the HERMES chip point carries the published value. A readout against the
+digital anchors is
 the digital-ecosystem column of the phase diagram (model scale x device speed
 x transfer paradigm x link tier). The analog-reality tier is a structural
 ESTIMATE, carried as a band with `status = "estimated"`, until a chip's own
@@ -69,7 +75,7 @@ class Anchor:
     label: str            # short, for tables and figure legends
     level: str            # ONDIE | D2D
     paradigm: str         # DIGITAL | ANALOG
-    status: str           # measured | post-layout | secondary | estimated
+    status: str           # measured | post-layout | secondary | spec | estimated
     source: str
     gbps: Optional[float] = None                 # a point ...
     band: Optional[Tuple[float, float]] = None   # ... or a band (low, high)
@@ -88,18 +94,37 @@ ANCHORS = [
     Anchor("simba_ondie", "Simba 8.75", ONDIE, DIGITAL, "measured",
            "Zimmer et al., JSSC 2020 (Simba, 16 nm): 'each link of the NoC achieves 70-Gb/s bandwidth' at 0.72 V",
            gbps=8.75),
-    Anchor("esp", "ESP 32", ONDIE, DIGITAL, "secondary",
-           "ESP SoC NoC, tile-to-tile, as reported in FlooNoC's comparison table (arXiv:2409.17606); "
-           "primary publication to be substituted before external use",
-           gbps=32.0),
+    Anchor("esp", "ESP 32", ONDIE, DIGITAL, "measured",
+           "Jia et al., ESSCIRC 2022 (12nm ESP-based SoC): 5 data NoC planes x 64 bit + "
+           "1 control plane x 32 bit, NoC measured at 800 MHz; tile-to-tile max 281 Gb/s "
+           "(the paper's headline, all 6 planes)",
+           gbps=32.0,
+           derivation="the 5 data planes: 5 x 64 bit x 800 MHz = 256 Gb/s = 32 GB/s tile-to-tile "
+                      "(the quantity FlooNoC's comparison quotes); one physical plane alone is "
+                      "6.4 GB/s -- multi-plane aggregate, stated as such (C36)"),
     Anchor("floonoc", "FlooNoC 80.6", ONDIE, DIGITAL, "post-layout",
            "Fischer et al., FlooNoC, arXiv:2409.17606: 645 Gb/s per link, 12 nm post-layout",
            gbps=80.6),
     Anchor("grs", "GRS 12.5", D2D, DIGITAL, "measured",
            "Zimmer et al., JSSC 2020: Simba package mesh, 100 Gb/s per link direction (GRS)",
            gbps=12.5),
+    Anchor("ucie", "UCIe-S 64", D2D, DIGITAL, "spec",
+           "UCIe Consortium specification (uciexpress.org): STANDARD-package module, "
+           "x16 lanes at 32 GT/s per lane -- an interconnect STANDARD's raw signaling "
+           "ceiling (no protocol overhead deducted), not a measured chip; no per-link "
+           "silicon measurement is in the registry yet -- revisit when one publishes "
+           "(C40, amended C40-r)",
+           gbps=64.0,
+           derivation="16 lanes x 32 GT/s = 512 Gb/s = 64 GB/s per direction per module. "
+                      "Standard package chosen DELIBERATELY: organic substrate, the "
+                      "packaging class of Simba's GRS and of plausible analog-CIM "
+                      "packages (the advanced-package x64 module reaches 256 GB/s -- "
+                      "noted, not adopted). Mapping convention, stated like the HERMES "
+                      "aggregation rule: ONE UCIe module = one model die-link; a real "
+                      "design may gang several modules per edge"),
     Anchor("analog_ondie", "analog on-die 0.4-8", ONDIE, ANALOG, "estimated",
-           "structural estimate: no fabricated analog CIM system publishes an on-die link bandwidth",
+           "structural estimate of the class; the one published analog link rate "
+           "(HERMES 0.4 GB/s, C36) lands on this band's low end",
            band=(0.4, 8.0),
            derivation="a 32-128-bit datapath at 100-500 MHz (65-130 nm digital periphery): "
                       "32 bit x 100 MHz = 0.4 GB/s .. 128 bit x 500 MHz = 8 GB/s"),
@@ -144,10 +169,26 @@ def columns(level: str):
 @dataclass(frozen=True)
 class ChipPoint:
     """A real system as a point of the phase diagram: a device-speed
-    coordinate (seconds per MVM row through one crossbar) and a bandwidth
-    coordinate per level, EACH with its own status. Digital NoCs are not chip
-    points: they have no honest compute coordinate in this model and are
-    drawn as horizontal bandwidth lines (the anchors above)."""
+    coordinate and a bandwidth coordinate per level, EACH with its own
+    status. Digital NoCs are not chip points: they have no honest compute
+    coordinate in this model and are drawn as horizontal bandwidth lines
+    (the anchors above).
+
+    NORMALIZATION RULES (C37) -- every coordinate is in OUR geometry:
+    * t_mvm_s is PER TOKEN: the time for one input row through the chip's
+      resident array stack. A TOPS-derived row time is tile-shape
+      INVARIANT (t = n_arrays x 2RC / TOPS), because the ops per row
+      already scale with the array dimensions -- so no array-height
+      folding (Mythic's 1024-row tile and ISAAC's 128-row array need no
+      rescaling; folding them would double-count the height).
+    * A bandwidth coordinate is what the chip's fabric supplies to the
+      array group ONE OF OUR LINKS serves (a macro = 32 crossbars of
+      256x256): a published PER-PHYSICAL-LINK rate (ondie_gbps_per_link)
+      is aggregated -- links per array x 32 -- before it becomes the
+      coordinate; comparing a single physical link against our per-macro
+      knee is a granularity mismatch (the C36 figure did, corrected here).
+      The estimated bands are AUTHORED at our granularity (a macro-trunk
+      datapath estimate) and need no aggregation."""
     key: str
     label: str
     fabric: str                       # what the paper describes
@@ -156,7 +197,8 @@ class ChipPoint:
     t_mvm_s: Optional[float] = None
     t_mvm_status: str = "pending"     # measured | derived | design-point | pending
     t_mvm_derivation: str = ""
-    ondie_gbps: Optional[float] = None
+    ondie_gbps: Optional[float] = None               # THE COORDINATE, our geometry (C37)
+    ondie_gbps_per_link: Optional[float] = None      # published per-physical-link rate, if any
     ondie_band: Optional[Tuple[float, float]] = None
     ondie_status: str = "not published"
     d2d_gbps: Optional[float] = None
@@ -172,11 +214,18 @@ CHIPS = [
               t_mvm_derivation="7 encoded input bit slices x 1.4486 us (CiMLoop calibration of the macro)",
               ondie_status="not published (chip IO through the board FPGA, 130 nm; hub-IO bound)"),
     ChipPoint("hermes", "HERMES 64-core (2023)",
-              "64 PCM cores, 256x256 each; on-chip network with per-core link controllers; compile-time scheduled",
+              "64 PCM cores, 256x256 each; 418 physical links in a 5 Parallel Prism fabric with per-core link controllers; compile-time scheduled",
               "star", "Le Gallo et al., Nat. Electron. 2023 (arXiv:2212.02872)",
               t_mvm_s=63.1e12 ** -1 * 64 * 2 * 256 * 256, t_mvm_status="derived",
               t_mvm_derivation="63.1 TOPS peak / 64 cores / (2 x 256 x 256 ops per MVM row) = ~133 ns per row",
-              ondie_band=(0.4, 8.0), ondie_status="estimated (link width / clock not in the main text; supplement to check)"),
+              ondie_gbps=32 * (418.0 / 64) * 0.4,
+              ondie_gbps_per_link=0.4,
+              ondie_status="derived (C37 normalization): per PHYSICAL link 0.4 GB/s is published "
+                           "(spec table: max link data-rate 3.2 Gbit/s; the analog band's low end); "
+                           "the coordinate aggregates it to our per-macro-link granularity: "
+                           "(418 links / 64 cores) x 0.4 GB/s x 32 arrays ~= 83.6 GB/s, assuming "
+                           "the ~6.5 links per core run concurrently (Parallel Prism, 'at most six "
+                           "neighboring cores')"),
     ChipPoint("isaac", "ISAAC (2016, design point)",
               "128x128 RRAM crossbars in tiles on a concentrated-mesh NoC (architecture study, not silicon)",
               "mesh", "Shafiee et al., ISCA 2016",
@@ -186,12 +235,16 @@ CHIPS = [
     ChipPoint("mx100", "TetraMem MX100",
               "10 NPUs + RISC-V + DMA engine + shared SRAM (512 KB + 1 MB), 65 nm; shared medium, no per-link bandwidth",
               "bus-T1", "TetraMem, arXiv:2410.14882",
-              t_mvm_status="pending (derive from published TOPS and array size, FIXLIST P2)",
+              t_mvm_status="pending (BLOCKED on the source, checked 2026-09-01: the SoC paper "
+                            "arXiv:2410.14882 publishes no TOPS or MVM rate and product material has "
+                            "none citable; revisit on TetraMem's 22nm SoC publication -- C36)",
               ondie_band=(0.4, 8.0), ondie_status="estimated (SRAM port width x clock; a T1 number in this model)"),
     ChipPoint("mythic_m1076", "Mythic AMP M1076",
               "76 analog tiles, each with 64 KB SRAM + NoC router; compile-time scheduled",
-              "star", "Mythic product material (no academic publication)",
-              t_mvm_status="pending (derive from 25 TOPS peak and the tile array size, FIXLIST P2)",
+              "star", "Mythic product material (no academic publication): 25 TOPS peak, 76 tiles, 80M weights on chip",
+              t_mvm_s=25e12 ** -1 * 76 * 2 * 1024 * 1024, t_mvm_status="derived",
+              t_mvm_derivation="25 TOPS peak / 76 tiles / (2 x 1024 x 1024 ops per MVM row) = ~6.4 us per row; "
+                               "the 1024x1024 tile array from 80M weights / 76 tiles = 1.05M (C36)",
               ondie_band=(0.4, 8.0), ondie_status="estimated (router width / clock not published)"),
     ChipPoint("tsinghua_multichip", "Tsinghua multi-chip (2025)",
               "8 RRAM chips (144k cells each) + FPGA hub; no chip-to-chip direct links, everything through the FPGA",
@@ -206,6 +259,22 @@ def chip(key: str) -> ChipPoint:
         if c.key == key:
             return c
     raise KeyError(key)
+
+
+def hermes_self_consistency():
+    """V0 (C37): HERMES audited against its own knee, from published numbers
+    only. Need per core per token: 256 INT8 inputs every t_MVM; supply per
+    core: (418 links / 64 cores) x 0.4 GB/s. Supply exceeds need by ~1.36x:
+    a fabricated analog chip provisioned its fabric just ABOVE its own
+    knee -- the first external silicon point validating the knee formula
+    (boundary = traffic / compute time), and consistent with its measured
+    63.1 TOPS (a fabric 38x under the knee, as the C36 mis-reading implied,
+    could not have sustained it)."""
+    c = chip("hermes")
+    need = 256.0 / c.t_mvm_s / 1e9                 # GB/s per core, one row per t_MVM
+    supply = (418.0 / 64) * c.ondie_gbps_per_link  # GB/s per core, aggregate ingress
+    return {"need_gbps_per_core": need, "supply_gbps_per_core": supply,
+            "headroom": supply / need}
 
 
 def device_marks():

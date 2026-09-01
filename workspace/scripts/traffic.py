@@ -115,10 +115,17 @@ class TrafficStructure:
 
         Counts are convention-free: with factors {C:4, P:2} there are always
         2 hyperedges of size 4. MEMBERSHIP additionally needs an index
-        convention, and we use the mapping's own loop order with the FIRST
-        listed dim varying slowest. That convention should be confirmed against
-        Timeloop's spatial index order before per-instance results are trusted;
-        the counts and sizes do not depend on it.
+        convention: the mapping's own loop order with the FIRST listed dim
+        varying slowest. CONFIRMED against Timeloop's spatial index order
+        (C38, hygiene 27): Timeloop flattens a nested spatial loop block
+        with the innermost loop varying fastest across the instance index
+        (loop-nest semantics; the arch's meshX assigns the nest to X in
+        order), which is exactly this convention; the parser preserves the
+        nest's textual outer-to-inner order (pinned on the frozen fixture in
+        test_interconnect, together with a guard that no dim repeats in the
+        nest -- the merged-factor form would lose a non-contiguous
+        interleaving). Timeloop emits no per-instance trace, so the
+        loop-nest level is the strongest available check.
         """
         split = next((s for s in self.splits if s.level == level), None)
         if split is None:

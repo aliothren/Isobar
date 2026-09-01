@@ -30,7 +30,7 @@ Axes (A-H at the NeuRRAM tier; the plane sweeps the device):
   H   partial-sum width on the on-die wires (1 vs 2 words, from the stored
       wire accountings; DR-7).
   plane  the (t_MVM x bandwidth) plane (O17b): device grid 0.05-100 us +
-      the three silicon marks (anchors.device_marks()), crossed with A, B1,
+      the silicon marks (anchors.device_marks(); four since C36), crossed with A, B1,
       B3 and C (B2 at the marks only). The metric is the BUSIEST OPERATOR's
       network / compute ratio r(g, t) -- the whole-stack multiplier is NOT
       the plane's metric because the K/V write and the digital unit do not
@@ -692,6 +692,128 @@ def axis_psum(sysd):
     return res
 
 
+# ----------------------------------------------------------------- axis T1
+def axis_t1_hub(sysd):
+    """O28 (C34): the die-buffer (T1) bandwidth axis, ANALYTIC in value
+    units. The hub is ONE shared port -- exactly the MX100-class medium
+    (DMA engine + shared SRAM): per matmul op its occupancy is the T2 bus
+    words (every macro's down stream and 16-bit up stream cross the same
+    medium) plus the op's input tensor arriving INTO the buffer once
+    (P x C x N values), so the T1 boundary is the T2 bus boundary shifted
+    by the in-fill share -- the equivalence the registry's mapping rule
+    promised, now an identity on stored components. Timeloop's native
+    throttling is NOT this axis: it charges the glb in COUNTER units
+    (input fills x7 bit slices + output fills and updates x8 bit groups;
+    the write port binds -- ffn1: 37,224,448 units against 8.9M value
+    words), which is why the old T1 sweep read 160x at "64 w/c". The unit
+    audit is pinned in group 29 and printed by analyze_bandwidth_sweep.py;
+    elementwise ops' glb passes stay energy-priced, not timed (as on every
+    other axis)."""
+    grid = log_grid(1e-3, 1e4, an.ONDIE)
+    lo, hi = grid[0], grid[-1]
+    cfg = lw.GptConfig()
+    conds = [("prefill, attention on chip", "prefill", True),
+             ("prefill, attention offloaded", "prefill", False),
+             ("decode, attention on chip", "decode", True),
+             ("decode, attention offloaded", "decode", False)]
+    res = {"grid_gbps": grid,
+           "port_model": "one shared port (MX100-class DMA + shared SRAM); "
+                         "hub words = T2 bus words + the op's input tensor once",
+           "timeloop_note": "Timeloop's glb throttling charges counter units "
+                            "(inputs x7, outputs x8x2 on the write port), not value "
+                            "words -- validation only, audited in group 29",
+           "conditions": {}}
+    print("\n=== axis T1: the die-buffer hub bandwidth (value units, analytic; O28/C34) ===")
+    for title, phase, on_chip in conds:
+        per_bus = sysd["phases"][phase]["per_op"]["bus (shared medium)"]
+        shapes = {o.name: o.P * o.C * o.N for o in lw.block_ops(cfg, 512, phase)}
+        ops = [o for o in per_bus if on_chip or STAYS(o["name"])]
+        per = {}
+        for o in ops:
+            infill_s = shapes.get(o["name"], 0) * CYC / REF_WC   # seconds at REF_GBPS
+            hub_s = o["serial_s"] + infill_s if o["kind"] != "elementwise" else 0.0
+            per[o["name"]] = {"bus_serial_ref_s": o["serial_s"], "infill_ref_s": infill_s,
+                              "hub_serial_ref_s": hub_s, "compute_s": o["compute_s"],
+                              "write_s": o["write_s"], "kind": o["kind"]}
+        base = sum((o["write_s"] if on_chip else 0.0) + o["compute_s"]
+                   for o in ops) * N_LAYERS
+
+        def stack(g, ov="max"):
+            tot = 0.0
+            for o in ops:
+                ser = ser_at(per[o["name"]]["hub_serial_ref_s"], g)
+                wr = o["write_s"] if on_chip else 0.0
+                tot += wr + (max(o["compute_s"], ser) if ov == "max"
+                             else o["compute_s"] + ser)
+            return tot * N_LAYERS
+
+        def ratio(g):
+            return max((ser_at(v["hub_serial_ref_s"], g) / v["compute_s"]
+                        for v in per.values()
+                        if v["hub_serial_ref_s"] > 0 and v["compute_s"] > 0),
+                       default=0.0)
+
+        knee = max((n for n, v in per.items() if v["compute_s"] > 0 and v["hub_serial_ref_s"] > 0),
+                   key=lambda n: per[n]["hub_serial_ref_s"] / per[n]["compute_s"])
+        thr = {"max_1pct": threshold(lambda g: stack(g) / base, 1.01, lo, hi),
+               "max_2x": threshold(lambda g: stack(g) / base, 2.0, lo, hi),
+               "sum_1pct": threshold(lambda g: stack(g, "sum") / base, 1.01, lo, hi),
+               "busiest_op_net_eq_comp": threshold(ratio, 1.0, lo, hi)}
+        res["conditions"][title] = {
+            "base_s": base, "per_op": per, "knee_op": knee,
+            "mult_max": [stack(g) / base for g in grid],
+            "mult_sum": [stack(g, "sum") / base for g in grid],
+            "busiest_ratio": [ratio(g) for g in grid],
+            "thresholds_gbps": thr,
+            "columns": {key: {"max": stack(gb) / base, "sum": stack(gb, "sum") / base,
+                              "busiest_ratio": ratio(gb)}
+                        for key, _, gb, _, _ in an.columns(an.ONDIE)}}
+        print(f"  {title:32} knee {knee:9} 1% {fmt_thr(thr['max_1pct'], hi):>7} GB/s  "
+              f"2x {fmt_thr(thr['max_2x'], hi):>7}  net=comp {fmt_thr(thr['busiest_op_net_eq_comp'], hi):>7}")
+    print_columns(an.ONDIE, [(t, [f"{c['columns'][k]['max']:.2f}..{c['columns'][k]['sum']:.2f}x"
+                                  for k, *_ in an.columns(an.ONDIE)])
+                             for t, c in res["conditions"].items()],
+                  "T1 hub stack multiplier at the on-die columns (the digital anchors are "
+                  "NoC links -- scale reference only; the band is the MX100-class estimate):")
+    return res
+
+
+def fig_t1_hub(res, sysd):
+    grid = res["grid_gbps"]
+    fig, ax = plt.subplots(figsize=(8.2, 5.0))
+    for title, col in (("prefill, attention on chip", "#2a9d8f"),
+                       ("prefill, attention offloaded", "#d1495b")):
+        c = res["conditions"][title]
+        ax.plot(grid, c["mult_max"], "-", color=col, lw=1.7,
+                label=f"T1 hub, {title} (knee {c['knee_op']})")
+        ax.plot(grid, c["mult_sum"], "--", color=col, lw=0.9, alpha=0.8)
+        # the bus twin: the same stored components without the in-fill
+        per_bus = sysd["phases"]["prefill"]["per_op"]["bus (shared medium)"]
+        on_chip = "on chip" in title
+        ops = [o for o in per_bus if on_chip or STAYS(o["name"])]
+        base = sum((o["write_s"] if on_chip else 0.0) + o["compute_s"] for o in ops) * N_LAYERS
+        bus = [sum((o["write_s"] if on_chip else 0.0)
+                   + max(o["compute_s"], ser_at(o["serial_s"], g)) for o in ops) * N_LAYERS / base
+               for g in grid]
+        ax.plot(grid, bus, ":", color=col, lw=1.2, alpha=0.9,
+                label=f"T2 bus twin (no in-fill), {title}")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlim(grid[0], grid[-1])
+    mark(ax, an.ONDIE)
+    ax.set_title("Axis T1 -- the die-buffer hub (one shared port, value units; O28/C34):\n"
+                 "the T1 boundary = the T2 bus boundary + the input's in-fill (the identity, group 29);\n"
+                 "MX100-class chips (DMA + shared SRAM) are read on THIS axis, at the estimated band",
+                 fontsize=9)
+    ax.set_xlabel("die-buffer hub bandwidth (GB/s, value units)")
+    ax.set_ylabel("whole-stack latency / no-network stack")
+    ax.grid(alpha=0.3, which="both")
+    ax.legend(fontsize=7, loc="upper right")
+    fig.tight_layout()
+    p = os.path.join(OUT, "sweep_axis_t1_hub.png")
+    fig.savefig(p, dpi=130); plt.close(fig)
+    print(f"PNG -> {p}")
+
+
 # ----------------------------------------------------------------- the plane (O17b)
 MAIN_COND = "prefill, attention offloaded"       # the main-figure condition
 MM_KINDS = ("static", "dynamic")                 # the ops whose compute scales with t_MVM
@@ -850,10 +972,13 @@ def axis_device_plane(sysd):
            "ffn2_step": "ffn2 (C = 4d) sits x2 above its on-die d line at d <= 4096 and ON it "
                         "from d >= 5120 (the tiler's macro C split flips 2 -> 4) -- an "
                         "annotation, not a kinked line",
-           "d2d_form": "tiler closed form, zero mapper: the hand-off tensor once; entry = "
-                       "ffn2's input (S x 4d) once the block splits into die-sets "
-                       "(block_chain, column split); d = 1024 = the C13 half-layer split "
-                       "(hand-off = the hidden state S x d, payer ffn1)",
+           "d2d_form": "tiler closed form, zero mapper. d = 1024: the PURE hand-off "
+                       "stream (ops fit their die; only the hidden state S x d crosses, "
+                       "C13 half-layer split, payer ffn1). d >= 2560: BLOCK CHAINS "
+                       "INCLUDING their spanning operators (column split, tensor once: "
+                       "each receiving die takes the full input) -- the binding entry is "
+                       "ffn2's S x 4d, so these lines already carry the flood and sit "
+                       "above the single-operator probe (C35)",
            "ondie": {}, "d2d": {}}
     print("\n  -- the d family (routed on die / die level), r = 1 at t_ref in GB/s:")
     for d, label in D_FAMILY:
@@ -922,10 +1047,73 @@ def axis_device_plane(sysd):
         print(f"  fixed terms, {phase:7}: {base_s*1e3:8.2f} ms -> {h['stack_s']*1e3:8.2f} ms at HERMES "
               f"({h['speedup']:.2f}x for a {T_REF/an.chip('hermes').t_mvm_s:.1f}x faster device)")
     res["fixed_terms"] = ft
+
+    # ---- the offloaded twin (C39): the same decomposition with the attention
+    #      (qk^t, av, softmax) AND the whole K/V write moved to the external
+    #      digital unit (DR-9 generic values; the die<->unit link at its
+    #      declared GB/s). The die keeps the projections + FFN (scale with
+    #      t_MVM) and its small digital remainder; the unit chain (link
+    #      transfer + unit compute + K/V memory) is the NEW fixed floor.
+    #      Mechanism note (C39): ON CHIP the dynamic attention ops are
+    #      WRITE-RATE-BOUND -- each decode token must SET its K/V row before
+    #      qk^t/av can read it, so a device 76x faster at reading with
+    #      unchanged writes keeps its on-chip attention walled (DR-5); the
+    #      two exits are faster writes (DR-5) or this offload (DR-9).
+    unit = fabric_mod.default().attention_unit
+    hops = lw.unit_link_hops()
+    fto = {}
+    relay = {}
+    for phase in ("prefill", "decode"):
+        c = lw.attention_unit_cost(cfg, S355, phase, unit, hops=hops)
+        ops_ph = sysd["phases"][phase]["per_op"]["star (private links)"]
+        mm_off = N_LAYERS * sum(o["compute_s"] for o in ops_ph
+                                if o["kind"] != "elementwise" and STAYS(o["name"]))
+        dg_off = N_LAYERS * sum(o["compute_s"] for o in ops_ph
+                                if o["kind"] == "elementwise" and STAYS(o["name"]))
+        link_s = N_LAYERS * (c["link_out_s"] + c["link_back_s"])
+        unit_s = N_LAYERS * (c["compute_s"] + c["kv_s"])
+        base_off = mm_off + dg_off + link_s + unit_s
+        fto[phase] = {"mm_s": mm_off, "digital_s": dg_off, "link_s": link_s,
+                      "unit_s": unit_s, "base_s": base_off,
+                      "stack_s": [mm_off * t / T_REF + dg_off + link_s + unit_s
+                                  for t in t_grid],
+                      "at_marks": {m.key: {"stack_s": mm_off * m.t_mvm_s / T_REF + dg_off + link_s + unit_s,
+                                           "speedup": base_off / (mm_off * m.t_mvm_s / T_REF + dg_off + link_s + unit_s)}
+                                   for m in marks}}
+        ph = sysd["phases"][phase]
+        f_on = ph["write_s"] + ph["elementwise_s"]
+        f_off = dg_off + link_s + unit_s
+        # crossing t*: offloaded < on-chip <=> r (mm_on - mm_off) > f_off - f_on;
+        # with f_off < f_on (the generic DR-9 unit beats the write wall) there is
+        # NO crossing: offload wins single-pass latency at EVERY device tier.
+        t_star = (T_REF * (f_off - f_on) / (ph["compute_s"] - mm_off)
+                  if f_off > f_on else None)
+        relay[phase] = {
+            "onchip_floor_s": f_on, "offloaded_floor_s": f_off,
+            "crossing_t_s": t_star,
+            "ratio_at_marks": {m.key: ft[phase]["at_marks"][m.key]["stack_s"] /
+                               fto[phase]["at_marks"][m.key]["stack_s"] for m in marks}}
+        print(f"  offloaded,   {phase:7}: {base_off*1e3:8.2f} ms -> "
+              f"{fto[phase]['at_marks']['hermes']['stack_s']*1e3:8.2f} ms at HERMES "
+              f"({fto[phase]['at_marks']['hermes']['speedup']:.2f}x); floor {f_off*1e3:.2f} ms "
+              f"(unit {unit_s*1e3:.2f} + link {link_s*1e3:.2f} + digital {dg_off*1e3:.2f}) "
+              f"vs on-chip floor {f_on*1e3:.2f} ms; crossing: "
+              f"{'none -- offload wins at every tier' if t_star is None else f'{t_star*1e6:.2f} us'}")
+    res["fixed_terms_offloaded"] = fto
+    res["offload_relay"] = dict(relay,
+        verdict="the fixed-terms RELAY: every configuration has its own floor -- on chip the "
+                "K/V write + digital unit (DR-5/DR-8), offloaded the attention unit + die<->unit "
+                "link (DR-9). Under the generic DR-9 values the offloaded floor beats the write "
+                "wall in both phases, so offload wins single-pass latency at EVERY device tier "
+                "(no crossing -- the expected 1-3 us threshold does not exist); but the unit "
+                "floor caps the offloaded config itself: a 76.3x device buys decode only 1.93x "
+                "offloaded (vs 1.11x on chip) -- near-full decode scaling needs offload AND a "
+                "faster unit. DR-5 and DR-9 are the two ends of the same decision.")
     return res
 
 
-MARK_STYLE = {"neurram": ("o", "#1d3557"), "isaac": ("s", "#7b2d8b"), "hermes": ("D", "#d1495b")}
+MARK_STYLE = {"neurram": ("o", "#1d3557"), "mythic_m1076": ("v", "#3d7a4f"),
+              "isaac": ("s", "#7b2d8b"), "hermes": ("D", "#d1495b")}
 
 
 def _plane_marks(ax, res):
@@ -1038,11 +1226,12 @@ def fig_collapse(res):
         mk, col = MARK_STYLE[c["key"]]
         pm_ = coll["per_mark"][c["key"]]
         lab = f"{c['label'].split(' (')[0]} {c['t_mvm_s']*1e6:.3g} us ({c['status']})"
+        lab = lab.replace("Mythic AMP M1076", "Mythic M1076")
         axes[0].plot(gt, pm_["matrix_mult"], mk + "-", color=col, ms=3, lw=1.1,
                      markevery=4, label=lab)
         axes[1].plot(gt, pm_["whole_mult"], mk + "-", color=col, ms=3, lw=1.1,
                      markevery=4, label=lab)
-    axes[0].set_title("matrix part: the three devices land on ONE curve\n(the collapse variable g x t_MVM)", fontsize=9)
+    axes[0].set_title("matrix part: the silicon marks land on ONE curve\n(the collapse variable g x t_MVM)", fontsize=9)
     axes[1].set_title("whole stack: K/V write + digital unit do not scale,\nso the collapse fails -- the finding, not a bug", fontsize=9)
     for ax in axes:
         ax.set_xscale("log"); ax.set_yscale("log")
@@ -1060,35 +1249,74 @@ def fig_collapse(res):
 
 def fig_fixed_terms(res):
     t_us = [t * 1e6 for t in res["t_grid_s"]]
-    fig, axes = plt.subplots(1, 2, figsize=(10.8, 4.4))
-    for ax, phase in zip(axes, ("prefill", "decode")):
+    fig, axes = plt.subplots(2, 2, figsize=(11.6, 8.2), sharex=True)
+
+    def marks_on(ax, ft):
+        for c in res["marks"]:
+            am = ft["at_marks"][c["key"]]
+            _, col = MARK_STYLE[c["key"]]
+            ax.axvline(c["t_mvm_s"] * 1e6, color=col, ls="--", lw=0.9, alpha=0.6)
+            if c["key"] not in ("neurram", "hermes"):   # annotate the endpoints only
+                continue
+            dx = 4 if c["key"] == "neurram" else -4
+            ha = "left" if c["key"] == "neurram" else "right"
+            ax.annotate(f"{c['label'].split(' (')[0]}\n{am['stack_s']*1e3:.2f} ms ({am['speedup']:.2f}x)",
+                        (c["t_mvm_s"] * 1e6, am["stack_s"] * 1e3), textcoords="offset points",
+                        xytext=(dx, -22), fontsize=6.2, color=col, ha=ha,
+                        bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.5))
+
+    for r, phase in enumerate(("prefill", "decode")):
         ft = res["fixed_terms"][phase]
+        fo = res["fixed_terms_offloaded"][phase]
+        rl = res["offload_relay"][phase]
+        ax = axes[r, 0]
         mm = [ft["mm_s"] * t / res["t_ref_s"] * 1e3 for t in res["t_grid_s"]]
-        w = ft["write_s"] * 1e3
-        dg = ft["digital_s"] * 1e3
+        w, dg = ft["write_s"] * 1e3, ft["digital_s"] * 1e3
         ax.stackplot(t_us, mm, [w] * len(t_us), [dg] * len(t_us),
-                     labels=[f"matmul compute (scales with t_MVM)",
-                             f"K/V write {w:.2f} ms (fixed, DR-5)",
+                     labels=["matmul compute, ALL of it incl. qk^t/av (scales with t_MVM)",
+                             f"K/V write {w:.2f} ms (fixed: SET pulses, DR-5)",
                              f"digital unit {dg:.2f} ms (fixed, DR-8)"],
                      colors=["#8fa8bf", "#d1495b", "#e8a13c"], alpha=0.85)
-        for c in res["marks"]:
-            mkr, col = MARK_STYLE[c["key"]]
-            am = ft["at_marks"][c["key"]]
-            ax.axvline(c["t_mvm_s"] * 1e6, color=col, ls="--", lw=0.9, alpha=0.7)
-            ax.annotate(f"{c['label'].split(' (')[0]}\n{am['stack_s']*1e3:.1f} ms ({am['speedup']:.2f}x)",
-                        (c["t_mvm_s"] * 1e6, am["stack_s"] * 1e3), textcoords="offset points",
-                        xytext=(4, 10), fontsize=6.5, color=col)
+        marks_on(ax, ft)
+        ax.set_title(f"{phase}, attention ON CHIP (fully simulated analog path): "
+                     f"{ft['base_s']*1e3:.2f} ms at NeuRRAM\n"
+                     f"floor = write + digital {rl['onchip_floor_s']*1e3:.2f} ms "
+                     f"(76.3x device buys {ft['at_marks']['hermes']['speedup']:.2f}x)", fontsize=8.2)
+        ax = axes[r, 1]
+        mmo = [fo["mm_s"] * t / res["t_ref_s"] * 1e3 for t in res["t_grid_s"]]
+        dgo, lk, un = fo["digital_s"] * 1e3, fo["link_s"] * 1e3, fo["unit_s"] * 1e3
+        ax.stackplot(t_us, mmo, [dgo] * len(t_us), [lk] * len(t_us), [un] * len(t_us),
+                     labels=["die matmuls: projections + FFN (scale with t_MVM)",
+                             f"die digital remainder {dgo:.2f} ms (fixed, DR-8)",
+                             f"die<->unit link {lk:.2f} ms (fixed at the declared GB/s)",
+                             f"attention unit: compute + K/V memory {un:.2f} ms (fixed, DR-9 "
+                             "generic -- awaiting the real unit's numbers)"],
+                     colors=["#8fa8bf", "#e8a13c", "#2a9d8f", "#7b2d8b"], alpha=0.85)
+        marks_on(ax, fo)
+        ax.set_title(f"{phase}, attention OFFLOADED (unit = DR-9 black box): "
+                     f"{fo['base_s']*1e3:.2f} ms at NeuRRAM\n"
+                     f"floor = unit + link + digital {rl['offloaded_floor_s']*1e3:.2f} ms "
+                     f"(76.3x device buys {fo['at_marks']['hermes']['speedup']:.2f}x)", fontsize=8.2)
+    for ax in axes.flat:
         ax.set_xscale("log"); ax.set_yscale("log")
         ax.set_xlim(t_us[0], t_us[-1])
-        ax.set_xlabel("t_MVM per row (us)"); ax.set_ylabel("no-network stack (ms)")
-        ax.set_title(f"{phase}, attention on chip: {ft['base_s']*1e3:.2f} ms at NeuRRAM", fontsize=9)
         ax.grid(alpha=0.3, which="both")
-        ax.legend(fontsize=7, loc="lower right")
-    h = res["fixed_terms"]["decode"]["at_marks"]["hermes"]
-    fig.suptitle("Fixed terms under the device axis (O17b): a "
-                 f"{res['t_ref_s']/an.chip('hermes').t_mvm_s:.1f}x faster device speeds decode by "
-                 f"{h['speedup']:.2f}x -- the K/V write does not scale with t_MVM", fontsize=9.5)
-    fig.tight_layout(rect=[0, 0, 1, 0.92])
+        ax.legend(fontsize=6.2, loc="lower right")
+    for ax in axes[1, :]:
+        ax.set_xlabel("t_MVM per row (us)")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("no-network stack (ms)")
+    fig.suptitle("The fixed-terms RELAY (O17b / C39): every configuration has its own non-scaling floor --\n"
+                 "on chip the K/V write (DR-5), offloaded the attention unit + link (DR-9); under the generic DR-9 values the "
+                 "offloaded floor beats the write wall in BOTH phases,\nso offload wins single-pass latency at EVERY device "
+                 "tier (no crossing) -- yet the unit floor then caps the offloaded config itself", fontsize=9)
+    fig.text(0.5, 0.005,
+             "Mechanism (C39): ON CHIP the dynamic attention ops are WRITE-RATE-BOUND -- each decode token must SET its K/V "
+             "row before qk^t/av can read it, so a device 76x faster at reading\nwith unchanged writes keeps its on-chip "
+             "attention walled: fast device + attention on chip is a self-contradictory configuration; the two exits are "
+             "faster writes (DR-5) or this offload (DR-9).",
+             ha="center", fontsize=6.4, color="0.25")
+    fig.tight_layout(rect=[0, 0.035, 1, 0.90])
     p = os.path.join(OUT, "device_fixed_terms.png")
     fig.savefig(p, dpi=130); plt.close(fig)
     print(f"PNG -> {p}")
@@ -1096,7 +1324,8 @@ def fig_fixed_terms(res):
 
 # ----------------------------------------------------------------- main
 def main():
-    want = sys.argv[1:] or ["ondie", "d2d_355m", "d2d_2p7b", "d2d_probe", "unit_link", "psum", "plane"]
+    want = sys.argv[1:] or ["ondie", "d2d_355m", "d2d_2p7b", "d2d_probe", "unit_link", "psum",
+                            "t1_hub", "plane"]
     sysd = json.load(open(os.path.join(OUT, "contention_system.json")))
     print("fixed settings:")
     for k, v in FIXED.items():
@@ -1121,11 +1350,13 @@ def main():
         out["unit_link"] = axis_unit_link(sysd); fig_unit_link(out["unit_link"])
     if "psum" in want:
         out["psum"] = axis_psum(sysd)
+    if "t1_hub" in want:
+        out["t1_hub"] = axis_t1_hub(sysd); fig_t1_hub(out["t1_hub"], sysd)
     if "plane" in want:
         out["plane"] = axis_device_plane(sysd)
         fig_plane(out["plane"]); fig_collapse(out["plane"]); fig_fixed_terms(out["plane"])
     path = os.path.join(OUT, "phase_sweep.json")
-    if len(want) < 7 and os.path.exists(path):        # partial run: merge into the stored file
+    if len(want) < 8 and os.path.exists(path):        # partial run: merge into the stored file
         old = json.load(open(path)); old.update(out); out = old
     with open(path, "w") as f:
         json.dump(out, f, indent=1, default=float)

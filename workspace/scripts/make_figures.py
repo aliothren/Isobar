@@ -98,8 +98,14 @@ STAGES = {
     "sweep": {
         "cmds": [["python3", "sweep_axes.py"]],
         "outputs": ["sweep_axis_ondie.png", "sweep_axis_d2d_355m.png", "sweep_axis_d2d_2p7b.png",
-                    "sweep_axis_d2d_probe.png", "sweep_axis_unit_link.png", "device_plane.png",
-                    "device_plane_collapse.png", "device_fixed_terms.png", "phase_sweep.json"],
+                    "sweep_axis_d2d_probe.png", "sweep_axis_unit_link.png", "sweep_axis_t1_hub.png",
+                    "device_plane.png", "device_plane_collapse.png", "device_fixed_terms.png",
+                    "phase_sweep.json"],
+    },
+    "phase": {
+        "cmds": [["python3", "analyze_phase_diagram.py"]],
+        "outputs": ["phase_diagram.png", "phase_diagram_gray.png",
+                    "phase_diagram_table.md"],
     },
     "bandwidth": {
         "cmds": [["python3", "analyze_bandwidth_sweep.py"]],

@@ -87,9 +87,11 @@ def test_the_marks_are_the_registry_chip_points():
     for c in regs:
         assert marks[c.key]["t_mvm_s"] == c.t_mvm_s
         assert marks[c.key]["status"] == c.t_mvm_status
-    assert set(marks) == {"neurram", "isaac", "hermes"}
+    assert set(marks) == {"neurram", "mythic_m1076", "isaac", "hermes"}   # four since C36
     approx(marks["neurram"]["t_mvm_s"], 10.14e-6, 1e-9)
     assert marks["neurram"]["status"] == "measured"
+    approx(marks["mythic_m1076"]["t_mvm_s"], 6.375e-6, 1e-3)
+    assert marks["mythic_m1076"]["status"] == "derived"
     approx(marks["isaac"]["t_mvm_s"], 1.6e-6, 1e-9)
     assert marks["isaac"]["status"] == "design-point"
     approx(marks["hermes"]["t_mvm_s"], 1.329e-7, 1e-2)
@@ -167,3 +169,33 @@ def test_network_seconds_are_device_free_at_fixed_gbps():
         wc_ref = SWEEP["fixed"]["ref_gbps"] * 1e9 * cyc
         approx(ser_ref * wc_ref / an.words_per_cycle(3.3, cycle_s=cyc),
                c["net_gb"] / 3.3, 1e-12)
+
+
+def test_the_fixed_terms_relay_under_offload():
+    """C39: the offloaded twin of the decomposition. The die keeps the
+    projections + FFN (scaling) and the unit chain (DR-9 generic) is the
+    NEW floor: it beats the write wall in BOTH phases (prefill 19.7 vs
+    78.8 ms, decode 1.02 vs 13.32 ms), so offload wins single-pass latency
+    at EVERY device tier -- no crossing (the expected 1-3 us threshold
+    does not exist) -- while the unit floor then caps the offloaded config
+    itself: a 76.3x device buys decode only 1.93x offloaded (vs 1.11x on
+    chip). The NeuRRAM totals tie the ledger exactly: offloaded prefill
+    518.1 ms, decode 1.99 ms per token (the C21 end-to-end numbers)."""
+    fo = PLANE["fixed_terms_offloaded"]
+    rl = PLANE["offload_relay"]
+    approx(fo["prefill"]["base_s"], 518.1e-3, 1e-3)
+    approx(fo["decode"]["base_s"], 1.99e-3, 5e-3)
+    approx(rl["prefill"]["offloaded_floor_s"], 19.7e-3, 1e-2)
+    approx(rl["decode"]["offloaded_floor_s"], 1.02e-3, 1e-2)
+    for phase in ("prefill", "decode"):
+        assert rl[phase]["crossing_t_s"] is None
+        assert rl[phase]["offloaded_floor_s"] < rl[phase]["onchip_floor_s"]
+        ft = PLANE["fixed_terms"][phase]
+        for a, b in zip(fo[phase]["stack_s"], ft["stack_s"]):
+            assert a < b, phase                       # offload wins at every grid t
+        for key, v in rl[phase]["ratio_at_marks"].items():
+            assert v > 1.0, (phase, key)
+    approx(fo["decode"]["at_marks"]["hermes"]["speedup"], 1.93, 1e-2)
+    approx(fo["prefill"]["at_marks"]["hermes"]["speedup"], 19.74, 1e-2)
+    approx(rl["decode"]["ratio_at_marks"]["neurram"], 14.78 / 1.99, 2e-2)
+    assert "RELAY" in rl["verdict"] and "DR-5" in rl["verdict"] and "DR-9" in rl["verdict"]

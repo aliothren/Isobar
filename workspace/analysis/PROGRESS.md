@@ -529,14 +529,24 @@ The whole stack does not scale with the device: 76.3× faster speeds
 prefill 9.33× and decode 1.11× (the K/V write dominates decode; the
 fixed-term decomposition `device_fixed_terms.png`); the matrix part
 collapses exactly in g × t_MVM, the whole stack does not
-(`device_plane_collapse.png`). The three silicon marks (NeuRRAM measured,
+(`device_plane_collapse.png`). The silicon marks (four since C36: NeuRRAM measured, Mythic derived,
 ISAAC design point, HERMES derived) come from the registry
 (`anchors.device_marks()`); the surface between them is closed-form, not
 measurement. Since C33 the plane also draws the d-family boundary lines
 (one per width tier, d = 1024 the production base; die level from the
 tiler closed form, the d = 2560 line through the measured B2 mark) with
 the routed ×4 multiplier verified d-independent on the re-scored probe
-flows. The scaling law in d is measured (O17c, C32; 48 mapper runs,
+flows. The T1 (die-buffer) axis is audited and measured since C34: Timeloop
+throttles the glb in counter units (×7 / ×8×2 — the old "160× at 64 w/c"
+reproduced exactly in closed form); the readable axis is analytic in value
+units, hub = T2 bus + the input's in-fill (ffn1 +6.25%), 1% at 2.27–2.33
+GB/s, MX100-class chips 3.9–5.0× at the estimated band's low end
+(`sweep_axis_t1_hub.png`, group 29). The phase diagram itself is drawn
+since C35 (`phase_diagram.png` + grayscale copy + the grid → ratio table,
+group 30) — with the die-level semantics corrected in review: the black
+d = 1024 line is the pure hand-off stream; the d ≥ 2560 lines are block
+chains INCLUDING their spanning operators (each receiving die takes the
+full input), hence above the single 4-die operator probe. The scaling law in d is measured (O17c, C32; 48 mapper runs,
 column split only): above the flip the busiest wire is the INPUT TRUNK and
 serial / compute = d / 114,688 exactly ("knee ∝ d", slope 1 — the O29
 boundary family's closed form); the flip is measured at d* = 1,220–1,350,
@@ -579,7 +589,7 @@ weights):
 | granularity | volume ÷ capacity | status |
 |---|---|---|
 | largest single operator (ffn1) | **0.50** | safe — this is what today's runs use |
-| one whole layer (6 operators) | **1.50** | already past the flip at layer granularity: the feasible configuration places TWO dies per layer (attention half + FFN half, the latter filling its die exactly) — now the configuration all 355M die-level results use (valid to ~2.5k tokens of K/V growth on the attention die) |
+| one whole layer (6 operators) | **1.50** | already past the flip at layer granularity: the feasible configuration places TWO dies per layer (attention half + FFN half, the latter filling its die exactly) — now the configuration all 355M die-level results use (valid to 2,048 tokens of K/V growth on the attention die — computed ceiling, guarded; O21/C38) |
 
 **The flip, measured.** A probe operator sized at 4 dies of weights (a
 2.7B-class FFN shape, 64 rows) was run with the multi-die spatial split
@@ -838,20 +848,35 @@ authority).
 1. ~~O25 — the anchor grid~~ — **done (C26)**: the registry with a status
    per row and the chip points, the estimated analog-reality band, the
    per-axis sweeps read in both columns (§5.5), the settings mapping table.
-   Left over (P2): MX100 / Mythic t_MVM derivations, the HERMES supplement.
+   Leftovers settled (C36): Mythic t_MVM derived (6.38 µs), the HERMES link
+   rate found published (3.2 Gbit/s = 0.4 GB/s per link — the analog band's
+   low end), the ESP anchor primary-sourced (ESSCIRC 2022). MX100 stays
+   blocked on its source (no published rate) — a new worklist item.
 2. **O17 — the device axis** — **done** (17a C30, 17b C31, 17c C32): the
-   device as a fabric input; the (t_MVM × bandwidth) plane with the three
-   silicon marks, fixed terms and the collapse; the mapper-measured V(d, S)
-   (trunk law ratio = d / 114,688, flip d* = 1.2–1.3k, S-independence)
-   (§5.5). The one exception still unexercised is the row split (O15).
-3. **O26 — the busiest-wire bound** stated in the model sections, the
-   `schedule_slack` input, one identity test.
-4. **S1–S6 — the search milestone**, run only in the cells where the
-   diagram has play (fast device, shared medium, offload-decode, weak D2D ×
-   spanning), with the proxy-optimization study as its result.
-5. **O27 — static energy and peak concurrency** (closed-form, last).
+   device as a fabric input; the (t_MVM × bandwidth) plane with the silicon
+   marks (four since C36), fixed terms and the collapse; the mapper-measured
+   V(d, S) (trunk law ratio = d / 114,688, flip d* = 1.2–1.3k,
+   S-independence) (§5.5). The one exception still unexercised is the row
+   split (O15).
+3. ~~O26 — the busiest-wire bound~~ — **done (C29)**: stated in the model
+   sections, the `schedule_slack` input, group 25. The T1 axis is audited
+   (O28/C34) and the phase diagram drawn (O29/C35, with the d family and
+   corrected die-level semantics).
+3b. **The validation track** (current work; FIXLIST is the authority):
+   ~~V0 silicon-point normalization + HERMES self-consistency audit~~
+   (done, C37) → V1 Simba reproduction → the document round (+ item 13,
+   the stale slow-suite goldens) → V2 BookSim slack → V3 robustness table
+   → the freeze (precondition since C40-r: fast AND slow suites fully
+   green; the slow suite runs weekly and before every freeze).
+4. **S1–S6 — the search milestone** (AFTER THE FREEZE), run only in the
+   cells where the diagram has play (fast device, shared medium,
+   offload-decode, weak D2D × spanning), with the proxy-optimization study
+   as its result.
+5. **O27 — static energy and peak concurrency** (closed-form; AFTER THE
+   FREEZE).
 6. ~~Source the §5 comparison points~~ — **done**: [ANCHORS.md](ANCHORS.md)
    (Simba silicon, ESP, FlooNoC; Simba GRS for die-to-die), read out in
    §5.2/§5.3 via `analyze_anchored_sweep.py`; re-labelled as the
-   digital-ecosystem column (O25). Remaining: a D2D anchor beyond Simba
-   (UCIe-class) once a citable per-link figure is chosen.
+   digital-ecosystem column (O25). ~~Remaining: a D2D anchor beyond Simba (UCIe-class)~~ -- done (C40):
+   UCIe-S 64 GB/s per direction per x16 module, status `spec` (the
+   standard's ceiling, one epistemic step past post-layout).

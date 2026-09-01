@@ -85,3 +85,52 @@ def test_unknown_policy_rejected():
         raise AssertionError("unknown policy must raise")
     except ValueError as e:
         assert "unknown overcapacity" in str(e)
+
+
+# ----------------------------------------------------------- O21 (C38)
+def test_attention_die_context_ceiling_closed_form():
+    """The two-dies-per-layer seating's K/V ceiling: (DIE_WEIGHT_CELLS -
+    8 d^2 resident cells) / (4 d cells per token) = 2,048 tokens at
+    d = 1024 -- the exact number behind the '~2.5k' estimate, now computed
+    and stated as the cell-capacity upper bound (array packing can only
+    round it down)."""
+    from scripts import llm_workload as lw
+    cfg = lw.GptConfig()
+    cap = lw.attention_die_context_ceiling(cfg)
+    assert cap == 2048
+    d = cfg.d_model
+    assert cap == (lw.DIE_WEIGHT_CELLS - 8 * d * d) // (4 * d)
+    # the ceiling falls with width: a 2.7B-class attention die is over
+    # capacity before any K/V at all (its halves span dies instead)
+    big = lw.GptConfig(d_model=2560, n_heads=32, d_ff=10240, n_layers=32, name="t")
+    assert lw.attention_die_context_ceiling(big) < 0
+
+
+def test_context_ceiling_guard_raises_past_2048():
+    from scripts import llm_workload as lw
+    cfg = lw.GptConfig()
+    lw.check_context_ceiling(cfg, 512)
+    lw.check_context_ceiling(cfg, 2048)
+    try:
+        lw.check_context_ceiling(cfg, 2049)
+    except ValueError as e:
+        assert "O21" in str(e) and "O14" in str(e) and "2048" in str(e)
+    else:
+        raise AssertionError("a context past the ceiling was accepted")
+
+
+def test_die_to_die_activation_guards_the_48_die_seating():
+    """The guard fires on the two-dies-per-layer path (die slots >= 2 x
+    layers) and only there: S = 512 passes as ever; S = 2500 raises."""
+    import os
+    from scripts import fabric as fabric_mod, llm_workload as lw
+    ws = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fab = fabric_mod.from_yaml(os.path.join(ws, "models", "fabric", "mlx300_multidie48.yaml"))
+    cfg = lw.GptConfig()
+    lw.die_to_die_activation(cfg, 512, "prefill", fabric=fab)      # fine
+    try:
+        lw.die_to_die_activation(cfg, 2500, "prefill", fabric=fab)
+    except ValueError as e:
+        assert "O21" in str(e)
+    else:
+        raise AssertionError("the 48-die path accepted a 2500-token context")

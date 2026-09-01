@@ -211,3 +211,29 @@ def test_hyperedges_feed_the_lambda_1_metric():
     clustered = h.merges_by_depth([0, 1, 2, 3])        # one group of 4
     split = h.merges_by_depth(groups[0])               # [0, 2, 4, 6]: straddles
     assert clustered[1] == 0 and split[1] == 1
+
+
+def test_membership_convention_matches_timeloops_nest_order():
+    """Hygiene 27 (C38): reduction-hyperedge MEMBERSHIP is trustworthy --
+    Timeloop flattens a nested spatial block with the innermost loop
+    varying fastest (loop-nest semantics), which is exactly our
+    first-listed-slowest convention. Pinned on the frozen fixture: the
+    parser preserves the nest's textual outer-to-inner order, no dim
+    repeats inside a nest (where the merged-factor form would lose a
+    non-contiguous interleaving), and the macro groups equal the manual
+    inner-fastest flattening (index = c * 2 + p for the C:4 outer, P:2
+    inner nest)."""
+    import os
+    from scripts import crossbar_stats as cbs
+    here = os.path.dirname(os.path.abspath(__file__))
+    txt = open(os.path.join(here, "fixtures", "ffn1_prefill_map.txt")).read()
+    parsed = dict(cbs.parse_mapping_levels(txt))
+    loops = [(d, f) for d, f, _ in parsed["inter_macro_in_die_spatial"] if f > 1]
+    assert loops == [("C", 4), ("P", 2)]                  # textual outer -> inner
+    for name, lps in parsed.items():
+        dims = [d for d, f, _ in lps if f > 1]
+        assert len(dims) == len(set(dims)), (name, dims)  # no repeats in any nest
+    groups = sorted(tuple(g) for g in _ts().reduction_hyperedges("macro"))
+    manual = sorted(tuple(sorted(c * 2 + p for c in range(4)))  # inner-fastest flatten
+                    for p in range(2))
+    assert groups == manual == [(0, 2, 4, 6), (1, 3, 5, 7)]

@@ -1,8 +1,38 @@
 import os
+import re
 from typing import Any, Iterable, Tuple, List, Union
 import pytimeloop.timeloopfe.v4 as tl
 from pytimeloop.timeloopfe.v4.output_parsing import MultipliableDict
 import yaml
+
+
+_ENERGY_LINE_RES = [
+    re.compile(r"^\s*Energy \(total\)\s*:\s*([\d.eE+-]+) pJ", re.M),
+    # Temporal-reduction and address-generation energies are SEPARATE
+    # adders in Timeloop's account (not contained in a component's
+    # 'Energy (total)' line), so they are summed too -- review answer,
+    # C40-r: currently zero under this architecture's ERTs (asserted on
+    # the frozen fixture), included so a future ERT that prices them
+    # cannot be silently dropped.
+    re.compile(r"^\s*Temporal Reduction Energy \(total\)\s*:\s*([\d.eE+-]+) pJ", re.M),
+    re.compile(r"^\s*Address Generation Energy \(total\)\s*:\s*([\d.eE+-]+) pJ", re.M),
+]
+
+
+def exact_total_energy_J(stats_text: str) -> float:
+    """Hygiene 22 (C40, amended C40-r): the EXACT operator total -- the sum
+    of every per-component 'Energy (total)' line PLUS the temporal-reduction
+    and address-generation adders -- instead of pytimeloop
+    parse_stats_stream's rounded per-compute summary table x computes,
+    whose print precision costs 0.05-0.5% (the frozen ffn1 fixture:
+    2699.48 -> 2697.92 uJ, a +0.058% overcount). Self-check available on
+    every stats file: this sum must agree with the file's own Summary
+    'Energy:' line within ITS print precision (3 significant digits) --
+    pinned as an identity, so it re-validates at every regeneration. The
+    per-operator ledger's 'unlisted residual' row closes to ~0 once
+    results regenerate with this total."""
+    return sum(float(x) for rex in _ENERGY_LINE_RES
+               for x in rex.findall(stats_text)) / 1e12
 
 
 class MacroOutputStats(tl.output_parsing.OutputStats):

@@ -27,7 +27,9 @@ only, not traffic or latency). Fabric: the 48-die package (d = 8192 needs
 32 dies). One mapper at a time; ~48 runs, resumable: finished (d, S, op)
 entries in the JSON are skipped on restart.
 
-Usage (container): python3 scripts/run_scaling_probes.py [--plan]
+Usage (container): python3 scripts/run_scaling_probes.py [--plan] [--fresh]
+(--fresh deletes the existing JSON first: without it a regeneration run
+RESUMES and re-measures nothing -- hygiene 28, C40)
 Output: analysis/scaling_probes.json (figures: analyze_scaling_law.py)
 """
 import json
@@ -104,6 +106,9 @@ def run_one(op, fab, fab_bw, pl, pl_bw, max_dies):
 
 def main():
     plan_only = "--plan" in sys.argv
+    if "--fresh" in sys.argv and os.path.exists(OUT_JSON):
+        os.remove(OUT_JSON)
+        print("--fresh: removed the cached probe JSON, re-measuring all points", flush=True)
     fab = mlx.FABRIC
     max_dies = fab.level("die").per_parent
     done = {}

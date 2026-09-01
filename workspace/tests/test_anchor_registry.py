@@ -28,9 +28,18 @@ SCHEMES = ["star (private links)", "mesh, glb centre", "mesh, glb corner",
 # ------------------------------------------------------------- the registry
 def test_digital_anchors_keep_their_published_values():
     assert an.by_key("simba_ondie").gbps == 8.75 and an.by_key("simba_ondie").status == "measured"
-    assert an.by_key("esp").gbps == 32.0 and an.by_key("esp").status == "secondary"
+    # C36: the ESP anchor is primary-sourced (Jia et al., ESSCIRC 2022): 5 data
+    # planes x 64 bit at a measured 800 MHz = 32 GB/s tile-to-tile; the paper's
+    # own headline (281 Gb/s) adds the 32-bit control plane; a single plane is
+    # 6.4 GB/s -- the multi-plane aggregate is stated in the derivation
+    assert an.by_key("esp").gbps == 32.0 and an.by_key("esp").status == "measured"
+    assert "ESSCIRC" in an.by_key("esp").source and "6.4 GB/s" in an.by_key("esp").derivation
     assert an.by_key("floonoc").gbps == 80.6 and an.by_key("floonoc").status == "post-layout"
     assert an.by_key("grs").gbps == 12.5 and an.by_key("grs").status == "measured"
+    # C40: the UCIe-S anchor is a SPEC ceiling (an interconnect standard, not a
+    # measured chip) -- its own status class, stated in the source
+    assert an.by_key("ucie").gbps == 64.0 and an.by_key("ucie").status == "spec"
+    assert "STANDARD" in an.by_key("ucie").source and "32 GT/s" in an.by_key("ucie").derivation
     for a in an.ANCHORS:
         if a.paradigm == an.DIGITAL:
             assert a.gbps is not None and a.band is None and a.source
@@ -44,7 +53,7 @@ def test_analog_reality_tier_is_an_estimated_band_with_a_derivation():
     # every readout column set = the digital anchors first, then the band ends
     cols = an.columns(an.ONDIE)
     assert [c[0] for c in cols] == ["simba_ondie", "esp", "floonoc", "analog_ondie_low", "analog_ondie_high"]
-    assert [c[2] for c in an.columns(an.D2D)] == [12.5, 0.1, 2.0]
+    assert [c[2] for c in an.columns(an.D2D)] == [12.5, 64.0, 0.1, 2.0]   # UCIe since C40
 
 
 def test_chip_points_carry_a_status_per_coordinate():
@@ -55,6 +64,21 @@ def test_chip_points_carry_a_status_per_coordinate():
     approx(an.chip("hermes").t_mvm_s, 63.1e12 ** -1 * 64 * 2 * 256 * 256, 1e-9)
     assert an.chip("hermes").t_mvm_status == "derived" and an.chip("hermes").t_mvm_derivation
     approx(an.chip("isaac").t_mvm_s, 1.6e-6, 1e-9)
+    # C36: Mythic derived (25 TOPS / 76 tiles / 2*1024*1024 = 6.375 us) -- a
+    # TOPS-derived per-TOKEN row time is tile-shape invariant, so no
+    # array-height folding (the C37 adjudication). C37: HERMES's PUBLISHED
+    # 0.4 GB/s is per PHYSICAL link (the analog band's low end); the
+    # COORDINATE aggregates to our per-macro-link granularity (32 arrays):
+    # (418/64) x 0.4 x 32 ~= 83.6 GB/s. MX100 stays pending, blocked on the
+    # source (no published rate as of 2026-09-01).
+    approx(an.chip("mythic_m1076").t_mvm_s, 25e12 ** -1 * 76 * 2 * 1024 * 1024, 1e-9)
+    assert an.chip("mythic_m1076").t_mvm_status == "derived"
+    approx(an.chip("hermes").ondie_gbps_per_link, 0.4, 1e-12)
+    approx(an.chip("hermes").ondie_gbps_per_link, an.band(an.ONDIE).band[0], 1e-12)
+    approx(an.chip("hermes").ondie_gbps, 32 * (418.0 / 64) * 0.4, 1e-12)
+    assert an.chip("hermes").ondie_status.startswith("derived (C37 normalization)")
+    assert "granularity mismatch" in an.ChipPoint.__doc__
+    assert an.chip("mx100").t_mvm_s is None
     for c in an.CHIPS:
         assert c.tier in ("hub-io", "bus-T1", "star", "mesh")
         assert c.t_mvm_status in ("measured", "derived", "design-point") or c.t_mvm_status.startswith("pending")
@@ -62,6 +86,21 @@ def test_chip_points_carry_a_status_per_coordinate():
             assert c.t_mvm_status.startswith("pending")
         if c.ondie_band is not None:
             assert c.ondie_status.startswith("estimated")
+
+
+def test_hermes_self_consistency_audit():
+    """V0 (C37): from published numbers only -- need per core per token
+    (256 INT8 inputs / 133 ns ~= 1.93 GB/s) vs aggregate supply per core
+    ((418 links / 64 cores) x 0.4 GB/s ~= 2.61 GB/s). Supply exceeds need
+    by ~1.36x: a fabricated analog chip provisioned its fabric just ABOVE
+    its own knee -- the first external silicon point validating the knee
+    formula, and the refutation of the C36 mis-reading (a fabric 38x under
+    its knee could not sustain the measured 63.1 TOPS)."""
+    sc = an.hermes_self_consistency()
+    approx(sc["need_gbps_per_core"], 1.926, 1e-3)
+    approx(sc["supply_gbps_per_core"], 2.6125, 1e-9)
+    assert sc["supply_gbps_per_core"] > sc["need_gbps_per_core"]
+    approx(sc["headroom"], 1.357, 1e-3)
 
 
 def test_one_bandwidth_constant():
@@ -88,7 +127,7 @@ def test_conversion_identities():
 # ------------------------------------------------------------- the sweeps
 def test_sweep_header_and_grids():
     assert set(SWEEP) >= {"fixed", "anchors", "ondie", "d2d_355m", "d2d_2p7b", "d2d_probe",
-                          "unit_link", "psum", "plane"}
+                          "unit_link", "psum", "t1_hub", "plane"}
     assert SWEEP["fixed"]["S"] == 512 and SWEEP["fixed"]["energy"] == "not swept"
     approx(SWEEP["fixed"]["cycle_s"], an.CYCLE_S, 1e-12)
     g = SWEEP["ondie"]["grid_gbps"]

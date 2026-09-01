@@ -522,15 +522,37 @@ and our device cycle — no anchor enters them; the anchors decide only where
 they are read.
 
 **What the anchors are.** Simba, ESP, FlooNoC and GRS are digital
-accelerators' links: the upper bound of what fabricated interconnects
-deliver, not operating points of analog CIM chips. No fabricated analog CIM
-system publishes an on-die link bandwidth; the ones that describe their
-fabric are DMA + shared SRAM (TetraMem MX100: 10 NPUs + RISC-V + 512 KB +
-1 MB SRAM, 65 nm), board-level FPGA hubs (NeuRRAM's inter-core buffers and
-partial-sum accumulation sit on the board; the Tsinghua multi-chip system
-routes all 8 chips through an FPGA), or compile-time scheduled point-to-point
-networks (HERMES: per-core link controllers, no bandwidth in the main text;
-Mythic AMP: per-tile 64 KB SRAM + router, product material only). In this
+accelerators' links (plus, since C40, UCIe-S 64 GB/s: an interconnect
+STANDARD's ceiling, status `spec` — one epistemic step past post-layout,
+no measured chip behind it): the upper bound of what fabricated interconnects
+deliver, not operating points of analog CIM chips. The ESP anchor is
+primary-sourced since C36 (Jia et al., ESSCIRC 2022: 5 data NoC planes ×
+64 bit + 1 control plane × 32 bit at a measured 800 MHz; the paper's own
+headline is 281 Gb/s tile-to-tile; the anchor's 32 GB/s = the 5 data
+planes' 256 Gb/s — the quantity FlooNoC's table quotes; a multi-plane
+aggregate, one physical plane is 6.4 GB/s, stated in the derivation). On
+the analog side **one system now publishes a link rate (C36)**: HERMES's
+chip spec table gives a maximum link data-rate of 3.2 Gbit/s = 0.4 GB/s
+per PHYSICAL link (418 links, a Parallel Prism fabric) — landing exactly
+on the analog-reality band's low end; the band stays the CLASS estimate.
+The phase-diagram COORDINATE follows the C37 normalization rules (stated
+in the registry): the t axis is PER-TOKEN row time (TOPS-derived times
+are tile-shape invariant — no array-height folding), and a bandwidth
+coordinate is the fabric's aggregate supply to the 32-array group one of
+OUR links serves — HERMES: (418/64) × 0.4 × 32 ≈ 83.6 GB/s (the per-link
+0.4 kept separately). **The self-consistency audit**
+(`hermes_self_consistency`, headed for the validation chapter): need per
+core per token 256 B ÷ 133 ns ≈ 1.93 GB/s vs supply ≈ 2.61 GB/s —
+**~1.36× headroom**: a real analog chip provisioned its fabric just above
+its own knee, the first external silicon point validating the knee
+formula (C36 briefly compared the single physical link against the
+per-macro knee — a granularity mismatch, corrected). The other systems that
+describe their fabric: DMA + shared SRAM (TetraMem MX100: 10 NPUs +
+RISC-V + 512 KB + 1 MB SRAM, 65 nm), board-level FPGA hubs (NeuRRAM's
+inter-core buffers and partial-sum accumulation sit on the board; the
+Tsinghua multi-chip system routes all 8 chips through an FPGA), and
+compile-time scheduled point-to-point networks (Mythic AMP: per-tile
+64 KB SRAM + router, product material only). In this
 model they map to: DMA / shared SRAM → a shared medium whose bandwidth is the
 T1 hub bandwidth; compile-time scheduled → the star scheme; NoC → the mesh
 scheme (mapping table in ANCHORS.md).
@@ -542,8 +564,11 @@ estimated BAND (on die 0.4–8 GB/s: a 32–128-bit datapath at 100–500 MHz; d
 to die 0.1–2 GB/s: board-level or older-node direct links), and every sweep
 reads "the digital anchors + the two band ends". Chip points (a t_MVM
 coordinate plus bandwidth coordinates, each with a status) live there too:
-NeuRRAM 10.14 µs measured, HERMES 0.133 µs derived, ISAAC 1.6 µs design
-point, MX100 / Mythic pending. The per-axis sweeps (`sweep_axes.py`: 8 points
+NeuRRAM 10.14 µs measured, Mythic 6.38 µs derived (C36: 25 TOPS ÷ 76 tiles
+÷ 2·1024·1024), ISAAC 1.6 µs design point, HERMES 0.133 µs derived; MX100
+is blocked on its source (arXiv:2410.14882 publishes no TOPS / MVM rate,
+checked 2026-09-01 — a new worklist item, pending TetraMem's 22nm SoC
+publication). The per-axis sweeps (`sweep_axes.py`: 8 points
 per decade plus the anchor values and the 2^k points, both overlap ends;
 figures `sweep_axis_*.png`, data `phase_sweep.json`, pinned in group 23)
 read: ① on die, at 0.4 GB/s bus 3.33×, the three routed schemes 1.31× (a
@@ -561,7 +586,48 @@ interposer bus reads 10.4×; offloaded, 0.1 GB/s reads 12–19× (mesh) / 70.5×
 1.2–1.9 GB/s or more. ④ The die↔unit link: end-to-end prefill 1.01× at GRS
 (518.1 ms, the ledger's number), 1% at 9.8 GB/s, doubling at 0.098 GB/s;
 decode 1.50× at 0.1 GB/s. ⑤ Partial-sum width 1 vs 2 words: the thresholds
-roughly halve (bus 1% at 1.17 vs 1.89 GB/s). **Current conclusion (NeuRRAM
+roughly halve (bus 1% at 1.17 vs 1.89 GB/s). ⑥ T1 (the die-buffer hub;
+O28 audited, C34): Timeloop's native throttling charges the glb in COUNTER
+units (input fills ×7 bit slices, output fills+updates ×8 bit groups; the
+write port binds — ffn1: 37,224,448 units, and the four cached points match
+units ÷ bandwidth with zero error: the origin of the old "160× at 64 w/c",
+C25's sibling on the T1 axis). The readable T1 axis is now analytic in
+value units: the hub is one shared port (exactly the MX100-class DMA +
+shared-SRAM medium), and per matmul op hub words = the T2 bus words + the
+input tensor arriving once (P×C×N) — the "T1 = T2-bus boundary" the
+registry's mapping rule promised holds, shifted by the in-fill share (ffn1
++6.25%). Readout: knee ffn2 in every condition; 1% at 2.27 (on chip; the
+bus's 1.89 pushed up by the in-fill) / 2.33 (offloaded) GB/s; busiest-op
+net = compute at 2.42 GB/s; MX100-class chips read 3.9–5.0× at the
+estimated band's low end (0.4 GB/s) and 1.00× at its high end; decode-
+offloaded equals prefill-offloaded exactly (S cancels in every hub ratio).
+No shipped config declares a hub bandwidth, so the Timeloop push stays
+inert (pinned in group 29).
+
+**The phase diagram (O29 drawn, C35).** `analyze_phase_diagram.py` (zero
+mapper; reads the stored JSONs + the registry) → `phase_diagram.png` (with
+a grayscale check copy) + the grid readout table `phase_diagram_table.md`.
+Two panels on the same (t_MVM × bandwidth) plane: slope −1 boundaries =
+the mechanism; the d family per width tier with model names (d = 1024 the
+production base); three shaded layers (on die: everything contends / the
+organisation decides / placement-free); digital anchors as horizontal
+lines with statuses, the estimated bands and chip bandwidths marked as
+estimates; HERMES / ISAAC as error-bar points, NeuRRAM with its t
+coordinate only (hub-IO); the two trend arrows; the collapse inset; and
+validation points classed by measured / closed-form with colour AND shape
+(grayscale-safe): the 17c probes on the left (ffn2's tiler step gets its
+own “known step — expected” marker class, never conflated with genuine
+disagreement), and on the right the measured B2 block-chain marks sitting
+on the closed-form d = 2560 line at all four silicon speeds (four marks
+since C36). **Die-level
+semantics (corrected in review — not a layout nit):** the black d = 1024
+line is the PURE hand-off stream (operators fit their die; only the hidden
+state crosses; = the die↔unit link under offload); the blue d ≥ 2560
+family are BLOCK CHAINS INCLUDING their spanning operators (column split,
+tensor once: each receiving die takes the full input) — which is why they
+sit above the purple SINGLE 4-die operator probe line; the three layers
+are stated as pure hand-off / probe / block-chain family, and the capacity
+ratio is the selector, not an axis. Pinned in group 30. **Current conclusion (NeuRRAM
 tier, no device extrapolation): shared media cross the line in the
 analog-reality tier (on-die bus 3.3×, interposer bus 10–70×), point-to-point
 links cross it at the 0.1 GB/s die-to-die tier (2.7B chain 5–7×, offloaded
@@ -600,12 +666,32 @@ link per MVM-row time): the matrix-part multiplier is a single-variable
 function of it and the three device curves coincide exactly; the
 whole-stack multiplier is not — words/cycle is that unit only at the
 NeuRRAM slice count (`device_plane_collapse.png`). The fixed-term
-decomposition (`device_fixed_terms.png`): a 76.3× faster device speeds
-prefill 9.33× (826.4 → 88.6 ms) and decode by only **1.11×** (14.78 →
-13.34 ms: the decode stack is almost entirely the K/V write) — the
-finding, not a bug. The three silicon marks come only from the registry
-(`anchors.device_marks()`): NeuRRAM 10.14 µs measured, ISAAC 1.6 µs design
-point, HERMES 0.133 µs derived (63.1 TOPS ÷ 64 cores ÷ 2·256·256); the
+decomposition (`device_fixed_terms.png`; four panels since C39 —
+prefill/decode × on-chip/offloaded on shared axes): a 76.3× faster device
+speeds on-chip prefill 9.33× (826.4 → 88.6 ms) and decode by only
+**1.11×** (14.78 → 13.34 ms: the decode stack is almost entirely the K/V
+write) — the finding, not a bug. **The mechanism half-sentence (C39):**
+on chip the dynamic attention operators are **write-rate-bound** — each
+decode token must be SET into its K/V row before qk^t/av can read it, so
+a device faster only on the read path keeps its on-chip attention walled:
+a fast device with attention on chip is a self-contradictory
+configuration; the exits are faster writes (DR-5) or offload (DR-9).
+**The fixed-terms RELAY (the offloaded twin panels, all closed-form):**
+offloaded, the die keeps the projections + FFN (scaling) and the new
+floor is the unit + link (DR-9 generic: decode 1.02 ms, prefill 19.7 ms)
+— **below the write wall in BOTH phases (13.32 / 78.8 ms), so under the
+generic DR-9 values offload wins single-pass latency at EVERY device
+tier: the expected 1–3 µs crossing threshold does not exist** (decode is
+already 14.78 vs 1.99 ms at NeuRRAM); but the unit floor then caps the
+offloaded config itself: a 76.3× device buys offloaded decode only 1.93×
+(prefill 19.7×) — near-full decode scaling needs offload AND a faster
+unit. DR-5 and DR-9 are thereby welded onto one argument: DR-5 sets the
+on-chip ceiling, DR-9 the offloaded one, and the crossing condition is
+whether unit + link fixed time exceeds the write wall. Pinned in group 27
+(the offloaded totals tie the ledger: 518.1 / 1.99 ms). The silicon marks come only from the registry
+(`anchors.device_marks()`; four since C36): NeuRRAM 10.14 µs measured,
+Mythic 6.38 µs derived, ISAAC 1.6 µs design point, HERMES 0.133 µs derived
+(63.1 TOPS ÷ 64 cores ÷ 2·256·256); the
 continuous surface between them is the model's closed form, not a
 measurement — read it the way the digital anchors are separated from the
 estimated analog band. Since C33 the plane draws the **d-family boundary
@@ -867,7 +953,7 @@ The die level is no longer degenerate: the multi-die variant
 a 6×8 package grid; at the honest capacity a layer is 1.5 dies, so the
 feasible assignment is TWO dies per layer — attention half + FFN half, the
 latter filling its die exactly; the attention die also hosts the growing
-K/V arrays, bounding this seating's validity to ~2.5k tokens) gives the
+K/V arrays, bounding this seating's validity to **2,048 tokens** — the computed cell ceiling (16.78M − 8d² cells over 4d cells per token; a guard raises past it, O21/C38)) gives the
 die link a scheme (mesh / star /
 bus, the same registry), a bandwidth, a per-word energy (10 pJ — the midpoint of Simba GRS's
 measured 6.6–14 pJ/word band, see ANCHORS.md), and `reference_hops`. All three
@@ -1285,9 +1371,10 @@ direction only: **toward underestimation**.
 | `analyze_grid_gating.py` | what gates the hub-position lever: 3×3 / 2×4 / 4×4 / 2×8 × hub × filling on the same traffic; the corner rule N − column; `grid_gating.png/json` (§2.3.1a) |
 | `figstyle.py` | the figure rule: identical series merged into one labelled curve, tied bars bracketed, coincident points one label |
 | `anchors.py` | the anchor registry (single source): digital anchors with status, the estimated analog-reality band, chip points (t_MVM + bandwidth coordinates), one cycle constant and the conversion (§2.5) |
+| `analyze_phase_diagram.py` | the phase diagram (O29): two panels on the (t_MVM × bandwidth) plane — d family + three layers + anchor lines + chip points + validation points + collapse inset; `phase_diagram.png` (with grayscale copy) + `phase_diagram_table.md` (§2.5) |
 | `run_scaling_probes.py` | the O17c scaling-law probes: 48 mapper runs (d ∈ {1024..8192} × S ∈ {128..2048}), column split, one full die per piece, resumable; `scaling_probes.json` (§2.5) |
 | `analyze_scaling_law.py` | the measured V(d, S): trunk closed form, the flip d*, S-independence; `scaling_law_vds.png` + `scaling_law_summary.json` (§2.5) |
-| `sweep_axes.py` | per-axis bandwidth sweeps: on-die / die-to-die (48-die, 2.7B chain, 4-die probe) / unit link / partial-sum width, both overlap ends, read at the digital anchors + the band ends; plus the (t_MVM × bandwidth) device plane (C31: closed-form boundaries + collapse + fixed-term decomposition); `phase_sweep.json` + `sweep_axis_*.png` + `device_plane*.png` + `device_fixed_terms.png` (§2.5) |
+| `sweep_axes.py` | per-axis bandwidth sweeps: on-die / die-to-die (48-die, 2.7B chain, 4-die probe) / unit link / partial-sum width, both overlap ends, read at the digital anchors + the band ends; plus the T1 hub axis (value units, C34) and the (t_MVM × bandwidth) device plane (C31/C33: closed-form boundaries + the d family + collapse + fixed-term decomposition); `phase_sweep.json` + `sweep_axis_*.png` + `device_plane*.png` + `device_fixed_terms.png` (§2.5) |
 | `analyze_anchored_sweep.py` | anchor-column readout: on-chip / offloaded × scheme × five columns (three digital anchors + the band ends), the offloaded column end to end with the external unit (§2.3.1c/e) |
 | `analyze_scale_tiers.py` | 2.7B tier: operators spanning dies × assignment × anchor (§3.5) |
 | `run_2p7b_block.py` | 2.7B one-layer block per-operator components (feeds the tier) |
@@ -1343,7 +1430,7 @@ they go through `tests/compare_baseline.py`, which diffs a fresh
 acceptance gate for re-plumbing work; model upgrades re-freeze with
 `--freeze v1` plus a changelog entry).
 
-There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. After C27 groups 14 and 17 gained v6 blocks (the 2×4 default: the three routed schemes tie, corner / centre 1.00×), the 3×3 mechanism anchors load `mlx300_3x3.yaml` explicitly and keep their numbers, and group 9 checks both grids. Group 26 (C30): the device as a fabric input (declaration + provenance in every config, run cycle = declaration and a divergence rejected, the registry reads the device, GB/s declarations converted at load, link seconds invariant under a 10x faster device, the former literal sites read the fabric, no cycle / 18112 literal in any script). Group 25 (C29): the occupancy as the bound of every explicit schedule, `schedule_slack` default / validation / scaling / inheritance. Group 24 (C28): the hub-lever gating table (six grids × hub, the corner rule, the verdict, the soft-placement lever, the 2×4 cell recomputed independently) and the figure-rule helpers. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point); 23 the anchor registry and the per-axis sweeps (digital values and statuses, the estimated band, chip points with a status per coordinate, no anchor-printing script with its own constant, the conversion identities, the digital columns reproducing the v5 pins, the band-end readouts, the exact thresholds, the knee operators, the three D2D workloads and the unit link, the partial-sum width). Group 27 (C31): the device plane (the bisection-swept thresholds land on the closed-form line to 1e-9, the r surface equals the closed form pointwise, the matrix-part multiplier collapses exactly in g×t_MVM while the whole stack does not, the three silicon marks come from the registry with the right statuses, the HERMES fixed-term decomposition prefill 9.33× / decode 1.11×, and the network seconds at a fixed GB/s carry no device — the group 26 identity restated on the plane's own data). Group 28 (C32/C33): the measured scaling law (the trunk-regime ratio = d/114,688 exactly with the busiest direction down, the flip d* measured at 1,220–1,350 with the 5,793 prediction falsified by >4×, ffn2's tiler step, every probed ratio S-independent qk^t included, column split throughout with the d=2560 probes reproducing the 2.7B block's ratios, the 48-run count; the scheme re-scoring: routed ×4.00 constant, bus drifting ×13.3→×8.25, star reproducing the stored values). Group 27 additionally pins the d family (production base = the plane's own mesh line, the trunk ×4 closed form, the die-level tensor-once closed form, d=2560 passing through the measured B2 mark, the width-tier model names).
+There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. After C27 groups 14 and 17 gained v6 blocks (the 2×4 default: the three routed schemes tie, corner / centre 1.00×), the 3×3 mechanism anchors load `mlx300_3x3.yaml` explicitly and keep their numbers, and group 9 checks both grids. Group 26 (C30): the device as a fabric input (declaration + provenance in every config, run cycle = declaration and a divergence rejected, the registry reads the device, GB/s declarations converted at load, link seconds invariant under a 10x faster device, the former literal sites read the fabric, no cycle / 18112 literal in any script). Group 25 (C29): the occupancy as the bound of every explicit schedule, `schedule_slack` default / validation / scaling / inheritance. Group 24 (C28): the hub-lever gating table (six grids × hub, the corner rule, the verdict, the soft-placement lever, the 2×4 cell recomputed independently) and the figure-rule helpers. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point); 23 the anchor registry and the per-axis sweeps (digital values and statuses, the estimated band, chip points with a status per coordinate, no anchor-printing script with its own constant, the conversion identities, the digital columns reproducing the v5 pins, the band-end readouts, the exact thresholds, the knee operators, the three D2D workloads and the unit link, the partial-sum width). Group 23 additionally pins, since C36–C40: the primary-sourced ESP anchor (status measured, multi-plane aggregation stated), the Mythic / HERMES t coordinates and statuses, the HERMES self-consistency audit (need 1.93 vs supply 2.61 GB/s per core, ×1.36 headroom), and the UCIe `spec` tier with the D2D column order. Group 27 (C31): the device plane (the bisection-swept thresholds land on the closed-form line to 1e-9, the r surface equals the closed form pointwise, the matrix-part multiplier collapses exactly in g×t_MVM while the whole stack does not, the three silicon marks come from the registry with the right statuses, the HERMES fixed-term decomposition prefill 9.33× / decode 1.11×, and the network seconds at a fixed GB/s carry no device — the group 26 identity restated on the plane's own data). Group 28 (C32/C33): the measured scaling law (the trunk-regime ratio = d/114,688 exactly with the busiest direction down, the flip d* measured at 1,220–1,350 with the 5,793 prediction falsified by >4×, ffn2's tiler step, every probed ratio S-independent qk^t included, column split throughout with the d=2560 probes reproducing the 2.7B block's ratios, the 48-run count; the scheme re-scoring: routed ×4.00 constant, bus drifting ×13.3→×8.25, star reproducing the stored values). Group 27 additionally pins the d family (production base = the plane's own mesh line, the trunk ×4 closed form, the die-level tensor-once closed form, d=2560 passing through the measured B2 mark, the width-tier model names). Group 29 (C34): the T1 audit (the cached Timeloop points == counter units ÷ bandwidth with zero error, the write port's 37,224,448 units, hub = bus + in-fill as a per-op identity, ffn1 +6.25% / ffn2 +20%, the thresholds and the MX100-class reading, decode-offloaded == prefill-offloaded, no shipped config declares a hub bandwidth). Group 30 (C35): the phase diagram (the layer edges and the corrected ordering pure hand-off < probe < every chain-incl.-spanning line; the validation classes: trunk exactly 1.0, ffn2 exactly ×2 at d ≤ 4096 and back on the line from 5120; the B2 marks on the d=2560 line at all three silicon speeds; the outputs and pinned table rows).
 
 Note: all-green does **not** mean physically correct. It only guarantees "the
 code equals the documented model"; whether the model is right waits for the

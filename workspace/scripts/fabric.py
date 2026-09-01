@@ -47,9 +47,16 @@ class Device:
 
 @dataclass(frozen=True)
 class Link:
-    """The network connecting a level's instances to their parent's hub."""
+    """The network connecting a level's instances to their parent's hub.
+
+    Propagation may be declared either as `ns_per_hop` directly or as
+    `ns_per_mm` (C38, hygiene: slot_pitch_um's first consumer) -- then
+    ns_per_hop = ns_per_mm x the level's slot_pitch_um / 1000 at load;
+    both at once is an error. The shipped configs keep their explicit
+    per-hop values (DR-4 placeholders), so nothing published moves."""
     name: str
     ns_per_hop: float
+    ns_per_mm: Optional[float] = None        # if set, ns_per_hop was derived from it
     pj_per_word: Optional[float] = None      # None = priced elsewhere / not priced
     cimloop_component: Optional[str] = None  # calibrated component (re-priced by distance)
     reference_hops: Optional[float] = None
@@ -75,6 +82,10 @@ class Level:
     link: Optional[Link] = None
     # T1: this level's HUB storage read/write bandwidth (words/cycle), pushed
     # into the Timeloop spec (e.g. the die's glb). None = unlimited.
+    # VALUE units (O28/C34): consumed by the analytic T1 axis
+    # (sweep_axes.axis_t1_hub). mlx_system pushes it into Timeloop's glb
+    # attributes, where Timeloop counts in ITS units (x7 / x8) -- that path
+    # is validation-only; leave unset in shipped configs.
     hub_bandwidth_words_per_cycle: Optional[float] = None
     # Physical centre-to-centre distance between adjacent slots of THIS level's
     # grid, in micrometres. Platform input (example default in the shipped
@@ -314,6 +325,21 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
         if b is not None:
             return device.words_per_cycle(float(b))
         return None if a is None else float(a)
+    def hop_ns(link, lv):
+        """ns_per_hop declared directly OR derived from ns_per_mm x the
+        level's slot_pitch_um (C38); both at once is an error."""
+        nh, nm = link.get("ns_per_hop"), link.get("ns_per_mm")
+        if nh is not None and nm is not None:
+            raise ValueError(f"{path}: {lv['name']}.link: declare ns_per_hop or ns_per_mm, not both")
+        if nm is not None:
+            pitch = lv.get("slot_pitch_um")
+            if pitch is None:
+                raise ValueError(f"{path}: {lv['name']}.link: ns_per_mm needs the level's slot_pitch_um")
+            return float(nm) * float(pitch) / 1000.0
+        if nh is None:
+            raise ValueError(f"{path}: {lv['name']}.link: declare ns_per_hop or ns_per_mm")
+        return float(nh)
+
     levels = []
     for lv in raw["levels"]:
         link = lv.get("link")
@@ -322,7 +348,9 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
             per_parent=int(lv.get("per_parent", 1)),
             mesh=tuple(lv["mesh"]) if lv.get("mesh") else None,
             link=Link(name=link["name"],
-                      ns_per_hop=float(link["ns_per_hop"]),
+                      ns_per_hop=hop_ns(link, lv),
+                      ns_per_mm=(None if link.get("ns_per_mm") is None
+                                 else float(link["ns_per_mm"])),
                       pj_per_word=(None if link.get("pj_per_word") is None
                                    else float(link["pj_per_word"])),
                       cimloop_component=link.get("cimloop_component"),

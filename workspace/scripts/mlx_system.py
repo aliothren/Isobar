@@ -142,10 +142,17 @@ def mlx_die_callfunc(spec):
         c.attributes.has_power_gating = True
         c.constraints.spatial.no_reuse = []
     spec.architecture.find("output_buffer").constraints.temporal.iter_only = []
-    # T1 storage bandwidth (words/cycle) from the fabric config: pushed into
-    # Timeloop so its NATIVE throttling stalls the cycle count. Network links
-    # are deliberately NOT pushed here -- they belong to the analytic per-link
-    # tier (crossbar_comm.link_occupancy); the two compose by max.
+    # T1 storage bandwidth from the fabric config, pushed into Timeloop so
+    # its NATIVE throttling stalls the cycle count. UNIT WARNING (O28/C34):
+    # Timeloop consumes this in its own COUNTER units at the glb -- input
+    # fills x7 bit slices, output fills/updates x8 bit groups (the write
+    # port binds; ffn1 charges 37,224,448 units against ~8.9M value words)
+    # -- NOT the value words the fabric declares. The readable T1 axis is
+    # the analytic one (sweep_axes.axis_t1_hub, value units); this push is
+    # kept for validation runs only (analyze_bandwidth_sweep.py), and no
+    # shipped config declares a hub bandwidth (group 29 checks). Network
+    # links are deliberately NOT pushed here -- they belong to the analytic
+    # per-link tier (crossbar_comm.link_occupancy); the tiers compose by max.
     hub_bw = FABRIC.level("die").hub_bandwidth_words_per_cycle
     if hub_bw is not None:
         glb = spec.architecture.find("glb")
@@ -214,6 +221,20 @@ def run_mlx_layer(layer_path, place_fn=pa.place_grid, layout=None,
     config = config or MLX_CONFIG
     callfunc = callfunc or mlx_callfunc
     result = utl.run_layer(layer=layer_path, callfunc=callfunc, **config)
+    # hygiene 22 (C40): replace the rounded summary-table energy (pJ/compute
+    # x computes, finite print precision, +0.05-0.5%) with the exact sum of
+    # the per-component 'Energy (total)' lines; the rounded value stays on
+    # `energy_summary_J`. Published JSON energies move by <=0.5% at the next
+    # regeneration; the ledger's residual row closes then.
+    try:
+        from scripts import tl_output_parsing as _tlp
+        with open(os.path.join(result.output_dir, "timeloop-mapper.stats.txt")) as _f:
+            _exact = _tlp.exact_total_energy_J(_f.read())
+        result.energy_summary_J = result.energy
+        result.energy = _exact
+        result.tops_per_w = result.computes / result.energy * 2 / 1e12
+    except (OSError, AttributeError):
+        pass
     levels = pa.perceive_result(result)                 # capture before next run
     analysis = pa.position_aware_cost(levels, layout or LAYOUT, place_fn,
                                       placement=placement,

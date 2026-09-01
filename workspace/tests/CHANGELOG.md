@@ -518,3 +518,200 @@ basis-specific); star re-scoring reproduces the stored serialization to
 on die, 0.101 / 1.010 / 1.616 / 3.232 GB/s at the die level (the levels
 coincide for d >= 2560: mesh's x4 multicast = ffn2's 4d-wide tensor).
 Groups 27 / 28 gain one test each. Suite: 235 passed / 1 xfail.
+
+## C34: O28 closed -- the T1 (die-buffer) axis audited: counter units again, 2026-08-31
+
+**What changed:** the audit confirmed the suspicion exactly: Timeloop
+throttles the glb per dataspace in its COUNTER units (input fills x7 bit
+slices; output fills AND updates x8 bit groups; the write port binds --
+ffn1: 7*S*C + 2*8*S*M = 37,224,448 units), and every cached Timeloop point
+equals units / bandwidth to machine precision -- the "160x at 64 w/c"
+anomaly reproduced in closed form; against ~8.9M value-unit hub words that
+is a ~4.2x unit inflation (C25's sibling on the T1 axis). No shipped
+config declares a hub bandwidth, so nothing published moved. The readable
+T1 axis is now ANALYTIC in value units (`sweep_axes.py` axis `t1_hub` +
+`sweep_axis_t1_hub.png`): the hub is one shared port (the MX100-class
+DMA + shared-SRAM medium) and per matmul op hub words = the T2 bus words
++ the input tensor arriving once (P x C x N) -- the T1 = T2-bus
+equivalence holds as an identity, shifted by the in-fill (ffn1 +6.25%).
+Readout: knee ffn2 everywhere; 1% at 2.27 / 2.33 GB/s (prefill on chip /
+offloaded; the bus's 1.89 shifted); busiest-op net = compute at 2.42 GB/s;
+MX100-class 3.9-5.0x at the estimated band's 0.4 GB/s, 1.00x at 8 GB/s;
+decode-offloaded == prefill-offloaded exactly (S cancels).
+`analyze_bandwidth_sweep.py` becomes the executable audit (asserts the
+closed form; labels its Timeloop curve in counter units); unit warnings at
+the `mlx_system` push site and the `fabric` field. Group 29
+(`tests/test_t1_hub.py`, 4 tests); the sweep schema gains `t1_hub`.
+Suite: 239 passed / 1 xfail.
+
+## C35: O29 closed -- the phase diagram drawn, 2026-09-01
+
+**What changed:** `scripts/analyze_phase_diagram.py` (new, zero mapper) ->
+`analysis/phase_diagram.png` + grayscale check copy +
+`phase_diagram_table.md`; a `phase` stage in make_figures; group 30
+(`tests/test_phase_diagram.py`, 4 tests). Two panels on the same
+(t_MVM x bandwidth) plane: slope -1 boundaries, the d family with model
+names (d = 1024 the production base), three shaded layers, digital anchors
+as horizontal lines with statuses, estimated bands / chip bandwidths
+marked as estimates, HERMES / ISAAC error-bar points and NeuRRAM's
+t-coordinate-only mark, two trend arrows, the collapse inset, and
+validation points coloured AND shaped by measured / closed-form
+(grayscale-safe): the 17c probes (left; ffn2's tiler step gets its own
+"known step -- expected" marker class) and the measured B2 block-chain
+marks (right; on the d = 2560 line at all three silicon speeds).
+
+**Semantics corrected in review (not layout):** the d >= 2560 die-level
+lines are O13 BLOCK CHAINS INCLUDING their spanning operators (column
+split: each receiving die takes the full input) -- which is why they sit
+ABOVE the single 4-die operator probe. Relabelled: pure hand-off (black,
+d = 1024; = the die<->unit link under offload) / block chain incl.
+spanning operators (blues) / single 4-die operator (purple); the three
+layers restated accordingly; the plane JSON's `d2d_form` carries the same
+phrasing. Suite: 243 passed / 1 xfail.
+
+## C36: the anchor leftovers settled -- Mythic derived, HERMES published, ESP primary; MX100 blocked, 2026-09-01
+
+**What changed:** the O25 P2 leftovers closed by a literature pass.
+Mythic M1076 t_MVM derived: 25 TOPS / 76 tiles / (2 x 1024 x 1024) =
+6.38 us (tile array from 80M weights / 76 tiles); `device_marks()` now
+serves FOUR silicon marks -- plane, phase diagram, collapse and
+fixed-terms figures regenerated with the fourth mark, the diagram's table
+gains a Mythic column (groups 27 / 30 re-pinned). The HERMES link rate
+was published all along: the arXiv methods' spec table gives a maximum
+link data-rate of 3.2 Gbit/s = 0.4 GB/s per link (418 links, Parallel
+Prism) -- the first published analog-CIM link rate in the registry,
+landing exactly on the analog-reality band's LOW end; the identity
+statement is amended everywhere, the band stays the class estimate, and
+HERMES becomes a PUBLISHED bandwidth point on the phase diagram (0.4 GB/s
+against its own star knee of 15.4 GB/s: deep in the everything-contends
+layer). The ESP anchor is primary-sourced (ESSCIRC 2022 read: 5 data
+planes x 64 bit + 1 control x 32 bit at a measured 800 MHz; 281 Gb/s
+tile-to-tile headline; the anchor's 32 GB/s = the 5 data planes, one
+plane = 6.4 GB/s -- multi-plane aggregation stated): status secondary ->
+measured, the ANCHORS.md citation caveat resolved (group 23 re-pinned).
+MX100 stays pending, BLOCKED on its source (arXiv:2410.14882 publishes
+no TOPS or MVM rate, checked 2026-09-01) -- recorded as worklist item 12.
+Suite: 243 passed / 1 xfail.
+
+## C37: V0 -- silicon-point normalization; the HERMES self-consistency audit; a C36 mis-reading corrected, 2026-09-01
+
+**The correction (the validation track's V0, caught in review):** C36
+plotted HERMES's 0.4 GB/s per PHYSICAL link against our per-macro-link
+star knee (15.4 GB/s at 133 ns) and read "deep in the everything-contends
+layer" -- a granularity mismatch (418 links / 64 cores vs one link
+feeding 32 arrays); a fabric 38x under its knee could not sustain the
+measured 63.1 TOPS. **The rules, now explicit in the registry
+(`ChipPoint` docstring):** (1) t_mvm_s is PER TOKEN -- TOPS-derived row
+times are tile-shape invariant, so no array-height folding (Mythic 6.38
+us / ISAAC 1.6 us stand); (2) a bandwidth coordinate is the chip fabric's
+aggregate supply to the array group one of OUR links serves (32 arrays);
+published per-physical-link rates aggregate (HERMES: (418/64) x 0.4 x 32
+~= 83.6 GB/s; the per-link 0.4 kept as `ondie_gbps_per_link`, still the
+analog band's low end); estimated bands are authored at our granularity.
+**The audit (`anchors.hermes_self_consistency()`):** need 256 INT8 / 133
+ns ~= 1.93 GB/s per core vs supply (418/64) x 0.4 ~= 2.61 GB/s --
+headroom ~1.36x: a fabricated analog chip provisioned its fabric just
+above its own knee, the first external silicon point validating the knee
+formula. The diagram redrawn (HERMES at ~84 GB/s: "the organisation
+decides", fitting a compile-time scheduled fabric); group 23 re-pinned +
+1 audit test. Suite: 244 passed / 1 xfail.
+
+## C38: O21 closed (the 2,048-token ceiling) + hygiene 25 / 27, 2026-09-01
+
+**O21:** `llm_workload.attention_die_context_ceiling` -- the feasible
+two-dies-per-layer seating's K/V ceiling in closed form:
+(DIE_WEIGHT_CELLS - 8 d^2 resident cells) / (4 d cells per token) =
+**2,048 tokens** at d = 1024 (the "~2.5k" estimate corrected; a
+cell-capacity upper bound). `check_context_ceiling` raises past it (the
+message points at O14, the long-context mechanism), and
+`die_to_die_activation` guards the two-dies-per-layer path (die slots >=
+2 x layers) -- S = 512 everywhere unaffected. Validity statements updated
+in SUMMARY (zh + en), PROGRESS, settings (assumption 5 carries the
+computed value). **Hygiene 25:** `slot_pitch_um` gains its first consumer
+-- a link may declare `ns_per_mm` instead of `ns_per_hop` (resolved at
+load as pitch x ns/mm; both at once rejected; shipped configs keep their
+explicit DR-4 per-hop values, so nothing published moves). **Hygiene
+27:** the `reduction_hyperedges` membership convention is CONFIRMED
+against Timeloop's spatial index order at the loop-nest level (Timeloop
+flattens a nested spatial block with the innermost loop fastest --
+exactly our first-listed-slowest convention); the parser's nest-order
+preservation and a no-repeated-dim guard are pinned on the frozen ffn1
+fixture, and the traffic.py docstring drops its "to be confirmed" caveat.
+Tests: +3 (capacity/O21), +1 (fabric/ns_per_mm), +1 (interconnect/
+membership). Suite: 249 passed / 1 xfail.
+
+## C39: the offloaded twin of the fixed-terms figure; the write-bound mechanism, 2026-09-01
+
+**What changed:** `sweep_axes.py`: the plane's fixed-terms block gains an
+offloaded twin (`fixed_terms_offloaded` + `offload_relay`;
+`device_fixed_terms.png` becomes four panels, prefill/decode x
+on-chip/offloaded). Offloaded, the die keeps the projections + FFN
+(scaling with t_MVM); the new fixed floor is the attention unit + link +
+die digital remainder at the DR-9 generic values (decode 1.02 ms = unit
+1.00 + link 0.01 + digital 0.01; prefill 19.71 ms = 8.61 + 4.03 + 7.08);
+the NeuRRAM totals tie the C21 ledger exactly (518.12 / 1.99 ms). The
+WRITE-BOUND mechanism is stated in writing (settings, assumption 22,
+SUMMARY zh+en, ANCHORS DR-9, the caption): on chip each decode token must
+be SET into its K/V row before qk^t/av can read it -- a fast device with
+attention on chip is self-contradictory; the exits are DR-5 or DR-9.
+**Findings (two expectations corrected):** no crossing threshold exists
+-- the offloaded floor beats the write wall in both phases, so offload
+wins single-pass latency at every device tier (the expected 1-3 us
+threshold is falsified; the condition is stated parametrically); and the
+offloaded decode is not a pure scaling wedge -- the unit floor caps it
+(76.3x device buys 1.93x offloaded vs 1.11x on chip; prefill 19.7x vs
+9.33x). The punchline is the fixed-terms RELAY: DR-5 sets the on-chip
+ceiling, DR-9 the offloaded one. Group 27 + 1 test. Suite: 250 passed /
+1 xfail.
+
+## C40: the hygiene slate cleared -- exact energies, seeded sampling, the UCIe anchor, regen semantics, 2026-09-01
+
+**What changed:** (22) `tl_output_parsing.exact_total_energy_J` sums the
+per-component 'Energy (total)' lines and `run_mlx_layer` ships it in place
+of pytimeloop's rounded per-compute-table total (ffn1 fixture: 2699.48 ->
+2697.92 uJ, +0.058%, pinned in test_perceive; rounded value kept on
+`energy_summary_J`; published JSON energies move <= 0.5% at the next
+regeneration and the ledger's residual row closes then). (23)
+`crossbar_value_real.py` seeds its CNN activation draw -- the
+1.199-vs-1.204 rerun drift gone going forward, the published 1.204x
+stands until the value stage regenerates. (24) make_figures audited:
+every declared stage output exists; guarded by
+`test_make_figures_outputs.py`. (26) the UCIe-S 64 D2D anchor (x16
+standard-package module at 32 GT/s per lane = 64 GB/s per direction; UCIe
+Consortium spec; status `spec` -- a standard's ceiling, one epistemic
+step past post-layout, honestly separated from measured silicon): in the
+D2D readout columns, all D2D tables/figures + the phase diagram
+regenerated, group 23 re-pinned. (28) `run_scaling_probes.py --fresh`.
+Suite: 252 passed / 1 xfail.
+
+C40 addendum -- found while closing, PRE-EXISTING (verified identical at
+the pushed HEAD via stash): two SLOW-suite goldens fail --
+test_per_level_volume_conservation_v1 (12,288 vs 311,296; an old v1
+identity apparently left in counter units by the C25 value reform) and
+test_position_spread_golden_v2 (1.091 vs the pinned 1.25; the tiny2x2
+spread never re-pinned after the C27 grid change). Fast suite unaffected.
+Recorded as worklist item 13: re-derive with attribution, never band-aid
+the pins.
+
+C40-r (review amendments, 2026-09-01): (22) the exact-energy sum now
+INCLUDES the temporal-reduction and address-generation adders (separate
+line items in Timeloop's account; zero under this architecture's ERTs,
+asserted on the fixture -- so nothing changes numerically today, and a
+future ERT pricing them cannot be silently dropped), and the fixture pin
+is joined by an IDENTITY that re-validates at every regeneration: the sum
+agrees with the stats file's own Summary 'Energy:' line within its print
+precision. (23) confirmed the seeded randn is the only stochastic source
+on the value-sampling path (numpy does deterministic transforms; the
+GPT-2 branch uses a fixed text). (26) the UCIe anchor states its four
+conventions explicitly -- standard package chosen deliberately (organic
+substrate, GRS's packaging class; the advanced x64 module's 256 GB/s
+noted, not adopted), raw signaling ceiling with no protocol overhead
+deducted, one module = one model die-link as a stated mapping convention,
+and the press-only "first silicon" claim removed from the registry
+(revisit when a per-link silicon measurement publishes). (28)
+regen_v6.sh's probe line now passes --fresh (regeneration re-measures;
+resume stays for interrupted runs). Process rules from the slow-suite
+finding: the v6 freeze precondition now includes both suites fully green,
+and the slow suite runs weekly + mandatorily before every freeze;
+attribution clue recorded for item 13 (12,288 = 3 x 4096, 311,296 = 76 x
+4096). Suite: 252 passed / 1 xfail.

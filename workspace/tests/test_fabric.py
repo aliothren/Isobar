@@ -103,3 +103,34 @@ def test_slot_pitch_is_carried_and_validated():
         raise AssertionError("zero slot_pitch_um must be rejected")
     except ValueError:
         pass
+
+
+def test_ns_per_hop_can_derive_from_slot_pitch(tmpdir=None):
+    """Hygiene 25 (C38): slot_pitch_um's first consumer -- a link may
+    declare ns_per_mm instead of ns_per_hop (derived at load: ns_per_mm x
+    pitch / 1000); both at once is an error; the shipped configs keep
+    their explicit DR-4 per-hop values, so nothing published moves."""
+    import os
+    import tempfile
+    from scripts import fabric
+    ws = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = open(os.path.join(ws, "models", "fabric", "mlx300.yaml")).read()
+    base = fabric.from_yaml(os.path.join(ws, "models", "fabric", "mlx300.yaml"))
+    assert base.level("macro").link.ns_per_hop == 5.0 and base.level("macro").link.ns_per_mm is None
+    y = src.replace("reference_hops: 1.0, ns_per_hop: 5.0, calibration: DR-4}",
+                    "reference_hops: 1.0, ns_per_mm: 6.25, calibration: DR-4}")
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as t:
+        t.write(y)
+    f = fabric.from_yaml(t.name)
+    assert f.level("macro").link.ns_per_hop == 5.0                 # 0.8 mm x 6.25 ns/mm
+    assert f.level("macro").link.ns_per_mm == 6.25
+    y2 = src.replace("reference_hops: 1.0, ns_per_hop: 5.0, calibration: DR-4}",
+                     "reference_hops: 1.0, ns_per_hop: 5.0, ns_per_mm: 6.25, calibration: DR-4}")
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as t2:
+        t2.write(y2)
+    try:
+        fabric.from_yaml(t2.name)
+    except ValueError as e:
+        assert "not both" in str(e)
+    else:
+        raise AssertionError("ns_per_hop and ns_per_mm together were accepted")

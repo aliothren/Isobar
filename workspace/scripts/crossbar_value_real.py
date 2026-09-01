@@ -87,7 +87,14 @@ def extract_cnn(out_json):
     hd = conv.register_forward_hook(
         lambda mod, inp, out: grab.__setitem__("x", inp[0].detach()))
     with torch.no_grad():
-        net(torch.randn(8, 3, 224, 224))              # 8 random images -> deep activations
+        torch.manual_seed(0)                          # hygiene 23 (C40): the sampling
+        # draw is seeded, so the CNN value histograms are reproducible (the
+        # 1.199-vs-1.204 rerun drift disappears from the next value-stage
+        # regeneration onward; the published 1.204x stays until then).
+        # Review answer (C40-r): this randn is the ONLY stochastic source on
+        # the path -- numpy here does deterministic histogramming/reshapes
+        # and the GPT-2 branch uses a fixed sample text; nothing else to seed.
+        net(torch.randn(8, 3, 224, 224))              # 8 sampled images -> deep activations
     hd.remove()
     X = grab["x"]                                     # [8, 512, 7, 7], ReLU'd, sparse
     kh, kw = conv.kernel_size

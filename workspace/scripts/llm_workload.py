@@ -542,6 +542,35 @@ def dies_for_op(op: Op) -> int:
     return -(-op_weight_cells(op) // DIE_WEIGHT_CELLS)
 
 
+def attention_die_context_ceiling(cfg: GptConfig) -> int:
+    """O21 (C38): the context ceiling of the feasible two-dies-per-layer
+    seating (C13). The attention die holds qkv_proj (d x 3d) and out_proj
+    (d x d) resident -- 8 d^2 cells at CELLS_PER_WEIGHT = 2 -- plus the
+    K/V arrays, which grow by one K column and one V row per token
+    (2 x d values = 4d cells). Ceiling = free cells / cells per token =
+    (DIE_WEIGHT_CELLS - 8 d^2) / (4 d); at d = 1024 that is
+    (16,777,216 - 8,388,608) / 4,096 = 2,048 tokens. This is the
+    CELL-capacity ceiling: array-granularity packing can only round it
+    DOWN, so it is the upper bound of the seating's validity domain
+    (prompt + generated tokens). No S = 512 number is affected; the
+    long-context mechanism itself is O14."""
+    resident_cells = 4 * cfg.d_model * cfg.d_model * CELLS_PER_WEIGHT
+    per_token_cells = 2 * cfg.d_model * CELLS_PER_WEIGHT
+    return int((DIE_WEIGHT_CELLS - resident_cells) // per_token_cells)
+
+
+def check_context_ceiling(cfg: GptConfig, context: int):
+    """Raise when a context (prompt + generated tokens) exceeds the
+    two-dies-per-layer seating's K/V ceiling (O21)."""
+    cap = attention_die_context_ceiling(cfg)
+    if context > cap:
+        raise ValueError(
+            f"context {context} tokens exceeds the attention die's K/V "
+            f"ceiling of {cap} for the two-dies-per-layer seating (O21): "
+            f"the 48-die configuration is INVALID past it -- the "
+            f"long-context mechanism itself is O14")
+
+
 def static_rewrite_cost(op: Op, e_write=E_WRITE_PER_CELL_J,
                         t_set_ns=T_SET_NS):
     """Per-inference cost of temporal weight reuse: EVERY cell is rewritten
@@ -985,6 +1014,9 @@ def die_to_die_activation(cfg: GptConfig, S: int, phase: str, chip2chip_pJ=None,
     lv = fab.level("die")
     pl = (placement or placement_mod.sequential_fill(fab)).verify(fab)
     asg = assignment or die_assignment(cfg, fab)
+    if len(pl.slots["die"]) >= 2 * cfg.n_layers:
+        # the two-dies-per-layer seating (C13): its K/V ceiling applies (O21)
+        check_context_ceiling(cfg, S)
     if len(asg) != cfg.n_layers:
         raise ValueError(f"assignment covers {len(asg)} layers, "
                          f"model has {cfg.n_layers}")

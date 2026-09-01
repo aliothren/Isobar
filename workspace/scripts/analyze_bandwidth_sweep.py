@@ -10,9 +10,17 @@ serialization phenomenon at different places and compose by MAX:
       the spec; Timeloop stretches the cycle count itself. Each point is a real
       mapper run in a subprocess with CIMSIM_FABRIC pointing at a temp variant.
 
-REGIME NOTE (per review): activating stalls is a DIFFERENT accounting regime
-from the stall-free numbers; sweep results are placeholder-bandwidth
-sensitivities, not findings, until DR-2 calibrates the axis.
+UNIT AUDIT (O28 / C34, group 29): the T1 points are in Timeloop's COUNTER
+units, not value words -- Timeloop charges the glb per dataspace in its own
+counters (input fills x7 bit slices; output fills AND updates x8 bit groups)
+and throttles on the busier port. For ffn1 the write port binds at
+7*S*C + 2*8*S*M = 37,224,448 units, and every cached point equals
+37,224,448 / bandwidth cycles EXACTLY -- which is why "64 w/c" once read as
+a 160x stretch (the value-unit hub words are ~8.9M: the T2 bus words plus
+the input tensor arriving once). The GB/s-readable T1 axis is therefore the
+ANALYTIC one (sweep_axes.py axis t1_hub, value units, one shared port);
+this script's Timeloop path remains as the mechanics validation (the stall
+is exactly linear in 1/bandwidth) with its unit stated.
 
 Usage: python3 analyze_bandwidth_sweep.py [--t2-only]
 Writes analysis/bandwidth_sweep.png + a printed table.
@@ -103,6 +111,23 @@ def t1_sweep():
     return rows
 
 
+FFN1_TL_WRITE_UNITS = 7 * 512 * 1024 + 2 * 8 * 512 * 4096   # 37,224,448
+
+
+def audit_t1(t1, cycle_s):
+    """The closed-form reconciliation (O28): every Timeloop point must equal
+    the write-port counter units / bandwidth, exactly."""
+    print("\nT1 unit audit (group 29): stall = TL write-port counter units / bw")
+    print(f"  write units = 7*S*C + 2*8*S*M = {FFN1_TL_WRITE_UNITS:,} "
+          f"(input fills x7 slices; output fills+updates x8 bit groups)")
+    for r in t1:
+        pred = FFN1_TL_WRITE_UNITS / r["bw"] * cycle_s
+        err = abs(pred / r["compute_s"] - 1)
+        print(f"  bw={r['bw']:6g} TL-units/cycle: measured {r['compute_s']:.6f} s, "
+              f"closed form {pred:.6f} s, rel err {err:.1e}")
+        assert err < 1e-9, "the T1 point left the counter-unit closed form"
+
+
 def main():
     compute, t2 = t2_sweep()
     print(f"\nT2 (router link, analytic; ffn1 compute = {compute:.4e} s):")
@@ -112,6 +137,8 @@ def main():
               f"{r['multiplier']:>14.2f}")
 
     t1 = [] if "--t2-only" in sys.argv else t1_sweep()
+    if t1:
+        audit_t1(t1, fabric_mod.default().device.cycle_seconds)
 
     plt.figure(figsize=(7.5, 5))
     plt.plot([r["bw"] for r in t2], [r["multiplier"] for r in t2], "o-",
@@ -120,15 +147,15 @@ def main():
         # normalize by the UNLIMITED-bandwidth compute time, same as T2 --
         # every plotted point is "times slower than stall-free".
         plt.plot([r["bw"] for r in t1], [r["compute_s"] / compute for r in t1],
-                 "s--", label="T1: glb hub (Timeloop native throttling)")
+                 "s--", label="T1: glb hub, Timeloop native -- COUNTER units\n"
+                              "(inputs x7, outputs x8x2; validation only, O28)")
     plt.xscale("log", base=2)
     plt.xlabel("bandwidth (words / cycle)")
     plt.ylabel("latency multiplier vs unlimited")
     plt.yscale("log")
-    plt.title("ffn1 latency vs link/hub bandwidth (PLACEHOLDER axes, DR-2)\n"
-              "cycle = ~1.45 us on this device, so 1 word/cycle is a slow link;\n"
-              "stall-free baseline = 1.0; not comparable to stall-free numbers\n"
-              "until DR-2 calibrates", fontsize=10)
+    plt.title("ffn1 latency vs link/hub bandwidth (DR-2's landing pad)\n"
+              "T2 in value words; the T1 curve is in Timeloop COUNTER units --\n"
+              "the value-unit T1 axis is sweep_axis_t1_hub.png (O28 / C34)", fontsize=10)
     plt.grid(alpha=0.3, which="both")
     plt.legend()
     p = os.path.join(OUT, "bandwidth_sweep.png")
