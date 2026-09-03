@@ -107,7 +107,11 @@ ANCHORS = [
            gbps=80.6),
     Anchor("grs", "GRS 12.5", D2D, DIGITAL, "measured",
            "Zimmer et al., JSSC 2020: Simba package mesh, 100 Gb/s per link direction (GRS)",
-           gbps=12.5),
+           gbps=12.5,
+           derivation="the demonstrated-MAXIMUM mode (25 Gb/s/pin x 4 lanes). Simba's own "
+                      "placement experiments ran the 11 Gb/s mode = 5.5 GB/s per direction "
+                      "(SIMBA_EXPERIMENT_GRS_GBPS below; MICRO'19 §4.1) -- an operating "
+                      "point, not a capability line; neither number corrects the other (C41)"),
     Anchor("ucie", "UCIe-S 64", D2D, DIGITAL, "spec",
            "UCIe Consortium specification (uciexpress.org): STANDARD-package module, "
            "x16 lanes at 32 GT/s per lane -- an interconnect STANDARD's raw signaling "
@@ -134,6 +138,17 @@ ANCHORS = [
            derivation="GPIO / LVDS-class links (8-32 lanes x 100-500 Mb/s) to a short SerDes-free "
                       "parallel link: 0.1 .. 2 GB/s per direction"),
 ]
+
+
+# Operating-point data of the Simba REPRODUCTION preset (C41, worklist step
+# 1) -- deliberately NOT Anchor rows: readout columns are capability anchors,
+# and adding these would silently widen every sweep. The reproduction's
+# fabric (models/fabric/simba.yaml) freezes these values; provenance:
+# analysis/papers/simba_extracts.md.
+SIMBA_EXPERIMENT_GRS_GBPS = 5.5    # 4 GRS lanes x 11 Gb/s mode (MICRO'19 §4.1)
+SIMBA_EXPERIMENT_NOC_GBPS = 8.75   # 70 Gb/s per NoC link at 0.72 V (JSSC'20 §II-C)
+SIMBA_EXPERIMENT_PE_HZ = 1.03e9    # PE clock at the experiment point (MICRO'19 §4.1)
+SIMBA_MACS_PER_CHIPLET_CYCLE = 1024  # 16 PEs x 8 vector MACs x 8-wide (Tab 2)
 
 
 def by_key(key: str) -> Anchor:
@@ -194,6 +209,10 @@ class ChipPoint:
     fabric: str                       # what the paper describes
     tier: str                         # hub-io | bus-T1 | star | mesh
     source: str
+    # "analog" chips are the device marks of the r=1 machinery; a
+    # "digital" chip point (C47: Simba, via its C41 equivalent-throughput
+    # declaration) sits on the plane as a chip but is NOT a device mark.
+    paradigm: str = "analog"
     t_mvm_s: Optional[float] = None
     t_mvm_status: str = "pending"     # measured | derived | design-point | pending
     t_mvm_derivation: str = ""
@@ -239,6 +258,22 @@ CHIPS = [
                             "arXiv:2410.14882 publishes no TOPS or MVM rate and product material has "
                             "none citable; revisit on TetraMem's 22nm SoC publication -- C36)",
               ondie_band=(0.4, 8.0), ondie_status="estimated (SRAM port width x clock; a T1 number in this model)"),
+    ChipPoint("simba", "Simba 36-chiplet (2019)", 
+              "36 chiplets x 16 digital PEs (8x8-wide vector MACs, 32 KiB resident weights each); hierarchical 4x5 NoC + 6x6 GRS NoP, X-Y routed, hybrid wormhole/cut-through",
+              "mesh", "Shao et al., MICRO'19 + Zimmer et al., JSSC 2020; the C41-C47 reproduction preset (analysis/SIMBA_PREREG.md)",
+              paradigm="digital",
+              t_mvm_s=2 * 32768 / (128 * 1.03e9), t_mvm_status="derived",
+              t_mvm_derivation="C37 per-token rule on the C41 equivalent-throughput device: one input "
+                               "row through a PE's resident 32 KiB = 2 x 32,768 ops / (128 ops/cycle "
+                               "x 1.03 GHz, the experiment point) = 497 ns; shape-invariant "
+                               "(576 PEs x 65,536 ops / 75.9 TOPS gives the same)",
+              ondie_gbps=2 * 8.75 * 32, ondie_gbps_per_link=8.75,
+              ondie_status="derived (C37 normalization): 70 Gb/s per NoC link at 0.72 V is published "
+                           "(JSSC §II-C); a 256x256-array equivalent = 2 PEs (65,536 resident "
+                           "weights) -> 2 links x 8.75 GB/s x 32 arrays = 560 GB/s per macro-group",
+              d2d_gbps=12.5,
+              d2d_status="measured (GRS 25 Gb/s max mode = the diagram's D2D line; the placement "
+                         "experiments ran the 11 Gb/s mode = 5.5 GB/s, SIMBA_EXPERIMENT_GRS_GBPS)"),
     ChipPoint("mythic_m1076", "Mythic AMP M1076",
               "76 analog tiles, each with 64 KB SRAM + NoC router; compile-time scheduled",
               "star", "Mythic product material (no academic publication): 25 TOPS peak, 76 tiles, 80M weights on chip",
@@ -278,12 +313,15 @@ def hermes_self_consistency():
 
 
 def device_marks():
-    """The silicon marks of the device axis (O17b): every chip point with a
-    t_MVM coordinate, value AND status straight from the registry -- the only
-    source a plane figure may draw device marks from. Everything between the
-    marks is a closed-form surface, not a measurement: NeuRRAM is measured,
-    ISAAC a design point, HERMES derived from peak TOPS."""
-    return sorted((c for c in CHIPS if c.t_mvm_s is not None),
+    """The silicon marks of the device axis (O17b): every ANALOG chip point
+    with a t_MVM coordinate, value AND status straight from the registry --
+    the only source a plane figure may draw device marks from. Everything
+    between the marks is a closed-form surface, not a measurement: NeuRRAM
+    is measured, ISAAC a design point, HERMES derived from peak TOPS.
+    Digital chip points (C47: Simba) are excluded by paradigm -- they sit
+    on the plane as chips, not as device marks of the r=1 machinery."""
+    return sorted((c for c in CHIPS if c.t_mvm_s is not None
+                   and c.paradigm == "analog"),
                   key=lambda c: -c.t_mvm_s)
 
 

@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 223 pass + 1 expected-fail, which is
+(`python3 tests/run_tests.py`; currently 288 pass + 1 expected-fail, which is
 open item O1).
 
 ---
@@ -458,8 +458,8 @@ identical at the pushed HEAD via stash):** two SLOW-suite goldens fail:
 -- smells like the C25 value-unit reform applied to one side of an old
 v1 identity) and `test_position_spread_golden_v2` (1.091 measured vs the
 pinned 1.25 -- likely the C27 grid change never re-pinned the tiny2x2
-spread). Recorded as worklist item 13; re-derive with attribution, do
-not band-aid the pins.
+spread). Recorded in the worklist (now folded into plan step 3 after
+the renumber); re-derive with attribution, do not band-aid the pins.
 
 ### C39. The offloaded twin of the fixed-terms figure; the write-bound mechanism stated (2026-09-01)
 
@@ -1356,31 +1356,31 @@ current owner and its open items. Bold items move current conclusions.
 
 | category | factor | current solution | improvements (item) |
 |---|---|---|---|
-| device | array energy/latency model | CiMLoop's silicon-calibrated wan macro (NeuRRAM class: 1.4486 us cycle, 7 input slices = 10.14 us per MVM row), declared as the fabric's `device` block and checked against the macro on every run (C30); the (t_MVM x bandwidth) plane with the three silicon marks is measured (C31: closed-form boundaries, collapse, fixed terms) | the scaling law from mapper-measured V(d, S) (**O17c**); the default die grids are the fill-exact 2x4 / 4x2 since C27 (`mlx300_3x3.yaml` = the earlier grids, comparison only) |
-| device | value-dependent energy | real per-model histograms (OPT-2.7b extracted); per-crossbar mode gated by device class | seed the CNN samples (hygiene) |
+| device | array energy/latency model | CiMLoop's silicon-calibrated wan macro (NeuRRAM class: 1.4486 us cycle, 7 input slices = 10.14 us per MVM row), declared as the fabric's `device` block and checked against the macro on every run (C30); the (t_MVM x bandwidth) plane measured (C31: closed-form boundaries, collapse, fixed terms), the width law mapper-measured (C32: trunk ratio d/114,688, flip d* in 1.2-1.35k), four silicon marks (C36) | -- (device axis closed; default die grids fill-exact 2x4 / 4x2 since C27, `mlx300_3x3.yaml` kept for comparison) |
+| device | value-dependent energy | real per-model histograms (OPT-2.7b extracted); per-crossbar mode gated by device class; the CNN sampling seeded (C40) | -- |
 | device | weight / K-V write model | append-only geometry + per-cell/row-serial params (our overlay) | write params are platform inputs (DR-5); long-context K/V (O14) |
 | per-op mapping | intra-op loop tiling | **provided by the CiMLoop mapper** (EDP search) under the op's co-residency share (C14) | default greedy path guarded by the residency tripwire |
 | per-op mapping | over-capacity residency policy | three explicit mechanisms + closed-form tiler (C12) | input-row split untested (O15); dynamic ops (O14) |
 | per-op placement | weight blocks -> macro/core/crossbar | Placement object + sequential fill; rankings measured | unpriced links keep it a ranking (O1); search (S3) |
-| per-op placement | shared-buffer attach point | scheme parameter; 1.56x lever measured (v3 accounting, Simba anchor) | search (S3) |
+| per-op placement | shared-buffer attach point | scheme parameter; the hub lever is GATED by grid width (C28: nil on the fill-exact 2x4, 1.67x on the 3x3 variant); the soft heaviest-block lever survives every grid (1.5-2x) | search (S3); the anchored soft-lever table = plan step 2 |
 | on-die wiring | interconnect organisation | scheme registry: star/mesh/tree/bus per level; full-duplex per-direction wires, bus shared (C17) | more schemes (O19); bus wire energy (O8); routing-algorithm asymmetries (XY vs YX replies, O19) |
-| on-die wiring | transfer paradigm | schemes are wiring; the paradigm (DMA + shared SRAM, compile-time scheduled, NoC) is implicit | paradigm -> tier mapping: DMA/shared-SRAM -> shared medium at the T1 hub bandwidth, scheduled -> star, NoC -> mesh (**O25**); `schedule_slack` input (O26) |
+| on-die wiring | transfer paradigm | paradigm -> tier mapping in the registry (C26: DMA/shared-SRAM -> the T1 hub axis, compile-time scheduled -> star, NoC -> mesh); `schedule_slack` input (C29); the T1 hub axis itself in analytic closed form (C34) | -- |
 | cross-die mapping | dies per op and split dimension | tiling planner (power-of-two aware, residency enforced) | cross-die addition path unexercised (O15); utilisation loss quantified, not optimised |
-| cross-die mapping | layer/op -> die granularity | feasible 48-die config, two dies/layer (C13); co-resident per-op mapping (C14) | context ceiling (O21); half-partition is an assumption (register) |
+| cross-die mapping | layer/op -> die granularity | feasible 48-die config, two dies/layer (C13); co-resident per-op mapping (C14); the 2,048-token attention context ceiling computed and runtime-guarded (C38) | half-partition is an assumption (register) |
 | cross-die placement | die-group seating on the package | the block's die-sets seated disjointly, three styles (C23) | whole-model seating (**O16**); search (S4) |
 | cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17); producer-to-consumer routing, the tensor once (C23) | O19 applies |
-| traffic accounting | multicast/reduction structure and units | v1 structured traffic in VALUE units (C25: reads / bit-slice, bit and cell-column factors; reassembly guard); down/up components kept, partial sums at 16 bits on wires (C17) | hyperedge membership convention (hygiene); partial-sum width in the ENERGY overlay (hygiene, transport <2% of energy) |
+| traffic accounting | multicast/reduction structure and units | v1 structured traffic in VALUE units (C25: reads / bit-slice, bit and cell-column factors; reassembly guard); down/up components kept, partial sums at 16 bits on wires (C17); the hyperedge membership convention confirmed at the loop-nest level (C38) | partial-sum width in the ENERGY overlay (transport <2% of energy) |
 | traffic accounting | cross-die traffic classes | hidden-state hand-offs + intra-op slices + the offload streams to the attach point (C21); elementwise operators move through the glb only (C19, stated) | host I/O streams |
-| contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default | the max end stated as the bound it is (C29: exact for star / bus, a lower bound for routed grids; `schedule_slack` >= 1 for schedules that cannot reach it) and queueing / BookSim-class checks narrowed to the NoC paradigm; joint tier sweep (hygiene) |
+| contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default; the max end stated as the bound it is (C29: exact for star / bus, a lower bound for routed grids; `schedule_slack` >= 1 for schedules that cannot reach it); the T1 hub axis analytic in value units, Timeloop's counter-unit throttling kept as validation-only (C34); the PACKET bracket on NoC-paradigm links (C46: [pipelined bound, round-serialized end], explicit link fields, off on every production config) | BookSim residual measurement = plan step 4 (NoC paradigm only) |
 | contention | operating mode | single-pass + pipelined, stage = slower half | bubbles/imbalance beyond the max rule; batch>1 (register) |
 | contention | critical-path composition | write + [max, sum](compute, network) + propagation -- both ends published (C16) | missing terms O24 |
-| calibration | bandwidth operating points | platform inputs + published anchors (blind-test pinned) -- all of them digital-ecosystem links | registry `scripts/anchors.py` (C26): grid with `status`, the analog-reality band, chip points; per-axis sweeps read at both columns; primary ESP citation identified (Jia et al., ESSCIRC 2022; per-link figure not yet verified), HERMES supplement not retrieved (P2); UCIe-class D2D anchor |
+| calibration | bandwidth operating points | registry `scripts/anchors.py` (C26): grid with `status`, the analog-reality band, chip points, per-axis sweeps at both columns; ESP primary-sourced from the ESSCIRC 2022 paper, status measured (C36); the HERMES per-link rate is published spec, normalized to our per-macro granularity with a self-consistency audit (C36/C37); UCIe-S spec-tier D2D anchor (C40); Mythic t_MVM derived from datasheet TOPS (C36) | MX100 row time blocked on its source (plan step 10); real platform bandwidths on DR-2 |
 | calibration | per-level link energy | macro silicon-calibrated + re-pricing; D2D at GRS band midpoint | core/crossbar at zero (O1; ceiling ~2% of an op after C25); bus (O8) |
 | energy | static / idle power | not modeled -- every total is dynamic-only | `idle_power_w` per level (default 0) + closed-form static term, static-share sweep, peak concurrency as an output field (O27) |
-| calibration | physical geometry | slot_pitch_um in the configs | first consumer: derive ns/hop and energy scale (hygiene) |
+| calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 185 tests + goldens incl. the 48-die chain pins (C15), the v3 accounting pins (C17), the ledger conservation (C18), the digital-unit pins (C19) and the v5 unit pins (C25) | change-audit process rule; the P0 gate (below) |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 288 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -1733,9 +1733,12 @@ cells; S6 on S3; S5 on O6 and the collaboration discussion (ON HOLD since
 ## Process rule (added after the 24-to-48-die miss)
 
 Any configuration or accounting change MUST be followed by a re-audit of
-the results-affecting register above, recorded in tests/CHANGELOG.md, in
-the same change. Discovering a stale assumption by being asked is a
-process failure.
+the results-affecting register above AND of the factor map (the
+current-solution / improvements table), recorded in tests/CHANGELOG.md,
+in the same change. Discovering a stale assumption by being asked is a
+process failure. (The factor map was outside this rule's wording until
+2026-09-01 and accumulated five stale cells over C32-C40; swept then,
+and in scope ever since.)
 
 P0 gate (2026-08-27): until O25 lands, no [est] number enters an external
 document; v4-and-earlier anchored figures and tables are retired from
@@ -1766,20 +1769,114 @@ archive sections below keep their historical O-tags for traceability.
 validation chapter (inherited calibration / counting / semantics /
 external behaviour / robustness) and then the freeze.
 
-1. **Simba reproduction** (1 week) -- the external validation of the
+1. ~~**Simba reproduction**~~ **DONE 2026-09-03 (C41-C48;
+   SIMBA_PREREG §12 is the closing record)** -- was: (8 working days)
+   the external validation of the
    SOFTWARE-placement channel: Simba measured fixed hardware with only
    the assignment varied, which is precisely what our search targets, so
    after this step the validation chapter carries one external contrast
    per layer (HERMES audits the accounting caliber; Simba the
-   soft-placement effect). Build a Simba preset fabric (36 chiplets 6x6,
-   16 PE + 1 global PE per chiplet, 70 Gb/s NoC links, GRS 100 Gb/s D2D
-   -- every parameter and both published effects, the ~16%
-   communication-aware placement gain and the ~2.5x far-chiplet tail
-   spread, RE-VERIFIED from MICRO'19 / JSSC'20 at start, never from
-   notes); ResNet-50 conv layers (Timeloop-native); reproduce the
-   measured placement levers. Criterion: direction right, magnitude
-   within 2x; disagreements attributed, never parameter-fitted away.
-   Output: a validation section and one figure.
+   soft-placement effect). Build a Simba preset fabric at the papers'
+   EXPERIMENT operating point (36 chiplets 6x6, evaluation on 32; per
+   chiplet 16 PEs + Global PE + RISC-V on a 4x5 NoC mesh; NoC 70
+   Gb/s/link at 0.72 V; GRS in the experiments' 11 Gb/s mode = 5.5 GB/s
+   per link direction, NOT the 12.5 GB/s max the worklist assumed; X-Y
+   routing; weights preloaded, layer-sequential) -- extraction DONE
+   2026-09-02, every parameter verbatim-sourced in
+   `analysis/papers/simba_extracts.md`, pre-registration in
+   `analysis/SIMBA_PREREG.md` awaiting user review; ResNet-50 conv layers
+   (Timeloop-native); reproduce the measured placement levers. THREE
+   targets, pinned to their exact experiments (SIMBA_PREREG.md): (1)
+   far/near seating spread (MICRO'19 Fig 9: res4a_branch1, four
+   chiplets, tiling fixed; the five seatings DECODED from the figure --
+   expanding squares from a corner, longest-pair distance 2..10; the
+   text's "12 hops" is a source inconsistency, unused; measured bars
+   1.000..2.530) -- ordering tier is the hard line, factor tier [1.265, 5.06]
+   (band on the measured 2.53); (2) the data-placement gain (Fig 15: 32 chiplets, greedy IA/OA
+   placement vs the sequential default; best bar pixel-reads 1.160 =
+   the abstract's 16%, seven of 19 layers at 1.00) -- direction must be
+   right, magnitude 8-32%, direction-first; (3) the scaling shape (Fig 7's three layer
+   classes 17/12/24 of 53; ordering classes with elbow positions within
+   2x, NO absolute line; JSSC Fig 18's sync breakdown = reference
+   reading only — its sync component is on our unmodeled list) -- target 3 is DROPPABLE: it must be
+   reachable with config + assignment changes only, and if any scale
+   point needs a new mechanism it is dropped, never coded for. Day
+   plan: 1 DONE 2026-09-02 (extraction + pre-registration; gate =
+   user review of SIMBA_PREREG.md); 2 DONE 2026-09-03 = C41 (simba.yaml at the experiment point; the
+   device_class bypass, explicit-field only; group 31 pins; config
+   FROZEN); 3
+   DONE 2026-09-02 = C42 (closed-form conv workload, touched-extent
+   volumes, guard substitution stated; execution model confirmed, no
+   amendment needed); 4 DONE 2026-09-02 = C43 (the
+   hand-check HARD GATE passed: pilot 3x3, multicast/reduction
+   membership, conservation, anti-im2col, conv==matmul bridge -- all
+   against hand integers); 5 DONE 2026-09-02 = C44 (T1 run under amendment A1: serialization
+   seating-flat, T1a degenerate/not claimed, T1b tier-2 class gap in
+   the declared UNDER direction -- the whole 2.5x is per-packet latency
+   + sync, BookSim to stamp; SIMBA_PREREG §8); 6 DONE 2026-09-03 = C45 (T2 under amendment A2:
+   the placement lever reproduces -- greedy never loses, best-gaining
+   layer coincides (res3a_branch1); T2b double-sided tier-2, same
+   mechanism as T1 read from the gain side; res2c tie = self-aligned
+   baseline artifact, recorded; SIMBA_PREREG §9); 6.5 DONE 2026-09-03 = C46 (the packet-level
+   bracket, inserted before T3 on review: pessimistic end = declared
+   round-serialized discipline, NOT a bound; 17/16 header share = a real
+   tightening on both ends; T1 pessimistic ladder tracks the measured
+   bars from below, residual 0.7-5.2% distance-linear; sub-case bracket
+   contains 1.05; BookSim's task upgraded to "measure the residual";
+   SIMBA_PREREG A3 + §10); 7 DONE
+   2026-09-03 = C47 (T3: graded rail 1/3 -- the first falsified
+   pre-registration choice, logged; class bracket contains measured
+   3/3, post-hoc labeled; tiling-freedom divergence again on res3a;
+   Simba = the first DIGITAL chip point on both plane panels, excluded
+   from device_marks by the new paradigm field -- the diagram predicts
+   exactly the D2D exposure Fig 9 measured; SIMBA_PREREG A4 + §11); 8 DONE 2026-09-03 = C48 (the
+   measured-vs-bracket figure `simba_validation.png` + make_figures
+   stage; SUMMARY §2.6 EN+ZH, PROGRESS, README synced; SIMBA_PREREG §12
+   closing verdict with the handover pointers). **STEP 1 COMPLETE**
+   (C41-C48): the validation chapter carries one external contrast per
+   layer -- HERMES audits the accounting caliber, Simba the
+   soft-placement effect; BookSim inherits the scoped residual list,
+   the robustness table inherits the bracket row. The C30 device self-check bypass is keyed on an
+   EXPLICIT `device_class` field in the device block (default
+   `reram_macro` keeps today's hard check; only a declared
+   `digital_throughput` class skips the macro reconciliation, with the
+   validate() sanity checks kept) -- never inferred from missing ReRAM
+   parameters, so a typo'd ReRAM config still fails loudly. Provenance
+   goes into anchors.py derivation strings + ANCHORS.md, the same
+   discipline as ESP / HERMES / Mythic, no separate file. GATE --
+   before the first simulation runs, a half-page
+   pre-registration is due (half a day, content prep not a new step):
+   (a) a per-target criteria table, one hard line per published effect
+   -- the ~16% communication-aware placement gain and the ~2.5x
+   far-chiplet tail spread each get their own pass criterion (trend
+   direction, ordering, or factor range; magnitude within 2x overall);
+   (b) two pre-declarations in the configuration mapping: the device
+   layer stands in Simba's digital MACs with an abstract
+   equivalent-throughput unit (device physics is NOT under validation
+   here), and the bias direction -- our busiest-wire occupancy is a
+   declared optimistic lower bound for a wormhole NoC, so any
+   systematic deviation should be an UNDERESTIMATE (the unmodeled items
+   -- queueing, flit serialization, router pipelining, sync barriers,
+   control overhead, DRAM streams -- all push the same direction, and
+   the list is written out so the yardstick exists before the numbers
+   do), and mismatches are triaged in that direction first; PLUS the
+   execution-model alignment declared from the extracted
+   weight-residency conditions (layer-sequential is our platform's
+   standing assumption; preload-vs-pipeline follows the paper's
+   placement experiments as extracted; if the day-3 config wiring
+   contradicts the declaration, the pre-registration is AMENDED before
+   any target runs -- otherwise days 5-6 deviations cannot be triaged);
+   (c) the triage rule, three tiers: direction and magnitude within
+   criteria = pass, into the validation chapter; direction matches the
+   declared underestimate but magnitude beyond the 2x band = class gap,
+   magnitude recorded in the limitations paragraph with the most likely
+   unmodeled item named, and left for the BookSim step to stamp (if its
+   schedule-slack interval covers the magnitude, the attribution
+   upgrades from inference to measurement); direction wrong (we
+   OVERestimate) or an ordering broken = the pre-declared gap cannot
+   explain it, formal changelog reopen, debugging in dependency order
+   (conv traffic extraction first, then routing/seating, then occupancy
+   semantics). The half-page cleared = Simba is released to run.
 2. **Soft-placement lever table at the anchors** (half a day, closed
    form, no new simulation; run before or alongside the document round).
    Attribution framework: hardware placement (scheme / links / geometry /
@@ -1800,14 +1897,21 @@ external behaviour / robustness) and then the freeze.
    first order in the analog-reality column; the write model stays the
    one device-side input that moves decode); the settings document's
    version header; the company report absorbing the recent findings; the
-   SUMMARY validation section (the five-part frame above). Includes
+   SUMMARY validation section (the five-part frame above); the README
+   fork-index section (docs + key scripts) already landed in the
+   2026-09-01 md refresh -- this step only re-checks it is current, and
+   extends the script list if new entry points appeared. Includes
    re-deriving and re-pinning the two stale slow-suite goldens found
    during the hygiene pass (pre-existing at the pushed HEAD: the
    volume-conservation identity apparently left in counter units on one
    side -- both numbers clean multiples of 4096 -- and the tiny-example
    position spread never re-pinned after the grid change); re-derive
    with attribution, never band-aid the pins.
-4. **BookSim cross-check** (3-day timebox). Convert the extracted mesh
+4. **BookSim cross-check** (3-day timebox). Since C46 its task is
+   UPGRADED: not "explain the 2.5x" but "measure the packet bracket's
+   residual" (T1's distance-linear 0.7-5.2% = acks / multicast rounds /
+   sync) and calibrate where in [pipelined, round-serialized] real
+   schedules sit. Convert the extracted mesh
    flows of one operator into cycle-accurate NoC traces (both injection
    models, assumptions stated); three bandwidth points around the knee;
    the reading -- BookSim makespan over our max end -- turns the
@@ -1875,8 +1979,11 @@ one instrument, two client classes. Energy
 in one sentence: dynamic energy is layout-blind (v5: <=0.2% on die, +1.2-1.3%
 across dies at the GRS anchor), static energy inherits the latency ranking
 (O27). Out of scope for the paper: the agent direction, residency detail
-(O14 / O16), company-specific wording, meshX > 1, O15, BookSim-class
-validation (digital column only), the long-form report.
+(O14 / O16), company-specific wording, meshX > 1, O15, the long-form
+report. BookSim-class checking is IN scope -- it is plan step 4, its
+slack interval feeds the validation chapter and the ANCHORS NoC row;
+the old note meant a RANGE limitation (such checks apply to the NoC
+paradigm column only, per the C29 bound statement), not an exclusion.
 
 Not scheduled until asked: giant layers across dies beyond the tiler's
 range, multi-package scaling.

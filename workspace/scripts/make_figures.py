@@ -107,6 +107,10 @@ STAGES = {
         "outputs": ["phase_diagram.png", "phase_diagram_gray.png",
                     "phase_diagram_table.md"],
     },
+    "simba": {
+        "cmds": [["python3", "analyze_simba_validation.py"]],
+        "outputs": ["simba_validation.png"],
+    },
     "bandwidth": {
         "cmds": [["python3", "analyze_bandwidth_sweep.py"]],
         "outputs": ["bandwidth_sweep.png"],

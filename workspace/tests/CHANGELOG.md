@@ -690,7 +690,7 @@ test_per_level_volume_conservation_v1 (12,288 vs 311,296; an old v1
 identity apparently left in counter units by the C25 value reform) and
 test_position_spread_golden_v2 (1.091 vs the pinned 1.25; the tiny2x2
 spread never re-pinned after the C27 grid change). Fast suite unaffected.
-Recorded as worklist item 13: re-derive with attribution, never band-aid
+Recorded in the worklist (now plan step 3): re-derive with attribution, never band-aid
 the pins.
 
 C40-r (review amendments, 2026-09-01): (22) the exact-energy sum now
@@ -715,3 +715,205 @@ finding: the v6 freeze precondition now includes both suites fully green,
 and the slow suite runs weekly + mandatorily before every freeze;
 attribution clue recorded for item 13 (12,288 = 3 x 4096, 311,296 = 76 x
 4096). Suite: 252 passed / 1 xfail.
+
+
+C41 (2026-09-03): the Simba reproduction preset (worklist step 1, day 2).
+models/fabric/simba.yaml expresses the 36-chiplet MCM prototype in the
+fabric schema at the papers' EXPERIMENT operating point (MICRO'19 §4.1:
+0.72 V, 1.03 GHz PE clock, GRS 11 Gb/s mode = 5.5 GB/s per link direction
+-- NOT the 12.5 GB/s max; X-Y routing): die level = chiplet (6x6 NoP mesh,
+20 ns/hop, 10 pJ/word GRS midpoint), macro level = PE (16 on the 4x5 NoC
+with 4 spare slots = Global PE's 3 router stops + RISC-V; 8.75 GB/s and
+10 ns per hop, pj_per_word 0 stated as uncharged), psum_word_bytes 3.0
+(24-bit partial sums). Device: `device_class` field added to the fabric
+schema (explicit whitelist reram_macro | digital_throughput); the Simba
+device is digital_throughput (1/1.03 GHz cycle, slices=1) and
+verify_cycle becomes a declared no-op for that class ONLY -- the bypass
+never infers from missing ReRAM parameters, the default fabric keeps the
+hard reconciliation, and a typo'd class refuses to load (validate).
+anchors.py gains operating-point CONSTANTS (SIMBA_EXPERIMENT_GRS_GBPS 5.5,
+NOC 8.75, PE_HZ 1.03e9, MACS_PER_CHIPLET_CYCLE 1024) deliberately outside
+the Anchor rows so readout columns do not widen; the grs anchor's
+derivation names the split. The device-input guard now exempts EXACTLY
+["simba.yaml"] via the explicit class. Config frozen per SIMBA_PREREG.md:
+from this entry on, no simba.yaml parameter moves to fit a result. New
+group 31 (test_simba_fabric): geometry pins (36/6x6, 16/4x5, 576 PEs,
+24x30 leaf grid), link pins (bandwidth words/cycle to 1e-9, hop
+latencies, energy convention), device pins (2.11 TOPS/chiplet closed form
+consistent with the published 4 TOPS at 2 GHz), the bypass contract both
+ways, provenance carries device_class, and the D2D readout columns stay
+[12.5, 64, 0.1, 2.0]. Suite: 259 passed / 1 xfail.
+
+
+C42 (2026-09-02): Simba workload integration (step 1, day 3).
+scripts/simba_workload.py: ResNet-50 target layers as closed-form ConvOps
+(shapes from He et al. Table 1, stated as the model source -- the Simba
+papers name layers without dimensions); conv_structure() builds
+traffic.TrafficStructure directly from an explicit {K,C,P,Q} split (K
+renamed to M so the existing dim-classification tables apply unchanged;
+traffic.py untouched). Volume semantics = touched extents, the
+anti-im2col rule: min((P-1)s+R, P*R) - 2*pad per axis; exact for 1x1
+layers and for 3x3-pad-1 without spatial split; halo-carrying P/Q splits
+on R>1 layers REFUSE (NotImplementedError) until a convention is
+hand-locked, and (review) so does stride>1 with pad>0 (off-by-one against
+the real map; no target layer uses either). compute_seconds at
+utilization 1.0 (declared optimistic; our 100,352 one-chip cycles vs JSSC
+Fig 18's measured 114,688 = exactly 7/8, direction consistent with the
+pre-declared underestimate). GUARD SUBSTITUTION, stated for the
+validation chapter: the mlx path's "reconcile derived volumes against
+Timeloop's own counters" guard does NOT exist on the Simba path -- there
+is no macro and no counter to reconcile (the closed form IS the volume
+source). Its replacement is the day-4 hand-check gate (C43): both edge
+directions, conservation, multicast/reduction membership and anti-im2col
+locked against hand-derived integers. Any wording like "traffic reconciled
+against simulator counters" must scope itself to the ReRAM path. Group 32
+(9 tests). Suite: 268 passed / 1 xfail at this point.
+
+C43 (2026-09-02): the conv-traffic hand-check HARD GATE passed (step 1,
+day 4). Group 33 (test_simba_pilot_gate): pilot 3x3 conv (K=C=4, 4x4,
+pad 1) under die K:2xC:2 and PE K:2xC:2 -- multicast groups {0,2}/{1,3}
+and reduction hyperedges {0,1}/{2,3} (transposed partitions of the
+instance grid, membership by the C38 index convention), per-edge volumes
+32/32 die and 16/16 macro, leaf shares {die 16, macro 32}, conservation
+(IA reassembles once, psums count C-copies), the anti-im2col assertion
+(die edge 32, never 9x = 288), and the 1x1-conv == matmul bridge
+(res4a_branch1 die edge = P*Q x C/2, the same shape as the width-law
+trunk). Every expected value is a hand-derived integer in the test file's
+comments. Suite: 272 passed / 1 xfail.
+
+
+C44 (2026-09-02): T1, the Fig 9 seating-spread experiment (step 1, day
+5). Amendment A1 written BEFORE the run (tiling enumeration rule,
+sourced on §4.1's power-of-two convention and the paper's own
+best-tiling baseline; IA home = anchor chiplet, per §5.2's
+single-source broadcast description; OA local; multicast DEDUP on
+shared route segments; on-die constant excluded with direction noted;
+T1b band re-anchored [1.265, 5.06] on the measured 2.53).
+scripts/simba_targets.py: closed-form evaluator (seatings -> node
+indices on the row-major die table, dedup'd multicast + psum unicast
+loads on the XY mesh, [max,sum] bracket + one-shot propagation).
+OUTCOME, pinned honestly (group 34): serialization is seating-FLAT
+(busiest segment 100,352 words at every seating; 18.246 us vs compute
+24.357 us), slope only from propagation (+40 ns/bar): ratios 1.0000 ..
+1.0066 vs measured 1.000 .. 2.530. T1a mechanically true but graded
+NOT CLAIMED (degenerate, 4 orders below the effect); T1b FAIL ->
+tier-2 class gap in the pre-declared UNDER direction, the entire
+2.5x distance effect attributed to per-packet latency accumulation
+(>= 738 packets at the 17-flit cap) + sync barriers, left for the
+BookSim step to stamp (SIMBA_PREREG §8). Enumeration: four
+multicast-structured candidates tie and the readout is tie-robust;
+{C:4} loses 9x (psum width). No parameter touched. Suite: 275 passed
+/ 1 xfail.
+
+
+C45 (2026-09-03): T2, the Fig 15 data-placement experiment (step 1, day
+6). Amendment A2 written BEFORE the run: active-32 declaration,
+per-layer tiling frozen by baseline-scored enumeration (the paper's own
+best-tiling convention), data blocks from the structure (IA per
+distinct-input coord, OA per reduction hyperedge), Fig 14(b) sequential
+baseline sourced verbatim, greedy procedure OURS-declared against the
+paper's stated objective (dedup'd multicast-tree size for IA, unicast
+distance sum for OA, iterative, exclusivity while unused dies remain),
+res4a corner-vs-center sub-case under the §5.2-sourced K:32 with the
+position-flatness risk PRE-STATED. scripts/simba_targets.py: T2
+machinery (t2_candidate_splits / t2_baseline_homes / t2_greedy_homes /
+t2_evaluate / t2_run). OUTCOME (group 35 pins, prereg §9): the lever
+reproduces -- greedy never loses, and the best-gaining layer COINCIDES
+with the figure's (res3a_branch1, ours 1.983 vs their 1.160); T2a pass
+with two recorded caveats (res2c tie = self-aligned-baseline convention
+artifact, 32/32 blocks local, their gain tiling-contingent --
+zero-communication P:4xQ:8 is legal per JSSC §III-B; center-vs-corner
+direction holds but degenerately); T2b FAILS its band on BOTH sides
+(1.983 over, sub-case 1.0044 under) with ONE tier-2 mechanism read two
+ways: placement-insensitive per-packet + sync terms (JSSC Fig 18)
+missing from our denominator inflate ser-dominated ratios and carry the
+whole position effect where dedup flattens ours. Absolute latencies stay
+UNDER (6.96 us vs Table II 8.92 us reference). BookSim stamp pointer
+unchanged. Suite: 281 passed / 1 xfail.
+
+
+C46 (2026-09-03): the packet-level bracket (SIMBA_PREREG A3; the
+reviewer's closed-form step 1, adopted with three corrections argued
+first). Schema: Link gains packet_payload_bytes (None = off; every
+production config) and packet_wire_overhead (>= 1); simba.yaml declares
+128 B / 1.0625 on both links (17-flit packets = 1 header + 16 x 64-bit
+payload flits, JSSC §II-C/III-D). Semantics: N x hops x t_hop is NOT a
+schedule lower bound on a cut-through NoC (packets pipeline), so it
+enters as the PESSIMISTIC end of a published bracket [pipelined bound,
+round-serialized end] -- per source the terms sum, across sources max,
+composes by SUM and absorbs propagation; the busiest-wire r=1 semantics
+stays with the optimistic end untouched. The 17/16 header-share
+multiplier IS an unconditional tightening and applies to both ends.
+Expectations were pre-registered in A3 and the run reproduced them
+(T1 pess bar-1 67.263 us vs 67.26 predicted; bar-5 ratio 2.3987 vs
+~2.400); one recorded slip: the sub-case's "~1.78" used corner distance
+10 where the active-32 maximum is 9 -- model output 1.6220 matches the
+declared formulas. Results: T1 bracket [1.0066, 2.3987] with the
+pessimistic end INSIDE T1b's band, tracking the measured ladder from
+below with a distance-linear residual 0.7-5.2% (ack/sync fingerprint,
+BookSim's assignment upgraded from "explain 2.5x" to "measure a <= 5.2%
+residual"); T2 sub-case bracket [1.0041, 1.6220] contains the measured
+1.05; T2 layer speedups compress toward 1 at the pessimistic end but
+res3a stays 1.86 vs 1.16 -- the missing dilutant is a
+placement-INSENSITIVE constant, sharpening the T2b record. Re-pins:
+group 34 ser 18.2456 -> 19.386 us, {C:4} enumeration 219 -> 232.7 us,
+new packet-bracket pins; group 35 opt speedups 1.9838 / 1.7922 / corner
+1.0041 + pessimistic pins. Production fabrics numerically unchanged
+(fields absent). Suite: 282 passed / 1 xfail.
+
+C46-a (2026-09-03, closure audit on review): the pessimistic-end
+arithmetic CLOSES to 1e-17; the reviewer's reconstruction mixed two
+calibers (whole-map 784-packet framing vs the frozen {K:2,P:2} tiling's
+two 392-packet slices at h = k and 2k -> the 3k coefficient; and the
+pre-A3 ser 18.246 vs the x17/16 19.386). Our bookkeeping share of the
+confusion fixed: SIMBA_PREREG §10a publishes the per-bar decomposition
+table and marks §8's serialization numbers as pre-A3/superseded; a
+closure identity joined group 34 (pess == comp + ser + pkt with the
+slice decomposition, to 1e-12). §10b scopes the BookSim residual
+candidates: psum packet density is ALREADY modeled (res4[b-f]_branch2a
+C:4 exercises it); res3a's frozen tiling has NO reduction edge, so its
+1.86-vs-1.16 residual stays with placement-insensitive constants.
+Suite: 283 passed / 1 xfail.
+
+
+C47 (2026-09-03): T3 + the Simba plane point (step 1, day 7). Amendment
+A4 first (seatings, per-point best tiling under A2-greedy homes, graded
+rail = pessimistic with the reason stated, class definitions with the
+10% plateau tolerance, expected classes). T3 machinery
+(t3_seating/t3_point/t3_classify/t3_run) + group 36 pins. OUTCOME: the
+graded rail scores 1/3 -- A4-3 is the FIRST pre-registered choice
+falsified by outcome, logged here formally (the round-serialized rail
+over-penalizes small-n communication; elbows need a point inside the
+bracket); the class bracket [opt rail, pess rail] contains the measured
+class 3/3 (post-hoc reading, labeled, not a criterion swap); the bound
+rail never exceeds measured anywhere; res3a's n=4/8 points expose the
+tiling-freedom divergence again (zero-communication P/Q tilings, legal
+per JSSC §III-B, beat silicon's realized mapping -- same root as T2's
+res2c). T3 completes as the droppable target without dropping. PLANE
+POINT: ChipPoint gains `paradigm` (analog default); Simba joins CHIPS as
+the first digital chip point (t 497 ns derived via the C37 per-token
+rule on the C41 device; on-die 560 GB/s per 32-array group; D2D 12.5/
+5.5) and is excluded from device_marks() by paradigm -- the r=1
+machinery keeps its four analog marks (pinned). analyze_phase_diagram
+draws the diamond on both panels; ANCHORS.md gains the chip row and the
+digital-exception note. Reading: on-die placement-free, D2D on the GRS
+line below the spanning-chain boundaries -- the diagram predicts exactly
+the exposure Fig 9 measured. Suite: 288 passed / 1 xfail.
+
+
+C48 (2026-09-03): step-1 closeout (day 8). The per-target
+measured-vs-bracket figure: scripts/analyze_simba_validation.py ->
+analysis/simba_validation.png (reads t1/t2/t3_run live, so it can never
+drift from the pinned record; house rules -- measured = gray bars,
+optimistic rail = filled circles, pessimistic rail = open diamonds,
+identity by marker/linestyle not color alone); make_figures gains the
+"simba" stage (the stage-output guard covers it). Docs: SUMMARY §2.6
+(EN+ZH) -- the validation-chapter section with both structural findings
+and the honest verdicts; script-index rows; the groups-31-36 test note;
+PROGRESS 3b marks the reproduction done; README's key-scripts line
+extended. SIMBA_PREREG §12 = the closing verdict (claim-strength order:
+ordering-class evidence, factor evidence, named gaps with owners,
+direction discipline unbroken) and hands §10b to BookSim, the bracket
+row to the robustness table, and §2.6 to the paper. The record is
+closed; further Simba work reopens via changelog. Suite: 288 passed / 1
+xfail.

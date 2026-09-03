@@ -864,7 +864,14 @@ authority).
    corrected die-level semantics).
 3b. **The validation track** (current work; FIXLIST is the authority):
    ~~V0 silicon-point normalization + HERMES self-consistency audit~~
-   (done, C37) → V1 Simba reproduction → the document round (+ item 13,
+   (done, C37) → ~~V1 Simba reproduction~~ (**done**, C41–C48: the frozen
+   experiment-point preset, three targets graded under a pre-registration
+   with amendments declared before each run, the packet bracket
+   [busiest-wire bound, round-serialized end], Simba as the first DIGITAL
+   chip point on the phase diagram — `simba_validation.png`; the
+   validation chapter now carries one external contrast per layer: HERMES
+   audits the accounting caliber, Simba the soft-placement effect) → the
+   document round (+ item 13,
    the stale slow-suite goldens) → V2 BookSim slack → V3 robustness table
    → the freeze (precondition since C40-r: fast AND slow suites fully
    green; the slow suite runs weekly and before every freeze).

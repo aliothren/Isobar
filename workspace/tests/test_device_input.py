@@ -32,8 +32,18 @@ CYC = 10.14e-6 / 7
 
 
 def test_every_shipped_config_declares_the_calibrated_device():
+    """Every shipped ReRAM fabric declares the calibrated wan macro. A
+    config may opt out ONLY through the explicit device_class field (C41:
+    the Simba reproduction preset is digital_throughput and has no macro);
+    group 31 pins that preset's own device, and the guard here asserts the
+    exemption is the explicit class, never a drifted ReRAM declaration."""
+    seen_digital = []
     for p in sorted(glob.glob(os.path.join(WS, "models", "fabric", "*.yaml"))):
         f = fabric.from_yaml(p)
+        if f.device.device_class == "digital_throughput":
+            seen_digital.append(os.path.basename(p))
+            continue
+        assert f.device.device_class == "reram_macro", p
         approx(f.device.cycle_seconds, CYC, 1e-9), p
         assert f.device.input_slices_per_mvm == 7
         approx(f.device.t_mvm_s, 10.14e-6, 1e-9)
@@ -41,6 +51,9 @@ def test_every_shipped_config_declares_the_calibrated_device():
         pv = fabric.provenance(f)["device"]
         approx(pv["cycle_seconds"], CYC, 1e-9); assert pv["input_slices_per_mvm"] == 7
         approx(pv["t_mvm_s"], 10.14e-6, 1e-9)
+    # the exempt list is EXACTLY the Simba reproduction preset -- a new
+    # digital config must be added here deliberately, not slip through
+    assert seen_digital == ["simba.yaml"], seen_digital
 
 
 def test_the_run_cycle_is_the_declared_device_and_a_divergence_is_rejected():

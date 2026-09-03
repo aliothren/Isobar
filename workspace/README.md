@@ -19,7 +19,9 @@ Key scripts (run inside the container, from `workspace/`): the anchor
 registry `scripts/anchors.py`; the per-axis sweeps + the (t_MVM x
 bandwidth) device plane `scripts/sweep_axes.py`; the scaling-law probes
 `scripts/run_scaling_probes.py` (+ `analyze_scaling_law.py`); the phase
-diagram `scripts/analyze_phase_diagram.py`; the whole-model regeneration
+diagram `scripts/analyze_phase_diagram.py`; the Simba reproduction
+`scripts/simba_workload.py` + `scripts/simba_targets.py` (+ the
+validation figure `scripts/analyze_simba_validation.py`); the whole-model regeneration
 list `analysis/regen_v6.sh`. Figures land in `workspace/analysis/*.png`.
 
 ## Tutorials and Examples

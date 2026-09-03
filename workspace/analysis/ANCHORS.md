@@ -40,6 +40,14 @@ below are its rendering.
 | on-die | analog-reality | analog on-die 0.4-8 | 0.4-8 GB/s (band) | 579 .. 11,589 | estimated |
 | die-to-die | analog-reality | analog D2D 0.1-2 | 0.1-2 GB/s (band) | 145 .. 2,897 | estimated |
 
+Operating-point note (2026-09-02, Simba reproduction): Simba's placement
+EXPERIMENTS ran GRS in its 11 Gb/s mode — 4 lanes x 11 Gb/s = 5.5 GB/s
+per mesh-link direction (MICRO'19 §4.1). That 5.5 GB/s is the
+reproduction operating point (worklist step 1) and enters the registry
+with the simba.yaml preset; the GRS 12.5 row above stays what it is — the
+link's demonstrated MAXIMUM capability and the phase diagram's D2D anchor
+line. Two identities, both real: neither number "corrects" the other.
+
 Every readout column set is the level's digital anchors followed by the two
 ends of its analog-reality band (`anchors.columns(level)`); a sweep that
 prints one column prints all of them. The estimated band's derivation:
@@ -73,7 +81,7 @@ multi-plane aggregation explicitly.
 
 | value | system | provenance | notes |
 |---|---|---|---|
-| **12.5 GB/s** (100 Gb/s) | Simba package GRS mesh | same JSSC 2020: "36 dice ... mesh network with 100 Gb/s interconnect in each link direction"; lanes run 11–25 Gb/s at **0.82–1.75 pJ/bit** | silicon-measured D2D on an organic substrate. **Adopted**: the die-link default energy is now 10 pJ/word = the midpoint of this measured band (6.6–14 pJ/word), replacing the earlier optimistic 5 pJ/word example |
+| **12.5 GB/s** (100 Gb/s) | Simba package GRS mesh | same JSSC 2020: "36 dice ... mesh network with 100 Gb/s interconnect in each link direction"; lanes run 11–25 Gb/s at **0.82–1.75 pJ/bit** | silicon-measured D2D on an organic substrate — the MAX-capability datum; the MICRO'19 placement experiments themselves ran the 11 Gb/s mode = 5.5 GB/s per direction (operating-point note above). **Adopted**: the die-link default energy is now 10 pJ/word = the midpoint of this measured band (6.6–14 pJ/word), replacing the earlier optimistic 5 pJ/word example |
 | **64 GB/s** (512 Gb/s) | UCIe standard-package module | UCIe Consortium specification: x16 lanes × 32 GT/s per lane, per direction per module (C40) | an interconnect **STANDARD's ceiling** (status `spec`), one epistemic step past post-layout: no measured chip, though first 32 GT/s-per-lane silicon is announced (GUC, TSMC 3 nm + CoWoS). Bounds where packaged D2D is headed, not where analog CIM chips sit |
 
 ## What analog CIM systems publish (survey 2026-08-27), and the registry tier each maps to
@@ -114,7 +122,11 @@ of OUR links serves (a macro, 32 crossbars) -- published per-physical-link
 rates are aggregated first, estimated bands are authored at our
 granularity already. Digital NoCs are NOT chip points -- they have no honest
 compute coordinate in this model -- and are drawn as horizontal bandwidth
-lines (the anchors above). `anchors.CHIPS`:
+lines (the anchors above) -- with ONE declared exception since C47:
+Simba enters as the first DIGITAL chip point, its compute coordinate
+supplied by the reproduction's equivalent-throughput device declaration
+(C41); it sits on the plane as a chip, NOT as a device mark of the r=1
+machinery. `anchors.CHIPS`:
 
 | chip | tier | t_MVM | status / derivation | on-die bandwidth | status |
 |---|---|---|---|---|---|
@@ -123,6 +135,7 @@ lines (the anchors above). `anchors.CHIPS`:
 | ISAAC (2016) | mesh | 1.6 us | design point: 16 one-bit slices x 100 ns | 0.4-8 GB/s | estimated (32 nm c-mesh sized, no per-link figure) |
 | TetraMem MX100 | bus-T1 | -- | pending, BLOCKED on the source (C36, checked 2026-09-01): the SoC paper arXiv:2410.14882 publishes no TOPS or MVM rate; revisit on TetraMem's 22nm SoC publication | 0.4-8 GB/s | estimated (SRAM port width x clock; a T1 number here) |
 | Mythic AMP M1076 | star | 6.38 us | derived (C36): 25 TOPS peak / 76 tiles / (2 x 1024 x 1024 per row); the 1024x1024 tile from 80M weights / 76 tiles | 0.4-8 GB/s | estimated (router width / clock not published) |
+| Simba 36-chiplet (2019) | mesh | 0.497 us | derived (C47), DIGITAL chip point: one input row through a PE's resident 32 KiB = 2 x 32,768 ops / (128 ops/cycle x 1.03 GHz, the C41 experiment point); shape-invariant (576 PEs x 65,536 / 75.9 TOPS agrees) | ~560 GB/s (coordinate, C37) | per NoC link 8.75 GB/s published (JSSC §II-C); coordinate: a 256x256-array equivalent = 2 PEs -> 2 x 8.75 x 32; D2D = GRS 12.5 max / 5.5 as experimented; NOT a device mark (paradigm digital) |
 | Tsinghua multi-chip (2025) | hub-io | -- | pending | -- | D2D 0.1-2 GB/s estimated (board-level links through the FPGA hub) |
 
 **Device marks vs the swept surface (O17b / C31; four marks since C36).**

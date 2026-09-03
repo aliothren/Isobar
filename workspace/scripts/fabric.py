@@ -26,11 +26,22 @@ class Device:
     every GB/s <-> words/cycle conversion reads it (the anchor registry
     included), and a run's CiMLoop cycle (GLOBAL_CYCLE_SECONDS of the macro)
     is checked against it (Fabric.verify_cycle). The shipped value is the
-    calibrated wan_nature_2022 macro: 10.14 us per MVM row over 7 slices."""
+    calibrated wan_nature_2022 macro: 10.14 us per MVM row over 7 slices.
+
+    device_class (C41): which self-check regime the device belongs to.
+    "reram_macro" (default) = a CiMLoop-calibrated analog macro backs the
+    declaration, and verify_cycle reconciles against it on every run.
+    "digital_throughput" = an abstract equivalent-throughput unit (the Simba
+    reproduction preset): the declared cycle IS the truth, there is no macro
+    to reconcile, and verify_cycle is a no-op -- but validate()'s sanity
+    checks still apply. The bypass is keyed on THIS explicit field only,
+    never inferred from missing ReRAM parameters (a typo'd ReRAM config must
+    still fail loudly)."""
     name: str = "wan_nature_2022 (NeuRRAM class, 130 nm RRAM)"
     cycle_seconds: float = 10.14e-6 / 7        # per input bit slice
     input_slices_per_mvm: int = 7              # signed 8-bit inputs, encoded
     calibration: str = "CiMLoop calibration of the macro (Wan et al., Nature 2022)"
+    device_class: str = "reram_macro"
 
     @property
     def t_mvm_s(self) -> float:
@@ -43,6 +54,11 @@ class Device:
 
     def gbps(self, wc: float) -> float:
         return wc / (1e9 * self.cycle_seconds)
+
+
+# The explicit whitelist behind Device.device_class (C41): a typo must fail
+# in validate(), never silently select a regime.
+DEVICE_CLASSES = ("reram_macro", "digital_throughput")
 
 
 @dataclass(frozen=True)
@@ -65,6 +81,14 @@ class Link:
     # Owned by OUR analytic tier, never pushed into Timeloop (ownership rule:
     # network links -> T2, storage/hub bandwidth -> T1 via Level.hub_bandwidth).
     bandwidth_words_per_cycle: Optional[float] = None
+    # Packet model (C46 / SIMBA_PREREG A3), NoC-paradigm links only:
+    # packet_payload_bytes = data bytes per packet (None = no packet model;
+    # every shipped production config); packet_wire_overhead = header
+    # share on the wire (>= 1), an unconditional serialization multiplier.
+    # The per-packet hop term these enable is the PESSIMISTIC end of the
+    # packet bracket -- the optimistic end keeps busiest-wire semantics.
+    packet_payload_bytes: Optional[float] = None
+    packet_wire_overhead: float = 1.0
     # Which communication SCHEME connects this level's instances to their hub.
     # "star" (private link per node) is the degenerate default and reproduces the
     # pre-W2 behaviour exactly. Every scheme takes its OWN parameter set, so they
@@ -233,7 +257,13 @@ class Fabric:
     def verify_cycle(self, cycle_seconds: float, rtol: float = 1e-9) -> None:
         """The run's CiMLoop cycle (the macro's GLOBAL_CYCLE_SECONDS) must be
         the fabric's device cycle: the fabric declares, CiMLoop is the
-        calibrated source it is checked against (O17a). Raises on mismatch."""
+        calibrated source it is checked against (O17a). Raises on mismatch.
+
+        C41: for device_class "digital_throughput" there is no macro to
+        reconcile -- the declared cycle is the truth and this check is a
+        no-op. The bypass reads the EXPLICIT class field only."""
+        if self.device.device_class == "digital_throughput":
+            return
         d = self.device.cycle_seconds
         if abs(cycle_seconds - d) > rtol * d:
             raise ValueError(
@@ -241,10 +271,22 @@ class Fabric:
                 f"CiMLoop macro cycle is {cycle_seconds:.7g} s -- fabric device and CiMLoop macro diverged")
 
     def validate(self) -> "Fabric":
+        if self.device.device_class not in DEVICE_CLASSES:
+            raise ValueError(
+                f"device_class must be one of {DEVICE_CLASSES}, got "
+                f"'{self.device.device_class}' -- the verify_cycle regime is "
+                f"selected by this explicit field only (C41)")
         if not (self.device.cycle_seconds > 0):
             raise ValueError(f"device.cycle_seconds must be > 0, got {self.device.cycle_seconds}")
         if self.device.input_slices_per_mvm < 1:
             raise ValueError(f"device.input_slices_per_mvm must be >= 1, got {self.device.input_slices_per_mvm}")
+        for lv in self.levels:
+            lk = lv.link
+            if lk is not None:
+                if lk.packet_payload_bytes is not None and lk.packet_payload_bytes <= 0:
+                    raise ValueError(f"{lv.name}: packet_payload_bytes must be > 0")
+                if lk.packet_wire_overhead < 1.0:
+                    raise ValueError(f"{lv.name}: packet_wire_overhead must be >= 1")
         if not (self.schedule_slack >= 1.0):
             raise ValueError(f"schedule_slack must be >= 1.0 (1.0 = the busiest-wire bound), got {self.schedule_slack}")
         for lv in self.levels:
@@ -314,7 +356,8 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
     device = Device(name=str(dv.get("name", Device.name)),
                     cycle_seconds=float(dv.get("cycle_seconds", Device.cycle_seconds)),
                     input_slices_per_mvm=int(dv.get("input_slices_per_mvm", Device.input_slices_per_mvm)),
-                    calibration=str(dv.get("calibration", Device.calibration)))
+                    calibration=str(dv.get("calibration", Device.calibration)),
+                    device_class=str(dv.get("device_class", Device.device_class)))
 
     def bw(obj, key_wc, key_gbps, where):
         """A bandwidth declared EITHER in GB/s (converted at the device cycle)
@@ -359,6 +402,9 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
                       calibration=link.get("calibration"),
                       bandwidth_words_per_cycle=bw(link, "bandwidth_words_per_cycle",
                                                    "bandwidth_gbps", lv["name"] + ".link"),
+                      packet_payload_bytes=(None if link.get("packet_payload_bytes") is None
+                                            else float(link["packet_payload_bytes"])),
+                      packet_wire_overhead=float(link.get("packet_wire_overhead", 1.0)),
                       topology=link.get("topology", "star"),
                       params=dict(link.get("params") or {})) if link else None,
             hub_bandwidth_words_per_cycle=bw(lv, "hub_bandwidth_words_per_cycle",
@@ -408,7 +454,8 @@ def provenance(fab: "Fabric") -> dict:
             "schedule_slack": getattr(fab, "schedule_slack", 1.0),
             "device": {"name": fab.device.name, "cycle_seconds": fab.device.cycle_seconds,
                        "input_slices_per_mvm": fab.device.input_slices_per_mvm,
-                       "t_mvm_s": fab.device.t_mvm_s}}
+                       "t_mvm_s": fab.device.t_mvm_s,
+                       "device_class": fab.device.device_class}}
 
 
 def default() -> Fabric:

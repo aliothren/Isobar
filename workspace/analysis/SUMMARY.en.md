@@ -763,6 +763,79 @@ schedule ≥ the bound, the per-wire greedy schedule = the bound, on a bus the
 serial schedule = the bound; at slack 1.5 every occupancy scales 1.5× and the
 scheme order is unchanged.
 
+### 2.6 External validation: the Simba reproduction (worklist step 1, C41–C48)
+
+The instrument's SOFTWARE-placement channel now has an external contrast:
+NVIDIA's Simba (Shao et al., MICRO'19; Zimmer et al., JSSC'20) measured
+fixed silicon with only the assignment varied — precisely the move our
+search makes. We rebuilt Simba in the fabric schema at its papers'
+EXPERIMENT operating point (0.72 V, 1.03 GHz, GRS 11 Gb/s mode = 5.5 GB/s
+per link direction — the experiments did not run the 12.5 GB/s max; X-Y
+routing, weights preloaded, layer-sequential), declared its digital MACs
+as an equivalent-throughput device (explicit `device_class` — device
+physics is NOT under validation; the ReRAM self-check stays hard
+elsewhere), and expressed its ResNet-50 layers as closed-form conv
+traffic on the existing dim-classification tables (touched-extent
+volumes — no im2col overcount; a hand-check gate locked
+multicast/reduction structure and conservation against hand integers
+before any target ran). A pre-registration (working record
+`analysis/SIMBA_PREREG.md`) froze parameters, criteria bands anchored on
+pixel-read figure values, bias-direction declarations and three-tier
+triage rules BEFORE each run; every under-specified choice (Fig 9's
+seatings decoded from the figure, the greedy-placement procedure, per-
+point tilings) was declared in dated amendments first. A review round
+added the PACKET BRACKET: [busiest-wire bound, round-serialized end]
+for NoC-paradigm links — the pessimistic end is a declared discipline,
+not a bound; the 17/16 header-flit share is an unconditional tightening;
+production configs are untouched.
+
+Figure: `simba_validation.png` (generator
+[`analyze_simba_validation.py`](../scripts/analyze_simba_validation.py)).
+Verdicts, honest ones included:
+
+- **T1, the 2.5× seating spread** (res4a_branch1, four chiplets, the five
+  decoded seatings): the serialization bound is seating-FLAT — the
+  distance-insensitivity of the busiest-wire bound is itself a finding —
+  while the pessimistic rail tracks the measured ladder FROM BELOW
+  (1.35/1.70/2.05/2.40 vs 1.36/1.74/2.12/2.53), residual 0.7–5.2% growing
+  linearly with distance: the fingerprint of acks / multicast rounds /
+  end-of-transfer sync, handed to the BookSim step as a measurement task.
+  Both rails stay below silicon at every bar.
+- **T2, the data-placement gain** (32 chiplets, greedy vs the paper's
+  sequential baseline): the lever REPRODUCES — greedy never loses, and
+  the best-gaining layer coincides with silicon's (res3a_branch1). The
+  corner-vs-center broadcast sub-case is contained by the bracket
+  [1.004, 1.622] ∋ ~1.05. Ratios overshoot on two layers because the
+  placement-INSENSITIVE constants (synchronization ≈ 6,000 of ~10,000
+  cycles at 32 chips, per JSSC Fig 18) are deliberately absent from our
+  denominator.
+- **T3, the scaling classes** (three layers over 1/4/8/32 chiplets): the
+  measured class is bracketed by the two rails 3/3 (a labeled post-hoc
+  reading); the pre-registered choice to grade the pessimistic rail alone
+  scored 1/3 and is logged as the first falsified pre-registration
+  choice — elbows need a point INSIDE the bracket, which is exactly what
+  BookSim calibrates.
+- **Two structural findings.** (a) TILING FREEDOM: our enumeration finds
+  zero-communication tilings (legal per JSSC §III-B) that silicon's
+  compiler did not use — so measured placement gains are
+  tiling-contingent, and our "best-tiling" baselines can beat silicon's
+  realized mapping outright. (b) The busiest-wire abstraction's dropped
+  terms are now NAMED and BOUNDED: per-packet distance-coupled latency
+  (the bracket's width) and placement-insensitive constants (the ratio
+  dilutant) — not "more communication modeling".
+- **The phase diagram closes the loop**: Simba enters as the first
+  DIGITAL chip point (t = 497 ns per input row through a PE's resident
+  32 KiB, derived; on-die 560 GB/s per 32-array group; D2D on the GRS
+  line). On-die it sits in the placement-free region; at the D2D tier it
+  sits above pure hand-off but below the spanning-chain boundaries —
+  "die-spanning operators exposed" — and Fig 9's spanning operator is
+  exactly the exposure the diagram predicts, at the size T1 measured.
+
+With HERMES auditing the ACCOUNTING caliber (§2.5) and Simba auditing the
+SOFT-PLACEMENT effect, the validation chapter now carries one external
+contrast per layer of the instrument.
+
+
 ## 3. Models & results, level by level
 
 ### 3.1 Distance and placement (macro level and below) — the central work
@@ -1374,6 +1447,9 @@ direction only: **toward underestimation**.
 | `analyze_phase_diagram.py` | the phase diagram (O29): two panels on the (t_MVM × bandwidth) plane — d family + three layers + anchor lines + chip points + validation points + collapse inset; `phase_diagram.png` (with grayscale copy) + `phase_diagram_table.md` (§2.5) |
 | `run_scaling_probes.py` | the O17c scaling-law probes: 48 mapper runs (d ∈ {1024..8192} × S ∈ {128..2048}), column split, one full die per piece, resumable; `scaling_probes.json` (§2.5) |
 | `analyze_scaling_law.py` | the measured V(d, S): trunk closed form, the flip d*, S-independence; `scaling_law_vds.png` + `scaling_law_summary.json` (§2.5) |
+| `simba_workload.py` | the Simba reproduction workload (C42): ResNet-50 conv layers as closed-form ops, touched-extent volumes (anti-im2col), conv→TrafficStructure on the existing dim tables (§2.6) |
+| `simba_targets.py` | the three reproduction targets (C44–C47): T1 seatings, T2 baseline/greedy placement, T3 scaling points; the packet bracket (A3); `simba_t1/t2/t3.json` (§2.6) |
+| `analyze_simba_validation.py` | the per-target measured-vs-bracket figure; `simba_validation.png` (§2.6) |
 | `sweep_axes.py` | per-axis bandwidth sweeps: on-die / die-to-die (48-die, 2.7B chain, 4-die probe) / unit link / partial-sum width, both overlap ends, read at the digital anchors + the band ends; plus the T1 hub axis (value units, C34) and the (t_MVM × bandwidth) device plane (C31/C33: closed-form boundaries + the d family + collapse + fixed-term decomposition); `phase_sweep.json` + `sweep_axis_*.png` + `device_plane*.png` + `device_fixed_terms.png` (§2.5) |
 | `analyze_anchored_sweep.py` | anchor-column readout: on-chip / offloaded × scheme × five columns (three digital anchors + the band ends), the offloaded column end to end with the external unit (§2.3.1c/e) |
 | `analyze_scale_tiers.py` | 2.7B tier: operators spanning dies × assignment × anchor (§3.5) |
@@ -1430,7 +1506,7 @@ they go through `tests/compare_baseline.py`, which diffs a fresh
 acceptance gate for re-plumbing work; model upgrades re-freeze with
 `--freeze v1` plus a changelog entry).
 
-There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. After C27 groups 14 and 17 gained v6 blocks (the 2×4 default: the three routed schemes tie, corner / centre 1.00×), the 3×3 mechanism anchors load `mlx300_3x3.yaml` explicitly and keep their numbers, and group 9 checks both grids. Group 26 (C30): the device as a fabric input (declaration + provenance in every config, run cycle = declaration and a divergence rejected, the registry reads the device, GB/s declarations converted at load, link seconds invariant under a 10x faster device, the former literal sites read the fabric, no cycle / 18112 literal in any script). Group 25 (C29): the occupancy as the bound of every explicit schedule, `schedule_slack` default / validation / scaling / inheritance. Group 24 (C28): the hub-lever gating table (six grids × hub, the corner rule, the verdict, the soft-placement lever, the 2×4 cell recomputed independently) and the figure-rule helpers. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point); 23 the anchor registry and the per-axis sweeps (digital values and statuses, the estimated band, chip points with a status per coordinate, no anchor-printing script with its own constant, the conversion identities, the digital columns reproducing the v5 pins, the band-end readouts, the exact thresholds, the knee operators, the three D2D workloads and the unit link, the partial-sum width). Group 23 additionally pins, since C36–C40: the primary-sourced ESP anchor (status measured, multi-plane aggregation stated), the Mythic / HERMES t coordinates and statuses, the HERMES self-consistency audit (need 1.93 vs supply 2.61 GB/s per core, ×1.36 headroom), and the UCIe `spec` tier with the D2D column order. Group 27 (C31): the device plane (the bisection-swept thresholds land on the closed-form line to 1e-9, the r surface equals the closed form pointwise, the matrix-part multiplier collapses exactly in g×t_MVM while the whole stack does not, the three silicon marks come from the registry with the right statuses, the HERMES fixed-term decomposition prefill 9.33× / decode 1.11×, and the network seconds at a fixed GB/s carry no device — the group 26 identity restated on the plane's own data). Group 28 (C32/C33): the measured scaling law (the trunk-regime ratio = d/114,688 exactly with the busiest direction down, the flip d* measured at 1,220–1,350 with the 5,793 prediction falsified by >4×, ffn2's tiler step, every probed ratio S-independent qk^t included, column split throughout with the d=2560 probes reproducing the 2.7B block's ratios, the 48-run count; the scheme re-scoring: routed ×4.00 constant, bus drifting ×13.3→×8.25, star reproducing the stored values). Group 27 additionally pins the d family (production base = the plane's own mesh line, the trunk ×4 closed form, the die-level tensor-once closed form, d=2560 passing through the measured B2 mark, the width-tier model names). Group 29 (C34): the T1 audit (the cached Timeloop points == counter units ÷ bandwidth with zero error, the write port's 37,224,448 units, hub = bus + in-fill as a per-op identity, ffn1 +6.25% / ffn2 +20%, the thresholds and the MX100-class reading, decode-offloaded == prefill-offloaded, no shipped config declares a hub bandwidth). Group 30 (C35): the phase diagram (the layer edges and the corrected ordering pure hand-off < probe < every chain-incl.-spanning line; the validation classes: trunk exactly 1.0, ffn2 exactly ×2 at d ≤ 4096 and back on the line from 5120; the B2 marks on the d=2560 line at all three silicon speeds; the outputs and pinned table rows).
+There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. After C27 groups 14 and 17 gained v6 blocks (the 2×4 default: the three routed schemes tie, corner / centre 1.00×), the 3×3 mechanism anchors load `mlx300_3x3.yaml` explicitly and keep their numbers, and group 9 checks both grids. Group 26 (C30): the device as a fabric input (declaration + provenance in every config, run cycle = declaration and a divergence rejected, the registry reads the device, GB/s declarations converted at load, link seconds invariant under a 10x faster device, the former literal sites read the fabric, no cycle / 18112 literal in any script). Group 25 (C29): the occupancy as the bound of every explicit schedule, `schedule_slack` default / validation / scaling / inheritance. Group 24 (C28): the hub-lever gating table (six grids × hub, the corner rule, the verdict, the soft-placement lever, the 2×4 cell recomputed independently) and the figure-rule helpers. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point); 23 the anchor registry and the per-axis sweeps (digital values and statuses, the estimated band, chip points with a status per coordinate, no anchor-printing script with its own constant, the conversion identities, the digital columns reproducing the v5 pins, the band-end readouts, the exact thresholds, the knee operators, the three D2D workloads and the unit link, the partial-sum width). Group 23 additionally pins, since C36–C40: the primary-sourced ESP anchor (status measured, multi-plane aggregation stated), the Mythic / HERMES t coordinates and statuses, the HERMES self-consistency audit (need 1.93 vs supply 2.61 GB/s per core, ×1.36 headroom), and the UCIe `spec` tier with the D2D column order. Group 27 (C31): the device plane (the bisection-swept thresholds land on the closed-form line to 1e-9, the r surface equals the closed form pointwise, the matrix-part multiplier collapses exactly in g×t_MVM while the whole stack does not, the three silicon marks come from the registry with the right statuses, the HERMES fixed-term decomposition prefill 9.33× / decode 1.11×, and the network seconds at a fixed GB/s carry no device — the group 26 identity restated on the plane's own data). Group 28 (C32/C33): the measured scaling law (the trunk-regime ratio = d/114,688 exactly with the busiest direction down, the flip d* measured at 1,220–1,350 with the 5,793 prediction falsified by >4×, ffn2's tiler step, every probed ratio S-independent qk^t included, column split throughout with the d=2560 probes reproducing the 2.7B block's ratios, the 48-run count; the scheme re-scoring: routed ×4.00 constant, bus drifting ×13.3→×8.25, star reproducing the stored values). Group 27 additionally pins the d family (production base = the plane's own mesh line, the trunk ×4 closed form, the die-level tensor-once closed form, d=2560 passing through the measured B2 mark, the width-tier model names). Group 29 (C34): the T1 audit (the cached Timeloop points == counter units ÷ bandwidth with zero error, the write port's 37,224,448 units, hub = bus + in-fill as a per-op identity, ffn1 +6.25% / ffn2 +20%, the thresholds and the MX100-class reading, decode-offloaded == prefill-offloaded, no shipped config declares a hub bandwidth). Group 30 (C35): the phase diagram (the layer edges and the corrected ordering pure hand-off < probe < every chain-incl.-spanning line; the validation classes: trunk exactly 1.0, ffn2 exactly ×2 at d ≤ 4096 and back on the line from 5120; the B2 marks on the d=2560 line at all three silicon speeds; the outputs and pinned table rows). Groups 31–36 (C41–C47), the Simba reproduction: the frozen experiment-point preset and the explicit device-class contract (the verify_cycle bypass keyed on the field, the guard's exempt list exactly `simba.yaml`), conv volumes and closed-form structure with the refusals (halo P/Q, stride-with-pad), the day-4 hand-check gate (multicast/reduction membership, conservation, anti-im2col, the conv≡matmul bridge — all hand integers), and the three targets' outcomes pinned INCLUDING the graded failures (T1b optimistic-rail miss, T2b double-sided band miss, the falsified A4-3 rail choice) plus the packet-bracket closure identity — moving any of those numbers is a model change that must re-open the triage record.
 
 Note: all-green does **not** mean physically correct. It only guarantees "the
 code equals the documented model"; whether the model is right waits for the

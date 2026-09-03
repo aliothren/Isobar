@@ -166,6 +166,19 @@ def main():
     ax.plot([nr.t_mvm_s * 1e6], [1.5e-3], marker="^", color="0.1", ms=7, zorder=6)
     ax.text(nr.t_mvm_s * 1e6 * 1.1, 1.5e-3, "NeuRRAM [t measured;\non-die b/w not published: hub-IO]",
             fontsize=5.8, va="center", color="0.1", zorder=6)
+    # Simba (C47): the first DIGITAL chip point -- the C41 equivalent-
+    # throughput declaration gives it an honest compute coordinate, so it
+    # sits on the plane as a chip (open diamond), NOT as a device mark of
+    # the r=1 machinery. Fast-and-wide: the corner opposite the production
+    # configs.
+    sb = an.chip("simba")
+    ax.plot([sb.t_mvm_s * 1e6], [sb.ondie_gbps], marker="D", color="0.1",
+            mfc="white", ms=6, zorder=6)
+    ax.text(sb.t_mvm_s * 1e6 * 1.25, sb.ondie_gbps * 0.72,
+            "Simba [digital chip point (C47);\nt derived 0.50 us (equiv. throughput);\n"
+            "supply ~560 GB/s per 32-array group\n(8.75 GB/s/link published; C37)]",
+            fontsize=5.8, va="top", color="0.1", zorder=6,
+            bbox=dict(fc="white", ec="none", alpha=0.8, pad=0.6))
     # validation points: the 17c probes, re-scored routed knee vs the trunk law
     for name in ("qkv_proj", "ffn1", "ffn2"):
         for dstr, row in LAW["scheme_check"][name].items():
@@ -232,6 +245,13 @@ def main():
     ax.plot(TT, line(probe), ls=(0, (7, 2, 1.5, 2)), color="#7b2d8b", lw=2.0, zorder=4,
             label="SINGLE 4-die operator (probe, measured): one spanning op alone")
     device_marks(ax)
+    sb = an.chip("simba")
+    ax.plot([sb.t_mvm_s * 1e6], [sb.d2d_gbps], marker="D", color="0.1",
+            mfc="white", ms=6, zorder=6)
+    ax.text(sb.t_mvm_s * 1e6 * 1.25, sb.d2d_gbps * 0.74,
+            "Simba [digital chip point (C47); GRS max 12.5,\nexperiments ran 5.5; its measured placement\nlevers = the reproduction targets T1-T3]",
+            fontsize=5.8, va="top", color="0.1", zorder=6,
+            bbox=dict(fc="white", ec="none", alpha=0.8, pad=0.6))
     # validation: the measured B2 chain marks sit on the d=2560 line
     b2 = PLANE["b2_marks"]["clustered"]
     pred = FAM["d2d"]["2560"]["boundary_gbps_at_tref"]
