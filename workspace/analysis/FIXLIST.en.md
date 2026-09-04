@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 288 pass + 1 expected-fail, which is
+(`python3 tests/run_tests.py`; currently 300 pass + 1 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -1380,7 +1380,7 @@ current owner and its open items. Bold items move current conclusions.
 | calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 288 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 300 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -1877,7 +1877,19 @@ external behaviour / robustness) and then the freeze.
    explain it, formal changelog reopen, debugging in dependency order
    (conv traffic extraction first, then routing/seating, then occupancy
    semantics). The half-page cleared = Simba is released to run.
-2. **Soft-placement lever table at the anchors** (half a day, closed
+2. ~~**Soft-placement lever table at the anchors**~~ **DONE 2026-09-04
+   (C49)**: every pre-registered direction held; A1 real = 1.000
+   exhaustively by symmetry (uniformity proven by the exact five-scheme
+   fit), A2 ceiling folds 1.609x/1.084x at 0.4 GB/s and dies above ~1-1.4
+   GB/s; the inherited 1.31x superseded (v6 ledger), the 1.5-1.7x low-end
+   claim confirmed; A1's 1.000 ADJUDICATED as structural
+   degeneracy (C49-a: identical per-wire loads, zero freedom -- frozen
+   by the MAPPING under three stated conditions, each reopening the
+   space when it breaks; the mapping = the attribution framework's
+   third hand, kept for the paper); in THIS configuration the
+   searchable freedom concentrates at the die level (SUMMARY §2.7,
+   soft_lever_table.md; the attribution-split row is ready for step 5).
+   -- was: (half a day, closed
    form, no new simulation; run before or alongside the document round).
    Attribution framework: hardware placement (scheme / links / geometry /
    device) sets WHERE the boundary lines sit; software placement (the
@@ -1893,7 +1905,75 @@ external behaviour / robustness) and then the freeze.
    threshold 1.2-1.9 GB/s moving with the ordering). This is the search
    chapter's motivation table; the ultimate proof stays the
    proxy-optimization experiment of step 7.
-3. **Document round.** DR-table refresh (real-bandwidth input returns to
+   PRE-REGISTRATION (2026-09-04, written before the run; review-amended):
+   (a) CELL = A TRIPLE: whole-stack worst/best ratio (the headline),
+   mechanism (busiest-wire) ratio, and the fixed-term share at that
+   anchor x condition -- the share explains the gap between the two
+   ratios in place. (b) TWO A-ROWS WITH DISTINCT SEMANTICS, never mixed
+   in one cell: A1 "real, exhaustive" -- ONE JOINT seat permutation of
+   the 8 macro bundles on the production 2x4 (8! = 40,320, exhaustive;
+   bundle composition held at the shipped mapping -- DECLARED not
+   covered; hub fixed: hardware placement); A2 "synthetic ceiling" --
+   the C28 x4 heavy-talker stressor, seat swept over its 8-slot orbit
+   (exhaustive), marked NOT A REALIZABLE SEATING. (c) EXPECTATIONS PER
+   CELL, directions pre-written: A1 = 1.000 at EVERY anchor x condition
+   (the fill-exact grid + uniform mapping is node-symmetric -- the
+   C27/C28 corner=centre result restated at the anchors; if any cell
+   deviates, that asymmetry is a finding); A2 mechanism ratio = 1.75x
+   CONSTANT across ops, conditions and anchors (pure geometry); A2
+   whole-stack ratio: monotone DECREASING in g, 1.00 above the knee,
+   decode < prefill at every g (the write wall dilutes), largest cell =
+   prefill at 0.4 GB/s; fixed share: monotone increasing in g within a
+   condition, decode > prefill at every g. The three INHERITED numbers
+   (1.31x at 0.4, 1.5-1.7x band low end, 1.00 above knee) predate the
+   v6 accounting -- if the v6 ledger disagrees, that is a finding to
+   record, not an error to fit. (d) Flow reconstruction self-check
+   before any scan: uniform per-node flows must reproduce the stored
+   per-op serial_s at the reference bandwidth to 1e-9, else stop.
+   (e) B collects, never recomputes; C states the 1%/10% g-thresholds;
+   the attribution-split row feeds step 5's robustness table.
+   A3 ADDENDUM (2026-09-04, review; pre-registered BEFORE the run;
+   one-day cap, declared close-out if exceeded): "natural non-uniformity
+   (multi-operator co-residency)" -- the non-synthetic reopened-space
+   probe A1's degeneracy theorem calls for. Production seating IS
+   multi-projection co-residency: under offload the die keeps only the
+   projection set, and the blocks tile INTEGRALLY at d=1024 (qkv 3
+   macros / out_proj 1 / ffn1 4 / ffn2 4 of 8) -- per-macro flow density
+   is naturally unequal, and the attention-half die has FOUR FREE slots
+   (offload removed K/V): real seat choices, no stressor. METHOD,
+   declared: block-exclusive reading of co-residency (each op's traffic
+   on its own k macros at density x8/k -- exact for distinct-partition
+   dims, stated); joint seatings exhaustive (attn die C(8,3)xC(5,1) =
+   280, ffn die C(8,4) = 70; within-op seat order irrelevant by
+   uniformity); compute/write kept from the stored share-basis ledger
+   (A3 re-reads WIRE GEOMETRY only; the compute-parallelism fork
+   between share- and block-readings is a stated boundary, and it
+   cancels in the lever ratio since compute is seating-invariant).
+   EXPECTATIONS, pre-written: A3 lever > 1.000 below the knee (the
+   reopened-space claim -- the first REALIZABLE on-die lever); attn-die
+   variance > ffn-die (free slots); monotone decreasing in g, 1.000
+   above the knee, prefill > decode; magnitude pre-estimate from trunk
+   volumes and the 2x4 column geometry: mechanism ratio order 1.1-1.8,
+   whole-stack at 0.4 GB/s between ~1.05 and A2's 1.609 (prefill).
+   Table and prose get the connector sentence: after offload what
+   remains on the die IS this co-resident projection set -- the on-die
+   space REOPENS in that configuration, evaluator unchanged.
+   A3 DONE 2026-09-04 = C49-b: mech 3.00/2.67 (EXCEEDS the synthetic
+   1.75 -- A2's "ceiling" now scoped to the uniform-mapping world),
+   stack 1.434/1.057 at 0.4 GB/s; directions all held, the magnitude
+   pre-estimate undershot and recorded as a finding.
+3. ~~**Document round.**~~ **DONE 2026-09-04 (C50)**: DR table
+   refreshed (DR-2 priced by the soft-lever table, DR-5 device-axis
+   framing); SUMMARY §2.8 = the five-layer frame (EN+ZH); README
+   extended; the two stale slow goldens re-derived WITH attribution
+   (caliber mix 311,296 -> exact 12,288 value identity; 5/4 -> 12/11
+   two-share-class spread on the 2x4) -- both suites green. TEX
+   RE-SCOPED by the user (2026-09-04): only the local
+   phase_diagram_report.tex absorbs findings (band-pricing section,
+   five-layer validation with the reproduction subsection + figure);
+   settings_and_assumptions.tex and company_report.tex NOT touched --
+   their version-header/absorption items are retired from this step.
+   -- was: DR-table refresh (real-bandwidth input returns to
    first order in the analog-reality column; the write model stays the
    one device-side input that moves decode); the settings document's
    version header; the company report absorbing the recent findings; the
@@ -1907,7 +1987,118 @@ external behaviour / robustness) and then the freeze.
    side -- both numbers clean multiples of 4096 -- and the tiny-example
    position spread never re-pinned after the grid change); re-derive
    with attribution, never band-aid the pins.
-4. **BookSim cross-check** (3-day timebox). Since C46 its task is
+4. **BookSim cross-check** (3-day timebox). ENVIRONMENT ADAPTED
+   2026-09-04 (ahead of the box, on request): BookSim2 vendored under
+   workspace/tools/ (un-tracked; one .gitignore line added), parser
+   generated on the HOST (flex/bison live there; the container lacks
+   them and nothing was installed anywhere), built in the container
+   with g++ only; smoke-tested on the bundled 8x8 example AND the
+   step-4 topology itself (6x6 mesh, DOR, 17-flit packets) -- recipe
+   in tools/booksim2/BUILD_NOTES.md. PRE-REGISTRATION (2026-09-04,
+   before any measurement run; review-ruled): CONVERSION TABLE -- flit
+   payload 8 B (64 data bits; the 2 id bits are wire format), NoP
+   channel cycle = 8 B / 5.5 GB/s = 1.4545 ns, hop = channel 12 cycles
+   + router pipeline 2 cycles (each with JSSC provenance; not a
+   rounding artifact; the -1.8% optimistic remainder recorded IN the
+   table), packet_size 17; VC count / buffer depths / credit delay =
+   BookSim defaults, DECLARED un-aligned parameters with their literal
+   default values copied into the table (congestion-side only;
+   shallower buffers push pessimistic). LAMBDA GUARD (ruling): the
+   slack coefficient lambda = (T_book - T_opt)/(T_pess - T_opt) is
+   REPORTED ONLY where the bracket width exceeds 10% of the completion
+   time; narrow-bracket points report the absolute deviation
+   (T_book - T_opt) instead -- the guard prevents a degenerate-domain
+   false alarm. ARITHMETIC NOTE, recorded: the review predicted bar1
+   lands narrow ("67.263 vs ~65.7, percent-level"); our computed
+   brackets are WIDE at both T1 points in both calibers (whole-stack
+   24.397/67.263, network 19.43/42.9 at bar1) and we cannot reproduce
+   the 65.7 figure -- the guard is armed regardless and the data
+   decides which points report lambda. CALIBER LABEL (ruling): BookSim
+   injects unicasts; multicast flow sets are run as per-destination
+   decompositions and their lambda carries the explicit label
+   "unicast-decomposition caliber" (the bias is NOT one-signed: both
+   T_book and the rails move); res3a's broadcast-heavy readout is
+   interpreted under this limitation, and T1's point-to-point-dominant
+   flows are the protagonist for this third reason. EXPECTATIONS
+   (pre-written): wide-bracket points -- lambda toward the pessimistic
+   end (silicon is partially pipelined; residual single-digit %), and
+   lambda(bar5) > lambda(bar1) (the round-effect share grows with
+   distance -- the distance-linear residual's direct check);
+   narrow-bracket points -- absolute deviation at the propagation-term
+   scale. Outside the bracket = a semantics discovery, formal reopen;
+   ordering reversed = single-record investigation. RED LINE: identity
+   gates not green by mid-day-2 -> close out per the C29 wording (the
+   NoC column keeps its declared lower bound, coefficient marked
+   pending). DAY-1 GATES: identity_optimistic (degenerate-latency
+   BookSim == the NON-DEDUP serialization bound + propagation, tolerance
+   declared at 5%) and identity_pessimistic (per-packet single runs sum
+   == the round-serialized rail, 5%); the vendored file-traffic patch
+   carries its own acceptance (one source, hand-counted completion).
+   DAY-1 CLOSED 2026-09-04 (C51), gates GREEN: gate B exact
+   (per-packet sum == 17 + 14h + 37, ratio 1.000000), gate A 1.0018 vs
+   the declared reference. PRE-REGISTRATION AMENDMENTS from day 1
+   (before any day-2 measurement): (i) hop split 10+4 (BookSim's default
+   IQ pipeline measures 4 cycles/hop; overriding alloc delays trips a
+   router assertion; total 14 cycles keeps the 20 ns provenance and the
+   -1.8% remainder); (ii) vc_buf_size 34 moves from "un-aligned
+   defaults" to ALIGNED (the default 8 cannot cover the 14-cycle BDP and
+   credit-throttles ~2x; silicon sustains line rate per JSSC SII-C;
+   insensitive 34 vs 64); (iii) injection caliber declared: one BookSim
+   injection channel vs Simba's four NoC local ports -- reference and
+   BOTH rails use max(channel bound, injection bound); (iv) EXPECTATION
+   CORRECTION, flagged for review before day 2: BookSim pipelines
+   freely and carries no protocol dependencies, so it measures the
+   NETWORK-INTRINSIC share of the gap only -- its lambda should land
+   NEAR THE OPTIMISTIC END (single-digit %), not near-pessimistic as
+   pre-written; the round-serialization share of silicon's 2.5x lives
+   ABOVE the network (protocol level). Day 2's product is therefore a
+   TWO-COMPONENT decomposition: [bound -> BookSim] = network-intrinsic
+   slack (measured), [BookSim -> silicon] = protocol/round-trip share
+   (attributed) -- a stronger statement than one coefficient, pending
+   the reviewer's sign-off since it reverses a pre-written expectation.
+   DAY-2 PRE-REGISTRATION (2026-09-05, reviewer-signed decomposition
+   frame; written before the runs). The gap is TWO STACKED LAYERS:
+   [bound -> BookSim] = the NETWORK-INTERNAL share (queueing, flow
+   control, flit competition -- free pipelining, no protocol
+   dependencies) and [BookSim -> silicon] = the PROTOCOL share (small
+   consumer buffers, per-block handshakes -- lives above the network,
+   invisible to BookSim). Expectations in two halves: network-internal
+   -- bar5's [bound -> BookSim] offset EXCEEDS bar1's (the
+   distance-linearity signature checked inside the network layer),
+   magnitude single-digit percent; protocol -- bar5's [BookSim ->
+   silicon] carries the BULK of the measured 2.53x (quantified as
+   2.53 / booksim_ratio, consistent with the T1 residual attribution).
+   Per the ruling bar1 reports the absolute deviation where the guard
+   classifies it narrow -- ARITHMETIC NOTE continued: in the bridge
+   caliber our computed bar1 bracket is WIDE (width ~1.5x of
+   completion), so the guard is expected NOT to trigger there; both
+   quantities are reported per point and the guard's verdict is stated.
+   The multicast-decomposition bias limitation rides res3a as ruled.
+   PROPAGATION (day 3): the phase-diagram NoC correction line is
+   labelled "network-internal; protocol share declared"; the validation
+   chapter's fourth layer states the two-component attribution with the
+   protocol share MEASURED as (silicon ratio) / (BookSim ratio); V3's
+   input renamed "network-internal coefficient + declared protocol
+   share". PROVENANCE TIGHTENING (ruling): the 7-cycle interface base
+   is a BRIDGE-INTERNAL measured constant (BookSim, BDP-aligned
+   config) with NO silicon counterpart claimed -- so labelled in the
+   conversion table.
+   STEP 4 CLOSED 2026-09-05 (C53; the 3-day box closed in 2):
+   day-3 propagation done -- ANCHORS NoC-slack row (evidence status
+   "cycle-accurate reference", network-internal vs declared protocol
+   share), SUMMARY §2.8 layer-4 sentence (EN+ZH), the report's
+   validation subsection carries the executed cross-check, the phase
+   diagram's D2D panel carries the certification note (a corrected
+   LINE needs a platform packet declaration -- not invented; DR-tier),
+   V3's input renamed in step 5.
+   DAY-2 CLOSED 2026-09-05 (C52), every amended expectation hit:
+   net-internal bar1 +0.18% / bar5 +0.74% (bar5 > bar1, single-digit
+   %), lambda ~0.001 at the optimistic end, protocol share = 2.530 /
+   1.0056 = 2.516x THE BULK with a measured anchor; ordering bound <
+   BookSim < closed pessimistic rail (2.40) < silicon (2.53) = the
+   stacked layers, quantified. Day 3 (records propagation per the
+   ruling) remains.
+   Since C46 its task is
    UPGRADED: not "explain the 2.5x" but "measure the packet bracket's
    residual" (T1's distance-linear 0.7-5.2% = acks / multicast rounds /
    sync) and calibrate where in [pipelined, round-serialized] real
@@ -1919,15 +2110,29 @@ external behaviour / robustness) and then the freeze.
    interval (ANCHORS' NoC row gains it). It validates ONLY the max-end
    claim: not volumes (counted), not device timing (calibrated), not the
    scheduled/DMA side (exact by construction).
-5. **Robustness table** (half a day, closed form). Every published
+5. ~~**Robustness table**~~ **DONE 2026-09-05 (C54)**: 15 rows under
+   pre-registered, review-amended criteria; digital-anchor region calls
+   survive 5x + the worst-endpoint overlay; the honest reds pinned
+   (R11 radius 1.36x, R12 margin 1.68x at the tiling-divergence site,
+   R13 bracket dies at 5x). -- was: (half a day, closed form). Every published
    conclusion x model error 2x / 5x: does the region verdict survive a
    k-fold boundary shift on the log axis. One row for the attribution
    split itself: does the 1.4-2x software band survive or collapse to 1,
    and if it collapses, in which diagram cells the soft-placement
-   narrative fails. The validation chapter's closer.
-6. **FREEZE.** Preconditions: fast AND slow suites fully green (step 3's
-   goldens resolved first); the slow suite runs weekly and mandatorily
-   before every freeze.
+   narrative fails. NoC-paradigm input RENAMED per the C52 ruling: not
+   "the lambda coefficient" but "the NETWORK-INTERNAL coefficient
+   (+0.18-0.74%, measured) plus the DECLARED protocol share (2.516x on
+   the Simba seating experiment)" -- the row asks which conclusions
+   survive if the protocol share applies wherever the NoC paradigm
+   does. The validation chapter's closer.
+6. ~~**FREEZE.**~~ **FROZEN 2026-09-05 = tag v6 (C55)**: final
+   read-through passed (wording deferred to the writing month by
+   decision); both suites fully green on the final run (fast 300 /
+   slow 311, each +1 xfail); citation snapshot exported
+   (analysis/frozen_v6.md -- the writing month cites THAT page, not the
+   moving workspace). -- was: Preconditions: fast AND slow suites fully
+   green (step 3's goldens resolved first); the slow suite runs weekly
+   and mandatorily before every freeze.
 7. **After the freeze: the placement search milestone.** An evaluator API
    wrapping the existing pipelines (anchor column and device tier as
    arguments; `schedule_slack` honoured) -> baselines + greedy -> the

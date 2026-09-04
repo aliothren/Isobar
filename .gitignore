@@ -52,3 +52,6 @@ io_study/.config/
 io_study/.ipython/
 io_study/.jupyter/
 io_study/.local/
+
+# vendored third-party tools (BookSim2 etc.), built locally -- not part of the repo
+workspace/tools/

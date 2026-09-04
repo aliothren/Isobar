@@ -1,5 +1,5 @@
 {
- "tiny2x2_max_over_min_active": 1.25,
+ "tiny2x2_max_over_min_active": 1.0909090909090908,
  "tiny2x2_n_active": 32,
- "_provenance": "v2: value units (C25); v1 read 3.579 max/min under the counter units"
+ "_provenance": "v2: value units (C25); v1 read 3.579 max/min under the counter units. Re-pinned C50: 1.25 (= 5/4) was measured on the 3x3-with-hole macro grid and was never re-derived after the C27 switch to the fill-exact 2x4; on that grid the 32 active crossbars fall into exactly two share classes, 4,608 vs 4,224 value units -> 12/11 = 1.0909 (attributed, not band-aided)"
 }

@@ -105,6 +105,23 @@ given routing, the missing piece being arbitration on shared segments;
 `schedule_slack` (fabric input, >= 1, default 1) expresses a schedule that
 cannot reach the bound.
 
+**The NoC-paradigm slack, measured (C52; evidence status: CYCLE-ACCURATE
+REFERENCE -- a simulator, not silicon; kept distinct from silicon rows).**
+BookSim 2 (vendored, patched for exact per-pair batches; conversion table
+in `scripts/booksim_bridge.py`, both identity gates green) ran the Simba
+reproduction's seating flow sets on the 6x6 mesh: the batch completion
+lands ON the busiest-wire bound -- +0.18% (adjacent seating) to +0.74%
+(corner seating), the larger offset at the larger distance (the
+distance-linearity signature inside the network layer). Reading, per the
+signed decomposition frame: the bound's reachability is CERTIFIED by a
+real router (schedule_slack's lower end is real, network-internally);
+what the coefficient covers is the NETWORK-INTERNAL share only -- the
+PROTOCOL share (consumer buffering, per-block handshake rounds; above
+the network, invisible to a NoC simulator) is a DECLARED item, measured
+against silicon as 2.530 / 1.0056 = 2.516x on the Simba seating
+experiment. Ordering, quantified: bound < BookSim (1.006) <
+round-serialized closed rail (2.40) < silicon (2.53).
+
 The analog-reality tier is in the registry as the estimated band above
 (2-20x below the digital anchors on die, 1-2 orders below GRS); since C36
 its on-die LOW end coincides with the one published analog link rate

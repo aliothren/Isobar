@@ -917,3 +917,205 @@ direction discipline unbroken) and hands §10b to BookSim, the bracket
 row to the robustness table, and §2.6 to the paper. The record is
 closed; further Simba work reopens via changelog. Suite: 288 passed / 1
 xfail.
+
+
+C49 (2026-09-04): the soft-placement lever at the anchors (worklist step
+2; half-day closed form, zero mapper). Pre-registered in FIXLIST step 2
+BEFORE the run (review-amended: triple cells, two A-rows with distinct
+semantics, per-cell direction expectations, coverage declared, gating
+self-checks). scripts/analyze_soft_lever.py: uniform (D,U) per-op flow
+model FIT against all five schemes' stored serializations
+(contention_system.json) -- exact to 0 for all 6 matmuls both phases,
+which PROVES node-uniformity, so A1 (real joint seat permutations, 8
+bundles on the 2x4) = 1.000 exhaustively by symmetry; A2 (C28's x4
+stressor, seat orbit exhaustive, marked non-realizable): mechanism
+1.750x constant, whole-stack folds prefill 1.609x @ 0.4 GB/s -> 1.000
+@ >= 2, decode 1.084x -> 1.000, fixed shares 76%/97% at 0.4; band > 1%
+only below 1.37/1.08 GB/s, > 10% below 1.06/0.33. Shipped-stack
+refold reproduces the stored row to 0. Expectations: all pre-written
+directions held; the inherited 1.31x@0.4 SUPERSEDED by 1.609x (v6
+ledger -- a finding per the pre-registration), the inherited 1.5-1.7x
+band-low-end confirmed. Die-level rows collected (not recomputed) with
+sources; the reading -- the on-die soft channel is CLOSED on the
+production grid, placement leverage lives at the DIE level (Simba's
+silicon says the same, SUMMARY §2.6) -- lands as SUMMARY §2.7 (EN+ZH)
++ analysis/soft_lever_table.md. Feeds step 5's attribution-split row.
+Group 37 (5 tests). Suite: 293 passed / 1 xfail.
+
+
+C49-a (2026-09-04, adjudication on review): what A1's 1.000 IS. The
+either/or was put to the data: any two seatings carry IDENTICAL per-wire
+loads (14 wires, wire by wire, all 6 lever ops both phases -- pinned in
+group 37), so the row is STRUCTURAL DEGENERACY -- zero freedom -- not
+differences canceling at the max. Second evidence layer: the traffic
+extraction's conservation guards certify per-leaf even division on
+Timeloop's own counters (ffn1 fixture: in_leaf 65,536 / out_leaf 32,768
+single values). All prose re-calibrated to the conditioned claim: the
+on-die soft-placement freedom is frozen to zero BY THE MAPPING under
+three stated conditions (fill-exact grid, uniform mapping, fixed
+bundling), each of which reopens the space when it breaks (C28
+stressor demonstrates; MoE expert routing / variable-length attention
+are natural producers); the unconditioned phrase "placement leverage
+lives at the die level" is banned from the table (asserted). The
+attribution framework gains its third hand, kept for the paper: the
+MAPPING decides whether placement has any play at all. Suite: 294
+passed / 1 xfail.
+
+
+C49-b (2026-09-04): A3, natural non-uniformity via multi-operator
+co-residency -- the REALIZABLE reopened-space probe the C49-a degeneracy
+theorem called for (review addition; pre-registered in FIXLIST step 2
+before the run, one-day cap unused). Block-exclusive reading: under
+offload the die keeps the projection set, tiling integrally at d=1024
+(qkv 3 / out_proj 1 / ffn1 4 / ffn2 4 macros; the attention-half die has
+4 FREE slots); traffic density x8/k on each op's own macros (exact for
+distinct-partition dims, stated); joint seatings exhaustive (280 attn /
+70 ffn); compute/write from the stored ledger -- wire geometry only,
+the compute-parallelism fork a stated boundary that cancels in the
+ratio. RESULTS: mechanism 3.00x (attn) / 2.67x (ffn) -- EXCEEDING A2's
+synthetic 1.75 (its "ceiling" is now scoped to the uniform-mapping
+world); whole-stack 1.434x prefill / 1.057x decode at 0.4 GB/s, 1.000
+above the knee. Expectation reconciliation: every pre-written direction
+held (realizable lever > 1, monotone in g, prefill > decode, attn
+variance > ffn, stack in [1.05, 1.609]); the magnitude pre-estimate
+(mech 1.1-1.8) was UNDERSHOT by the data -- recorded as a finding. The
+connector lands in the table and SUMMARY §2.7 (EN+ZH): after offload
+what remains on the die IS this co-resident set; the space reopens, the
+evaluator needed no new code. Group 37 +2 tests. Suite: 296 passed / 1
+xfail.
+
+
+C50 (2026-09-04): the document round (worklist step 3). (1) The two
+stale SLOW goldens re-derived with attribution, never band-aided:
+test_per_level_volume_conservation_v1 was a CALIBER MIX -- the left
+side moved to value units at C25 while the right side stayed RAW
+'Total scalar accesses' (counter units including fills: 311,296 =
+76 x 4096); the correct right side is reads-only divided by the unit
+factors, 57,344/7 + 65,536/16 = 12,288 = the flows total EXACTLY (the
+test now pins the identity to 1e-9 and the 12,288 itself);
+slow_golden_v2's 1.25 (= 5/4) was measured on the 3x3-with-hole grid
+and never re-derived after the C27 fill-exact 2x4 switch -- on the 2x4
+the 32 active crossbars fall into exactly two share classes, 4,608 vs
+4,224 value units -> 12/11 = 1.0909, re-pinned with the attribution in
+the fixture's provenance field. (2) DR-table refresh (EN+ZH): DR-2 now
+priced directly by the anchored soft-lever table (band > 1% only below
+~1.4 / ~1.1 GB/s; realizable lever 1.43x/1.06x at 0.4); DR-5 carries
+the device-axis framing (the one device-side input that moves decode:
+76.3x device -> 1.11x on-chip vs 1.93x offloaded). (3) SUMMARY gains
+§2.8, the five-layer validation frame (inherited calibration /
+counting / semantics / external behaviour / robustness), EN+ZH.
+(4) README's key-scripts line adds the soft-lever generator. (5) The
+LOCAL report tex (phase_diagram_report.tex -- the only tex in scope,
+per the user's 2026-09-04 re-scope; settings_and_assumptions.tex and
+company_report.tex explicitly untouched) absorbed the findings:
+contributions extended (the mapping third hand; the pre-registered
+reproduction), a new section "Pricing the software band at the
+anchors" (degeneracy theorem conditioned on its three premises, the
+realizable reopening, where the wide bands live), the validation
+section rebuilt on the five-layer frame with the Simba reproduction
+subsection + the measured-vs-bracket figure, and the conclusion's band
+sentence -- content rules held (no test counts, no internal codenames,
+no correction history). Suites: fast 296 / slow 302 expected all green.
+
+
+C51 (2026-09-04): BookSim bridge, day 1 of step 4. Environment: BookSim2
+vendored (tools/, un-tracked; tarball via the harness web channel),
+parser generated on the host (container lacks flex/bison; nothing
+installed anywhere), g++-only container build; the cimsim patch (TRACKED
+at scripts/booksim_patches/0001-file-traffic-batch.patch, 171 lines)
+adds traffic=file exact per-pair batches (per-source quotas override
+batch_size) and the mesh_channel_latency knob. Conversion table (the
+pre-registration's authority, amended with day-1 findings): flit payload
+8 B, channel cycle 1.4545 ns, hop = channel 10 + default router
+pipeline 4 = 14 cycles (alloc-delay overrides trip an IQ assertion;
+split amended from the ruled 12+2, total and -1.8% remainder
+unchanged), packet 17 flits, vc_buf_size 34 ALIGNED by BDP/line-rate
+reasoning (default 8 throttles ~2x; insensitive vs 64), injection
+caliber declared (max of channel/injection bounds on both rails).
+GATES GREEN: B exact (85,456 == 85,456; interface base 37 cycles), A
+1.0018. Lambda guard and unicast-decomposition label implemented per
+the ruling; the review's bar1-narrow-bracket prediction could not be
+reproduced arithmetically (recorded; the guard is armed regardless).
+FLAGGED for review before day 2: expectation correction -- BookSim
+measures the network-intrinsic share only; day 2 becomes a
+two-component gap decomposition. New slow group 38
+(test_slow_booksim, binary-missing = clean skip). Fast suite unchanged:
+296 / 1 xfail.
+
+C51-a (2026-09-04): interface-base correction -- the day-1 log's base 37
+was measured under the DEFAULT 8-flit buffer (credit-stalled even a lone
+packet); the BDP-aligned config's constant is 7 cycles (38 = 17 + 14 +
+7), pinned in group 38; gate B stays exact. Slow suite: 306 / 0 / 1
+xfail.
+
+
+C52 (2026-09-05): BookSim day 2 -- the two-component decomposition,
+measured (analyze_booksim_slack.py -> analysis/booksim_slack.json; all
+quantities in the declared bridge caliber). Network-internal share
+(bound -> BookSim): bar1 +0.18% (35 cycles), bar5 +0.74% (147 cycles)
+-- bar5 > bar1, the distance-linearity signature confirmed INSIDE the
+network layer, magnitudes single-digit percent as the amended
+pre-registration wrote; both brackets classified WIDE by the guard
+(bar1 included -- the review's narrow-bar1 prediction did not
+materialize in this caliber, recorded), lambda ~0.0012 at both points:
+the cycle-accurate reference lands ON the busiest-wire bound, certifying
+its reachability by a real router (the schedule_slack lower end is
+real). Protocol share (BookSim -> silicon): the BookSim distance ratio
+is 1.0056, so silicon's 2.530x decomposes as 1.0056 (network-internal,
+measured) x 2.516 (protocol: consumer buffering / per-block handshake
+rounds -- now attributed WITH a measured anchor instead of "residual").
+Triangulation note: the A3 round-serialized closed rail (2.40) sits
+between BookSim's network-internal ratio and silicon -- the three-way
+ordering bound < BookSim < closed-pess-rail < silicon is exactly the
+stacked-layers picture. Group 38 +1 test. Slow suite: 307 / 0 / 1
+xfail expected.
+
+
+C53 (2026-09-05): BookSim day 3 -- records propagation per the signed
+frame; step 4 CLOSED (the 3-day box took 2). ANCHORS gains the
+NoC-paradigm slack passage (evidence status "cycle-accurate reference",
+kept distinct from silicon; certification +0.18-0.74% network-internal
+with the distance ordering; protocol share DECLARED and measured 2.516x
+against Simba's seating experiment; the four-way ordering bound <
+BookSim < round-serialized rail < silicon). SUMMARY §2.8's fourth layer
+updated EN+ZH. phase_diagram_report.tex's validation subsection carries
+the executed cross-check (two components, each with a number) and drops
+it from "next steps". analyze_phase_diagram: the D2D panel carries the
+certification annotation; NO corrected boundary line is drawn for this
+fabric -- that requires a platform packet declaration (payload/packet
+cap), a DR-tier input we refuse to invent. Step 5's robustness input
+renamed "network-internal coefficient + declared protocol share".
+Figures regenerated. Suites: fast 296 / slow 307, both green.
+
+
+C54 (2026-09-05): the robustness pass (worklist step 5; half-day closed
+form, zero new simulation). Criteria pre-registered
+(ROBUSTNESS_CRITERIA.md) with the caliber vocabulary (REGION / STRADDLE
+/ ORDERING / THRESHOLD-GATE / MEASURED-EXACT; FAIL vs UNINFORMATIVE
+enforced) and review-amended three ways before the run: R11 recast as
+the accounting audit's DISCRIMINATION RADIUS (1.36x -- blind beyond; a
+high-information row, not a free pass), R15 renamed the
+WORST-PROTOCOL-ASSUMPTION overlay (Simba endpoint tier, 2.516x,
+extrapolation declared, with the mandatory counter-note that protocol
+share is an endpoint-design parameter), R12's 1.68x location caveat
+(the tiling-divergence site -- pure model-error headroom larger; triage
+pre-written). Run: 15 rows -> analysis/robustness_table.md + .json;
+digital-anchor region calls survive 5x and the overlay (min residual
+margin 4.3x); the workspace straddle fails 5x only in the
+placement-strengthening direction; R13's bracket containment dies at 5x
+as a bracket should. Group 39 (4 tests) pins the verdicts INCLUDING the
+reds. SUMMARY S2.8 layer 5 (EN+ZH) and the report's validation chapter
+absorb the verdicts. Fast suite: 300 / 1 xfail.
+
+
+C55 (2026-09-05): FREEZE = tag v6. Final read-through passed (wording
+layer deferred to the writing month by decision); both suites fully
+green on the final pre-tag run (fast 300 / slow 311, each + 1 xfail);
+the citation snapshot analysis/frozen_v6.md exported so the writing
+month cites frozen numbers. Covers C41-C54: the Simba reproduction
+(preset, workload, gate, three targets, packet bracket, plane point,
+closeout), the anchored soft-placement band (degeneracy adjudication +
+the realizable A3 reopening), the document round with the two slow
+goldens re-derived, the BookSim cross-check (bridge, identity gates,
+two-component decomposition, records propagation), and the robustness
+table with its pre-registered criteria and honest reds.

@@ -31,9 +31,18 @@ def test_per_level_volume_conservation_v1():
     """v1 (structured) conservation: the LEAF level ties exactly to Timeloop's
     own counters, and upper levels carry at most the leaf total (strictly less
     wherever the mapping multicasts -- per-level equality was an artifact of
-    the uniform model, not physics)."""
+    the uniform model, not physics).
+
+    Re-derived (C50): the identity is stated in VALUE units on both sides.
+    The pre-C25 version compared the value-unit flows against RAW 'Total
+    scalar accesses' (counter units INCLUDING fills/updates: 311,296 =
+    76 x 4096 for this run) -- a caliber mix that broke when C25 moved the
+    left side. Correct right side = reads only, divided by the unit
+    factors: row reads / X + adc reads / (Z x Y_col) = 57,344/7 +
+    65,536/16 = 8,192 + 4,096 = 12,288 -- EXACT, no tolerance story."""
     import os
 
+    from scripts import traffic
     from scripts import crossbar_stats as cbs
     out_dir = _run()["output_dir"]
     flows, _, _, _ = cc.build_flows(out_dir, verbose=False)
@@ -41,9 +50,19 @@ def test_per_level_volume_conservation_v1():
     for f in flows:
         totals[f["level"]] = totals.get(f["level"], 0.0) + f["volume"]
     txt = open(os.path.join(out_dir, "timeloop-mapper.stats.txt")).read()
-    stats_total = (cbs._per_tensor_volume(txt, "row_drivers")
-                   + cbs._per_tensor_volume(txt, "adc"))
-    approx(totals["core<->crossbar"], stats_total, 1e-6)
+    mp = open(os.path.join(out_dir, "timeloop-mapper.map.txt")).read()
+    x = traffic._loop_product(mp, "X")
+    z = traffic._loop_product(mp, "Z")
+    y = 1
+    for lname, loops in cbs.parse_mapping_levels(mp):
+        if lname == "inter_column_spatial":
+            for dim, f, _axis in loops:
+                if dim == "Y":
+                    y *= f
+    stats_values = (traffic._component_reads(txt, "row_drivers") / x
+                    + traffic._component_reads(txt, "adc") / (z * y))
+    approx(totals["core<->crossbar"], stats_values, 1e-9)
+    approx(totals["core<->crossbar"], 12_288.0, 1e-9)   # 8,192 in + 4,096 out
     assert totals["glb<->macro"] <= totals["core<->crossbar"] + 1e-6
     assert totals["macro<->core"] <= totals["core<->crossbar"] + 1e-6
 

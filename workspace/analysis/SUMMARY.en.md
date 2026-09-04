@@ -836,6 +836,115 @@ SOFT-PLACEMENT effect, the validation chapter now carries one external
 contrast per layer of the instrument.
 
 
+
+### 2.7 The soft-placement band, priced at the anchors (worklist step 2, C49)
+
+The attribution framework says hardware placement sets WHERE the boundary
+lines sit and software placement is each line's width. This table prices
+that width closed-form at the anchor operating points (zero mapper; table:
+`soft_lever_table.md`, data `soft_lever.json`, generator
+`analyze_soft_lever.py`; pre-registered cell semantics and per-cell
+direction expectations in FIXLIST step 2, written before the run). Cells
+carry a TRIPLE — whole-stack worst/best, mechanism (busiest-wire)
+worst/best, and the fixed-term share that connects them.
+
+Two rows with distinct semantics, never mixed: **A1 real** (one joint
+seat permutation of the 8 macro bundles on the production 2×4) =
+**1.000 exactly — and the adjudicated reading is STRUCTURAL DEGENERACY,
+not a null search result**: any two seatings carry IDENTICAL per-wire
+loads (checked wire by wire for every lever op, pinned), because three
+conditions stack — the fill-exact grid, the uniform mapping (per-leaf
+even division certified by the traffic extraction's conservation guards
+on Timeloop's own counters), and the shipped bundling. The on-die
+soft-placement freedom is FROZEN TO ZERO BY THE MAPPING at this
+operating point. **A2 synthetic ceiling** (the ×4
+heavy-talker stressor, not a realizable seating): mechanism 1.75×
+constant (pure geometry); whole-stack fold — prefill 1.609× at
+0.4 GB/s → 1.000 at 2 GB/s and above; decode 1.084× → 1.000 (the write
+wall dilutes; fixed shares 76% / 97% at 0.4). Band visibility: >1% only
+below ~1.37 / ~1.08 GB/s (prefill / decode), >10% below ~1.06 / ~0.33.
+Expectation reconciliation: every pre-written direction held; the
+inherited "1.31× at 0.4" is SUPERSEDED by the v6 ledger's 1.609×
+(recorded as a finding), the inherited "1.5–1.7× at the band's low end"
+is confirmed.
+
+The reading, conditioned to its premises (the search chapter's
+motivation): in the dense, evenly-tiled operating point of the
+production die, on-die soft-placement freedom is frozen to zero by the
+mapping — and each of the three conditions reopens the space when it
+breaks (a non-fill-exact grid; non-uniform per-macro loads, which the
+C28 stressor demonstrates and MoE-class expert routing or
+variable-length attention naturally produce; re-bundled co-residency).
+This must NOT be read as "on-die placement never matters". It is the
+attribution framework's clean THIRD HAND: besides hardware placement
+(where the lines sit) and software placement (the band width), the
+MAPPING decides whether placement has any play at all. In THIS
+configuration the searchable freedom concentrates at the die level,
+where the measured bands are wide — and the evaluator prices both
+levels, so a workload that reopens the on-die space needs no new code.
+(Simba says the converse from silicon: fast device + wide NoC puts its
+on-die corner in the placement-free region while its D2D tier carries
+the measured levers, §2.6 — two different mechanisms, one conclusion
+about WHERE the play sits.)
+
+**A3 — the reopening, measured on a REALIZABLE configuration (C49-b).**
+The degeneracy theorem called for a non-synthetic probe, and the
+production seating supplies one: under offload the die keeps only the
+co-resident projection set, whose blocks tile integrally at d=1024 (qkv
+3 macros, out_proj 1, ffn1 4, ffn2 4 — the attention-half die keeps
+FOUR slots free). Joint seatings exhaustive (280 / 70): the mechanism
+lever is **3.00× (attn die) / 2.67× (ffn die)** — EXCEEDING the ×4
+synthetic stressor's 1.75 (A2's "ceiling" is scoped to the
+uniform-mapping world; natural concentration ×8/k plus real free-slot
+geometry moves more) — folding to a whole-stack **1.434× at 0.4 GB/s**
+(decode 1.057×), 1.000 above the knee. Every pre-registered direction
+held; the magnitude pre-estimate (1.1–1.8×) was undershot by the data
+and is recorded as a finding. The connector, verbatim from the table:
+after offload what remains on the die IS this co-resident projection
+set — the on-die space reopens in that configuration, and the evaluator
+needed no new code.
+
+
+### 2.8 The validation chapter, in five layers (the frame the worklist executes)
+
+Everything above §2.5–§2.7 slots into one five-layer frame — the paper's
+validation chapter and the order the remaining work closes in:
+
+1. **Inherited calibration** — the device is CiMLoop's silicon-calibrated
+   macro, declared as a fabric input and reconciled on every run; every
+   anchor and chip point carries provenance and a status
+   (measured / post-layout / spec / estimated / derived), §2.5.
+2. **Counting** — Timeloop's counters reconciled into value units (reads
+   per bit-slice, bit and cell-column factors), conservation guards that
+   raise instead of smearing, the exact-energy identity, and the die-buffer
+   axis audited against Timeloop's own throttling in closed form.
+3. **Semantics** — swept thresholds land on closed-form boundaries to
+   1e-9; the busiest-wire number is stated as the bound it is (exact for
+   star/bus, optimistic for routed grids, `schedule_slack` ≥ 1); the
+   packet bracket makes the NoC-paradigm gap two-sided; normalization
+   rules are declared before coordinates are compared.
+4. **External behaviour** — one contrast per layer of the instrument:
+   HERMES audits the accounting caliber (×1.36 headroom, §2.5); Simba
+   audits the soft-placement effect (§2.6, with the honest verdicts);
+   the soft-lever table prices the band our own search will move in
+   (§2.7); and the cycle-accurate reference (BookSim, C52) certifies
+   the busiest-wire bound's reachability by a real router (+0.18-0.74%
+   network-internal, distance-ordered) and splits silicon's 2.53x into
+   1.0056 (network-internal, measured) x 2.516 (protocol share --
+   declared, now with a measured anchor).
+5. **Robustness** — run (C54, `robustness_table.md`; criteria
+   pre-registered and review-amended): the region calls at the digital
+   anchors survive 5× error and the worst-endpoint protocol overlay; the
+   workspace straddle survives 2× and fails 5× only in the direction
+   that strengthens the placement case; measured-structure rows are
+   error-immune by construction. The honest reds ARE the table's
+   credibility: the accounting audit's resolution radius is 1.36×
+   (beyond that it is blind, quantifying "audits accounting, certifies
+   no mechanism"); the bound-below-silicon property has its tightest
+   margin 1.68× at the tiling-divergence point (pure model-error
+   headroom is larger; triage pre-written); the packet bracket's
+   containment dies at 5×, as a bracket should.
+
 ## 3. Models & results, level by level
 
 ### 3.1 Distance and placement (macro level and below) — the central work
@@ -1380,10 +1489,10 @@ volumes — not a bottleneck:
 | DR | Data requested | Numbers it moves | Direction |
 |---|---|---|---|
 | **DR-1** | per-hop/per-word energy of core- and crossbar-level links | network energy share; the 3.69×/1.70× maps and the 17.8% | network share ↑; rankings become joules (ceiling ~2% of an operator after C25) |
-| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive. **The knee is located at 0.2–1.9 GB/s per macro link (§2.2, C25 value units), an order of magnitude below the published on-die NoCs — in the digital-ecosystem column this request decides the zero-overlap margin, not a multiplier. If the chip's fabric is DMA / bus or a board-level die link (analog-reality tier, §2.5) it returns to first order: the 2.7B die chain doubles below 0.26–0.40 GB/s and moves 1% below 1.0–1.7 GB/s, the offloaded 48-die pipeline reads 12–19× at 0.1 GB/s (measured, `sweep_axes.py`, §2.5)** |
+| **DR-2** | link bandwidths at each level | compute latency; write share, 10.12×, 93% | compute ↑, the rest ↓; latency becomes placement-sensitive. **The knee is located at 0.2–1.9 GB/s per macro link (§2.2, C25 value units), an order of magnitude below the published on-die NoCs — in the digital-ecosystem column this request decides the zero-overlap margin, not a multiplier. If the chip's fabric is DMA / bus or a board-level die link (analog-reality tier, §2.5) it returns to first order: the 2.7B die chain doubles below 0.26–0.40 GB/s and moves 1% below 1.0–1.7 GB/s, the offloaded 48-die pipeline reads 12–19× at 0.1 GB/s (measured, `sweep_axes.py`, §2.5). Since the anchored soft-lever table (§2.7) this is priced directly: the on-die placement band is >1% only below ~1.4 / ~1.1 GB/s (prefill / decode) and the REALIZABLE co-residency lever reads 1.43× / 1.06× at 0.4 GB/s — the analog-reality column is where this input is first order** |
 | **DR-3** | D2D topology/routing/latency/bandwidth/energy | network energy share; whole-package placement spread | network share ↑; unlocks the go/no-go experiment |
 | **DR-4** | what the router's calibrated per-word energy represents: one hop or an average multi-hop transfer | the router term; the **sign** of the +0.3% re-pricing | resolves the one open sign |
-| **DR-5** | SET pulse width, cells programmable in parallel, incremental programming, write-verify, endurance | the write term: 21%, 90%, 10.12×, 93% | **these stand or fall with it** |
+| **DR-5** | SET pulse width, cells programmable in parallel, incremental programming, write-verify, endurance | the write term: 21%, 90%, 10.12×, 93% | **these stand or fall with it. Across the device axis it stays THE one device-side input that moves decode: a 76.3× faster device buys only 1.11× on-chip decode (the write wall) vs 1.93× at the offloaded unit floor (§2.5 fixed terms)** |
 | **DR-6** | device class (precision- vs value/sparsity-driven) + ADC calibration point | whether per-crossbar value modeling is needed | gates the refinement (§3.3) |
 
 **Why DR-4**: the router's calibrated vector-access energy is 48.3 pJ vs the glb's

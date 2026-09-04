@@ -21,7 +21,8 @@ bandwidth) device plane `scripts/sweep_axes.py`; the scaling-law probes
 `scripts/run_scaling_probes.py` (+ `analyze_scaling_law.py`); the phase
 diagram `scripts/analyze_phase_diagram.py`; the Simba reproduction
 `scripts/simba_workload.py` + `scripts/simba_targets.py` (+ the
-validation figure `scripts/analyze_simba_validation.py`); the whole-model regeneration
+validation figure `scripts/analyze_simba_validation.py`); the anchored
+soft-placement lever table `scripts/analyze_soft_lever.py`; the whole-model regeneration
 list `analysis/regen_v6.sh`. Figures land in `workspace/analysis/*.png`.
 
 ## Tutorials and Examples

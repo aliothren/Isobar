@@ -252,6 +252,18 @@ def main():
             "Simba [digital chip point (C47); GRS max 12.5,\nexperiments ran 5.5; its measured placement\nlevers = the reproduction targets T1-T3]",
             fontsize=5.8, va="top", color="0.1", zorder=6,
             bbox=dict(fc="white", ec="none", alpha=0.8, pad=0.6))
+    # C52: the NoC-paradigm bound is CERTIFIED by a cycle-accurate
+    # reference; the protocol share is a declared item. A corrected
+    # boundary LINE for this fabric would need a platform packet
+    # declaration (payload/packet cap) -- not invented here.
+    ax.text(0.02, 0.30,
+            "NoC-paradigm boundaries: busiest-wire bounds, certified\n"
+            "reachable by a cycle-accurate reference (+0.2-0.7%\n"
+            "network-internal; C52). Protocol share DECLARED separately\n"
+            "(measured 2.5x on the Simba seating experiment); a corrected\n"
+            "line draws when a platform packet declaration arrives (DR).",
+            transform=ax.transAxes, fontsize=5.8, va="bottom", color="0.25",
+            zorder=6, bbox=dict(fc="white", ec="none", alpha=0.8, pad=0.6))
     # validation: the measured B2 chain marks sit on the d=2560 line
     b2 = PLANE["b2_marks"]["clustered"]
     pred = FAM["d2d"]["2560"]["boundary_gbps_at_tref"]
