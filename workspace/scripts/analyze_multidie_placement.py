@@ -81,7 +81,7 @@ def main():
         pl = placed(fab, slots4)
         m = ic.build(fab, "die", pl)
         act = [f for f in flows if f["level_name"] == "die" and f["volume"] > 0]
-        hops = [m.hops(ic.HUB, f["node"]) for f in act]
+        hops = [m.energy_hops(ic.HUB, f["node"]) for f in act]
         surplus = sum(f["volume"] * max(h - 1.0, 0.0) for f, h in zip(act, hops))
         row = (f"{label:22}"
                f"{max(_loads(flows, with_bw(fab, 256.0), pl).values())/dvol:>12.1f}x"

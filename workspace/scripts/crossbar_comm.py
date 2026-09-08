@@ -189,7 +189,11 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
     # centroid-Manhattan values exactly (see tests/test_interconnect.py).
     from scripts import interconnect as ic_mod
     ics = {lv.name: ic_mod.build(fab, lv.name, pl) for lv in (lvl_m, lvl_c, lvl_x)}
-    d_of = {lv.name: [ics[lv.name].hops(ic_mod.HUB, i) * fab.pitch(lv.name)
+    # C59 (O8): flow distances are ENERGY-attribution quantities (they feed
+    # the overlay column, the per-crossbar maps and the vol x dist dumps;
+    # no latency consumer reads them) -- so they carry the energy wire
+    # length: == hops for star/mesh, the full line for a bus.
+    d_of = {lv.name: [ics[lv.name].energy_hops(ic_mod.HUB, i) * fab.pitch(lv.name)
                       for i in range(lv.per_parent)]
             for lv in (lvl_m, lvl_c, lvl_x)}
 
@@ -213,7 +217,7 @@ def build_flows(output_dir, layer_name="", verbose=True, fabric=None,
                           "volume": vol_edge["die"] if d_on else 0.0,
                           "down": vol_dn["die"] if d_on else 0.0,
                           "up": vol_up["die"] if d_on else 0.0,
-                          "distance": ic_die.hops(ic_mod.HUB, d)})
+                          "distance": ic_die.energy_hops(ic_mod.HUB, d)})
 
     gid = 0
     for m in range(nM):

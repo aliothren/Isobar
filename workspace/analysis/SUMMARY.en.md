@@ -155,18 +155,29 @@ come first.
 | `row_drivers` / `cim_unit` | analog compute | 39.1 / 38.7 | 1.4% / 1.4% |
 | others (<1% each)† | — | 78.1 | 2.9% |
 | **total** | | **2,700** | 100% |
+| + core/crossbar wires (declared supplement)‡ | transport | +29.8 | +1.11% |
 
 † `router` 0.99% (**on-die macro NoC**; block mean 0.65%, range 0.39–0.99%),
 `shift_add` 0.74%, `chip2chip_link` 0.69% (**flat off-die port**), `input_buffer`
 0.47%. The two transport components are **distinct things, stated separately** —
 never merged as "the on-die network".
 
-> **Under the current calibration, transport is <2% — and a lower bound** (every
-> unpriced term is a network term); the expensive part is **staging: glb alone is
-> 33%**. Reading protocol: shares are against the currently priced cost → network
-> rows read as **lower bounds**, all other rows as **upper bounds**. The table
-> excludes the two terms we add: the K/V write (~0.9% of block energy, both
-> phases) and the distance re-pricing (+0.3% on the 2×4 layout, C27).
+‡ The two lower wire levels, priced since C58 at derived rates (the calibrated
+macro anchor × wire-length ratio) as an overlay **outside** the baseline
+account — the baseline's 100% is untouched. Itemized: core wires 15.7 µJ +
+crossbar wires 14.1 µJ; it landed inside the <2%-of-operator ceiling it was
+predicted under (C25). The platform's own measured values (DR-1) replace the
+derived rates outright when they arrive.
+
+> **Under the current calibration, transport is <2% — and was a lower bound**;
+> with the lower-wire supplement now priced, transport reads ~2.8% all-in
+> (router + off-die port + the new column) and every remaining unpriced term is
+> still a network term (inter-operator transport, the bus). The expensive part
+> is **staging: glb alone is 33%**. Reading protocol: shares are against the
+> currently priced cost → network rows read as **lower bounds**, all other rows
+> as **upper bounds**. The table excludes the two terms we add: the K/V write
+> (~0.9% of block energy, both phases) and the distance re-pricing (+0.3% on
+> the 2×4 layout, C27).
 
 ### 2.2 Latency composition (share of a block's critical path, scenario A, stall-free)
 
@@ -345,15 +356,23 @@ hub: 4→7 = 1.75× on the 2×4, 2.00× / 1.60× on the 3×3, 1.75× / 1.50× on
 4×4. Pinned in `tests/test_contention_anchors.py` (both grids) and
 `tests/test_grid_gating.py` (the gating table).
 
-**(b) This is a latency finding, not an energy finding.** Across the same
-variants, system energy spans **1.007×** total, and two pairs have **identical**
-energy while their busiest-wire occupancy differs 8.25× / 2.06× (star ↔ bus-centre both
-2.7128 mJ; mesh-corner ↔ bus-corner both 2.7262 mJ; 2×4 default grid, C27). Mechanism: energy reads
-the **mean hop count** (a sum), latency reads the **peak occupancy** (a max) —
-two different statistics of the same load vector, and their orderings can
-disagree (energy ranks mesh-centre first; latency ranks star first).
-Per-level attribution: 1.60× within the router level × its 0.99% share →
-0.74% at the system level.
+**(b) This is a latency finding, not an energy finding — and since C59 that
+sentence rests on wire models, not on an artifact.** Across the same variants
+system energy spans **1.057×** while busiest-wire occupancy spans 8.25×. Until
+C59 the account read every scheme's energy off the mean hop count, which tied
+star ↔ bus-centre exactly — the O8 artifact. The per-scheme wire models broke
+it: a bus transfer swings the whole serpentine line ((N−1) = 7 slot pitches,
+endpoints irrelevant), so bus reads 2.858 mJ = 1.054× star's 2.711 mJ (router
+term 7 vs 1.5 mean slot units — 4.67× at component level); the h-tree's wires
+follow the physical halving-span table (registered, `anchors.
+HTREE_MACRO_LEVEL_LENGTH_SLOTS`) and read 2.751 mJ. The one tie left is the
+physically correct one: **bus-centre = bus-corner in energy** — the whole line
+swings either way; the driver position matters only for latency. The mechanism
+is unchanged in kind: energy reads a **wire quantity** (it now sees the medium,
+still not the schedule), latency reads the **peak occupancy** (a max), and
+their orderings can still disagree (energy ranks mesh-3×3-centre first;
+latency ranks star first). Star/mesh rows are C59-invariant by construction;
+the small drift vs the C27-era quote (2.7128 mJ) predates this round.
 ![energy vs latency divergence](placement_energy_latency.png)
 ![per-link load vectors](placement_link_loads.png)
 
@@ -486,11 +505,13 @@ scheduled fabrics, optimistic for NoCs, §2.5); what remains unmodeled is
 queueing in the NoC paradigm: only the busiest wire counts, so the load vectors `3,2,1,1,1,1,1`
 and `3,3,3,3,3,3,3` are equivalent (the full per-wire vector is exposed to
 consumers via `link_occupancy`'s `per_link` — the segment maps read it).
-② Bus energy is charged by distance to the driver; a real bus drives the whole
-line's capacitance per transfer → bus energy is underestimated, and the
-"star ↔ bus identical energy" tie is partly a model artifact. ③ `h_tree`'s
-`level_length` defaults to 1 per level; a physical H-tree lengthens toward the
-root.
+② CLOSED at C59 (was: bus energy charged by distance to the driver): every
+bus transfer now charges the whole serpentine line, (N−1) slot pitches — an
+explicitly replaceable example model — and the "star ↔ bus identical energy"
+tie is retired (§2.3.1b). ③ CLOSED at C59 on the energy side: `h_tree`'s
+energy wire lengths follow the physical halving-span rule, registered as
+literals (`anchors.HTREE_MACRO_LEVEL_LENGTH_SLOTS`); the latency-side flat
+`level_length` default is untouched (O8 ruled the latency side right).
 
 ### 2.4 The pricing boundary, and which way numbers can move
 
@@ -583,7 +604,8 @@ the on-die link at 0.4 GB/s a further 1.19× stacks on top. The earlier [est]
 pipeline: on chip at 0.1 GB/s the mesh orderings stay 1.00× and the
 interposer bus reads 10.4×; offloaded, 0.1 GB/s reads 12–19× (mesh) / 70.5×
 (bus) and 2 GB/s reads mesh 1.00×, bus 3.5× — the +124% dividend needs
-1.2–1.9 GB/s or more. ④ The die↔unit link: end-to-end prefill 1.01× at GRS
+1.2–1.9 GB/s or more (weave knob on this axis: mesh→torus compresses the
+ordering-penalty spread 3.4×, ring widens it — §2.9). ④ The die↔unit link: end-to-end prefill 1.01× at GRS
 (518.1 ms, the ledger's number), 1% at 9.8 GB/s, doubling at 0.098 GB/s;
 decode 1.50× at 0.1 GB/s. ⑤ Partial-sum width 1 vs 2 words: the thresholds
 roughly halve (bus 1% at 1.17 vs 1.89 GB/s). ⑥ T1 (the die-buffer hub;
@@ -944,6 +966,51 @@ validation chapter and the order the remaining work closes in:
    margin 1.68× at the tiling-divergence point (pure model-error
    headroom is larger; triage pre-written); the packet bracket's
    containment dies at 5×, as a bracket should.
+
+### 2.9 The weave knob: torus and ring join the registry (A7, C60)
+
+The registry gained its first folded schemes — **torus** (wrap-around mesh)
+and **ring** (the 1D cycle) — under the folded wire model: a wrap link is
+not free in 2D packaging, so every hop on a folded axis is 2 slot pitches,
+and the accessors split (`hops()` = physical length for the ns_per_mm and
+C58 price-per-length chains; `router_hops()` = crossing count for
+per-router packet constants; validation refuses packet parameters on a
+folded scheme until the packet path reads the count explicitly). Both are
+point-to-point, so the C59 energy identity and the C58-c
+order-inheritance theorem apply on physical length. Three results:
+
+1. **The hub-position lever can be zeroed by topology.** The 3×3
+   comparison grid's corner/centre peak lever (the pinned 5/3) reads
+   exactly **1.00** under torus — the wrap restores the symmetry the
+   corner hub broke. The antidote works precisely for ECCENTRIC hubs
+   (from a central hub, wrap never helps a path ≤ half-width: count means
+   are equal, and folding then costs 1.67–2.0× mean physical wire on
+   grids this small). The 2×4 production grid was already hub-insensitive
+   on the peak; its conclusions do not move.
+2. **The honest seating recommendation is three sentences** (the
+   pre-registered "ring removes the far end, spread narrows" FLIPPED on
+   the data and is booked as a finding — a 1D cycle's far end is longer
+   than a 2D mesh's): ring is exactly optimal for in-order pipeline flow
+   (sequential rows reads 1.000, its native ordering) **but makes the
+   ordering MORE critical** (worst/best spread 6.55× → 12.26×); it is
+   **torus that relaxes ordering criticality** (6.55× → 3.57×); mesh
+   sits between. The weave knob's lever on the ordering-penalty axis is
+   **3.4×** (12.26 vs 3.57) — a third hand beside the scheme and
+   bandwidth knobs on that boundary.
+3. **The optimal ordering itself swaps with the weave** (mesh and torus:
+   snake; ring: sequential rows) — a direct instance of the
+   paradigm-dependence clause: without the weave parameter even the
+   ordering BASELINE is chosen wrong. The search-side consequences are
+   filed: the baseline library registers orderings per weave, and the
+   mis-paradigm adjudication arm has a ready-made example.
+
+Frozen claims are untouched (production on-die insensitivity, the 12–19×
+D2D band — mesh-caliber readouts, the 1.4–2× soft lever); the changes
+live in the design-implication layer. Readouts:
+[`analyze_torus_ring.py`](../scripts/analyze_torus_ring.py) →
+`torus_ring.{json,md}`; pins group 45 (the die-level count and physical
+spread columns coincide structurally — both 6×8 axes fold, the uniform
+scalar cancels in ratios; asserted elementwise).
 
 ## 3. Models & results, level by level
 
@@ -1527,7 +1594,7 @@ direction only: **toward underestimation**.
 |---|---|
 | `fabric.py` + `models/fabric/*.yaml` | physical fabric config (single source of truth; `CIMSIM_FABRIC` picks variants) |
 | `placement.py` | explicit Placement (per-level slot tables + verify + JSON; `sequential_fill` reproduces the legacy floorplan bit for bit) |
-| `interconnect.py` | interconnect scheme registry: `star`/`mesh`/`h_tree`/`bus`, selected per level by `topology:` in the fabric config (§2.3) |
+| `interconnect.py` | interconnect scheme registry: `star`/`mesh`/`h_tree`/`bus`/`torus`/`ring` (the last two folded, C60: `hops` = physical length, `router_hops` = crossing count), selected per level by `topology:` in the fabric config (§2.3, §2.9) |
 | `traffic.py` | real traffic structure (multicast trunks once, idle zeroed, divisibility guard against Timeloop counters) |
 | `make_figures.py` | one driver for every figure (7 stages; `--tag` for config variants without clobbering canonical) |
 | `mlx_system.py` | hardware config (resident die hierarchy) + LAYOUT + runners + `n_dies_for_weights` |
@@ -1615,7 +1682,7 @@ they go through `tests/compare_baseline.py`, which diffs a fresh
 acceptance gate for re-plumbing work; model upgrades re-freeze with
 `--freeze v1` plus a changelog entry).
 
-There is also 1 **xfail** (expected-fail) test — the known-gap list: lower-level link energies unpriced (the DR-1 input not yet filled in). Closing it turns it green; promote it then (the propagation one was promoted in A-3; the D2D one was promoted by W3 into `test_d2d.py`, group 15). The contention mechanism anchors (1.75×–13.96×, 1.67×, the identical-energy pairs, the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. After C27 groups 14 and 17 gained v6 blocks (the 2×4 default: the three routed schemes tie, corner / centre 1.00×), the 3×3 mechanism anchors load `mlx300_3x3.yaml` explicitly and keep their numbers, and group 9 checks both grids. Group 26 (C30): the device as a fabric input (declaration + provenance in every config, run cycle = declaration and a divergence rejected, the registry reads the device, GB/s declarations converted at load, link seconds invariant under a 10x faster device, the former literal sites read the fabric, no cycle / 18112 literal in any script). Group 25 (C29): the occupancy as the bound of every explicit schedule, `schedule_slack` default / validation / scaling / inheritance. Group 24 (C28): the hub-lever gating table (six grids × hub, the corner rule, the verdict, the soft-placement lever, the 2×4 cell recomputed independently) and the figure-rule helpers. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point); 23 the anchor registry and the per-axis sweeps (digital values and statuses, the estimated band, chip points with a status per coordinate, no anchor-printing script with its own constant, the conversion identities, the digital columns reproducing the v5 pins, the band-end readouts, the exact thresholds, the knee operators, the three D2D workloads and the unit link, the partial-sum width). Group 23 additionally pins, since C36–C40: the primary-sourced ESP anchor (status measured, multi-plane aggregation stated), the Mythic / HERMES t coordinates and statuses, the HERMES self-consistency audit (need 1.93 vs supply 2.61 GB/s per core, ×1.36 headroom), and the UCIe `spec` tier with the D2D column order. Group 27 (C31): the device plane (the bisection-swept thresholds land on the closed-form line to 1e-9, the r surface equals the closed form pointwise, the matrix-part multiplier collapses exactly in g×t_MVM while the whole stack does not, the three silicon marks come from the registry with the right statuses, the HERMES fixed-term decomposition prefill 9.33× / decode 1.11×, and the network seconds at a fixed GB/s carry no device — the group 26 identity restated on the plane's own data). Group 28 (C32/C33): the measured scaling law (the trunk-regime ratio = d/114,688 exactly with the busiest direction down, the flip d* measured at 1,220–1,350 with the 5,793 prediction falsified by >4×, ffn2's tiler step, every probed ratio S-independent qk^t included, column split throughout with the d=2560 probes reproducing the 2.7B block's ratios, the 48-run count; the scheme re-scoring: routed ×4.00 constant, bus drifting ×13.3→×8.25, star reproducing the stored values). Group 27 additionally pins the d family (production base = the plane's own mesh line, the trunk ×4 closed form, the die-level tensor-once closed form, d=2560 passing through the measured B2 mark, the width-tier model names). Group 29 (C34): the T1 audit (the cached Timeloop points == counter units ÷ bandwidth with zero error, the write port's 37,224,448 units, hub = bus + in-fill as a per-op identity, ffn1 +6.25% / ffn2 +20%, the thresholds and the MX100-class reading, decode-offloaded == prefill-offloaded, no shipped config declares a hub bandwidth). Group 30 (C35): the phase diagram (the layer edges and the corrected ordering pure hand-off < probe < every chain-incl.-spanning line; the validation classes: trunk exactly 1.0, ffn2 exactly ×2 at d ≤ 4096 and back on the line from 5120; the B2 marks on the d=2560 line at all three silicon speeds; the outputs and pinned table rows). Groups 31–36 (C41–C47), the Simba reproduction: the frozen experiment-point preset and the explicit device-class contract (the verify_cycle bypass keyed on the field, the guard's exempt list exactly `simba.yaml`), conv volumes and closed-form structure with the refusals (halo P/Q, stride-with-pad), the day-4 hand-check gate (multicast/reduction membership, conservation, anti-im2col, the conv≡matmul bridge — all hand integers), and the three targets' outcomes pinned INCLUDING the graded failures (T1b optimistic-rail miss, T2b double-sided band miss, the falsified A4-3 rail choice) plus the packet-bracket closure identity — moving any of those numbers is a model change that must re-open the triage record.
+The **xfail list is empty since C58**: the last expected-fail (lower-level link energies unpriced) was closed by the A5 round — derived prices charged in the platform overlay, the CiMLoop account untouched — and promoted per protocol (`test_lower_level_links_are_priced`; the propagation one was promoted at A-3, the D2D one by W3 into `test_d2d.py`, group 15). DR-1's arrival swaps the derived constants. The contention mechanism anchors (1.75×–13.96×, 1.67×, the mean-hops tie pairs — their energy side split off and broken at C59, the latency-side numbers intact — the decode corner counter-example's mechanism, on direction-less synthetic flows) are pinned in `test_contention_anchors.py` (group 14); the published single-op readout under the physical accounting and value units (1.00× perfect-overlap, 1.07–1.59× zero-overlap; the v3 3.43×–27.68× retired) is pinned in the same file's v5 test. After C25 group 11 pins values (65,536 / 32,768) and the ×7, ×8, ×2, ×3 decomposition of the counters, and group 17 gained the v5 block. After C27 groups 14 and 17 gained v6 blocks (the 2×4 default: the three routed schemes tie, corner / centre 1.00×), the 3×3 mechanism anchors load `mlx300_3x3.yaml` explicitly and keep their numbers, and group 9 checks both grids. Group 26 (C30): the device as a fabric input (declaration + provenance in every config, run cycle = declaration and a divergence rejected, the registry reads the device, GB/s declarations converted at load, link seconds invariant under a 10x faster device, the former literal sites read the fabric, no cycle / 18112 literal in any script). Group 25 (C29): the occupancy as the bound of every explicit schedule, `schedule_slack` default / validation / scaling / inheritance. Group 24 (C28): the hub-lever gating table (six grids × hub, the corner rule, the verdict, the soft-placement lever, the 2×4 cell recomputed independently) and the figure-rule helpers. Groups added since: 17 anchored readouts and the O7 bracket; 18 the feasible 48-die seating; 19 ledger conservation (whole-model totals = the system script); 20 the digital vector unit; 21 the external attention unit interface (the streams sent out equal the die's foregone writes and projections, an infinite unit reduces to the die side, decode scales with the context, the end-to-end dividend never exceeds the die side, the streams route to the attach point); 23 the anchor registry and the per-axis sweeps (digital values and statuses, the estimated band, chip points with a status per coordinate, no anchor-printing script with its own constant, the conversion identities, the digital columns reproducing the v5 pins, the band-end readouts, the exact thresholds, the knee operators, the three D2D workloads and the unit link, the partial-sum width). Group 23 additionally pins, since C36–C40: the primary-sourced ESP anchor (status measured, multi-plane aggregation stated), the Mythic / HERMES t coordinates and statuses, the HERMES self-consistency audit (need 1.93 vs supply 2.61 GB/s per core, ×1.36 headroom), and the UCIe `spec` tier with the D2D column order. Group 27 (C31): the device plane (the bisection-swept thresholds land on the closed-form line to 1e-9, the r surface equals the closed form pointwise, the matrix-part multiplier collapses exactly in g×t_MVM while the whole stack does not, the three silicon marks come from the registry with the right statuses, the HERMES fixed-term decomposition prefill 9.33× / decode 1.11×, and the network seconds at a fixed GB/s carry no device — the group 26 identity restated on the plane's own data). Group 28 (C32/C33): the measured scaling law (the trunk-regime ratio = d/114,688 exactly with the busiest direction down, the flip d* measured at 1,220–1,350 with the 5,793 prediction falsified by >4×, ffn2's tiler step, every probed ratio S-independent qk^t included, column split throughout with the d=2560 probes reproducing the 2.7B block's ratios, the 48-run count; the scheme re-scoring: routed ×4.00 constant, bus drifting ×13.3→×8.25, star reproducing the stored values). Group 27 additionally pins the d family (production base = the plane's own mesh line, the trunk ×4 closed form, the die-level tensor-once closed form, d=2560 passing through the measured B2 mark, the width-tier model names). Group 29 (C34): the T1 audit (the cached Timeloop points == counter units ÷ bandwidth with zero error, the write port's 37,224,448 units, hub = bus + in-fill as a per-op identity, ffn1 +6.25% / ffn2 +20%, the thresholds and the MX100-class reading, decode-offloaded == prefill-offloaded, no shipped config declares a hub bandwidth). Group 30 (C35): the phase diagram (the layer edges and the corrected ordering pure hand-off < probe < every chain-incl.-spanning line; the validation classes: trunk exactly 1.0, ffn2 exactly ×2 at d ≤ 4096 and back on the line from 5120; the B2 marks on the d=2560 line at all three silicon speeds; the outputs and pinned table rows). Groups 31–36 (C41–C47), the Simba reproduction: the frozen experiment-point preset and the explicit device-class contract (the verify_cycle bypass keyed on the field, the guard's exempt list exactly `simba.yaml`), conv volumes and closed-form structure with the refusals (halo P/Q, stride-with-pad), the day-4 hand-check gate (multicast/reduction membership, conservation, anti-im2col, the conv≡matmul bridge — all hand integers), and the three targets' outcomes pinned INCLUDING the graded failures (T1b optimistic-rail miss, T2b double-sided band miss, the falsified A4-3 rail choice) plus the packet-bracket closure identity — moving any of those numbers is a model change that must re-open the triage record.
 
 Note: all-green does **not** mean physically correct. It only guarantees "the
 code equals the documented model"; whether the model is right waits for the

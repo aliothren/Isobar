@@ -86,10 +86,34 @@ def test_energy_overlay_placement_equals_place_fn_priors():
     assert new_lin["position_aware"] == old_lin["position_aware"]
 
 
-def xfail_lower_level_links_are_priced():
-    """WORKSTREAM A1/DR-1: core- and crossbar-level links carry zero energy, so
-    the 3.58x map and the 17.8% placement gap cannot reach the system totals."""
-    lv = pa.perceive(fixture("ffn1_prefill_stats.txt"))
-    lower = [v for k, v in lv.items()
-             if "inter_core_in_macro" in k or "inter_crossbar_in_core" in k]
-    assert lower and all(v["energy_J"] > 0 for v in lower)
+def test_lower_level_links_are_priced():
+    """WORKSTREAM A1/DR-1 -- acceptance REWRITTEN 2026-09-08 (C58-a, the A5
+    day-1 route ruling; old clause: energy_J > 0 INSIDE the perceived
+    CiMLoop stats). PROMOTED from xfail_ 2026-09-08 (C58-b): the overlay
+    mechanism landed at A5 day 3; the runner's rule is to promote in the
+    round that closes the gap.
+
+    Ruling: the OVERLAY route. The CiMLoop account keeps its inherited
+    silicon calibration untouched -- writing a derived-grade price into the
+    calibrated per-word account would dilute that account's evidence grade.
+    The platform prices core/crossbar traffic as a DECLARED supplement
+    outside the calibrated account (same convention as the D2D surplus
+    overlay: words x pJ/word x hops), and DR-1's arrival becomes a constant
+    swap instead of a model-change round.
+
+    Passes when BOTH lower link levels carry a positive derived price in
+    the fabric config (calibration label upgraded from bare DR-1) AND the
+    overlay readout (analysis/lower_link_energy.json, A5 day 3) reports
+    positive energy for both levels on the ffn1 fixture."""
+    import json
+    import os
+
+    from scripts import fabric as fabric_mod
+    fab = fabric_mod.default()
+    for name in ("core", "crossbar"):
+        p = fab.level(name).link.pj_per_word
+        assert p is not None and p > 0, f"{name} link still unpriced"
+    here = os.path.dirname(os.path.abspath(__file__))
+    rd = os.path.join(here, "..", "analysis", "lower_link_energy.json")
+    d = json.load(open(rd))
+    assert all(d["levels"][k]["energy_J"] > 0 for k in ("core", "crossbar"))

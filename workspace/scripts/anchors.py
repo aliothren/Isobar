@@ -180,6 +180,21 @@ def columns(level: str):
     return cols
 
 
+# ------------------------------------------------- interconnect wire tables
+# C59 (A6, O8): the h-tree PHYSICAL per-level wire lengths -- the ENERGY-side
+# table, root-first, in slot units, for the shipped lambda-1 host topology
+# (the macro level's 8-slot 2x4 grid at branching 4, depth 2). Registered as
+# LITERALS by ruling: h_tree is the collaborator's lambda-1 host (S5), so the
+# solver on their side must be able to read the same table -- the RULE that
+# produced it ("each branching step halves the subtree's linear span; level l
+# length = extent / 2**l, extent = the larger grid dimension in slots:
+# 2x4 -> 4 -> [4/2, 4/4]") is implemented in interconnect.HTree and a test
+# asserts rule == literals. The latency-side level_length convention is
+# untouched (O8 ruled the latency side right). Replaceable by the real
+# layout's measured lengths, like every wire model in this family.
+HTREE_MACRO_LEVEL_LENGTH_SLOTS = (2.0, 1.0)
+
+
 # ----------------------------------------------------------------- chip points
 @dataclass(frozen=True)
 class ChipPoint:

@@ -111,6 +111,15 @@ class Level:
     # attributes, where Timeloop counts in ITS units (x7 / x8) -- that path
     # is validation-only; leave unset in shipped configs.
     hub_bandwidth_words_per_cycle: Optional[float] = None
+    # O27 (C57): per-INSTANCE idle (static) power of this level's component,
+    # in watts. PLATFORM INPUT, default None = static power not modeled
+    # (the shipped state; the dynamic-only account stays exactly as
+    # published). The closed-form static term is
+    #   E_static = sum over levels of idle_power_w x instance count x makespan,
+    # so it INHERITS the latency ordering structurally. Values enter only
+    # from DR inputs or literature anchors under the anchor provenance
+    # discipline -- never estimated in place.
+    idle_power_w: Optional[float] = None
     # Physical centre-to-centre distance between adjacent slots of THIS level's
     # grid, in micrometres. Platform input (example default in the shipped
     # configs); nothing consumes it yet -- it exists so hop counts have a
@@ -287,6 +296,18 @@ class Fabric:
                     raise ValueError(f"{lv.name}: packet_payload_bytes must be > 0")
                 if lk.packet_wire_overhead < 1.0:
                     raise ValueError(f"{lv.name}: packet_wire_overhead must be >= 1")
+                # C60 (A7, review clause 1): a folded scheme splits router
+                # COUNT from physical LENGTH (hops() returns the folded
+                # length), so per-router packet constants must not silently
+                # read hops -- refuse the combination until the packet path
+                # consumes router_hops() explicitly.
+                if (lk.packet_payload_bytes is not None
+                        and lk.topology in ("torus", "ring")):
+                    raise ValueError(
+                        f"{lv.name}: packet parameters on folded scheme "
+                        f"'{lk.topology}' -- hops() returns folded PHYSICAL "
+                        f"length there, not the router count; wire the packet "
+                        f"path to router_hops() before enabling this")
         if not (self.schedule_slack >= 1.0):
             raise ValueError(f"schedule_slack must be >= 1.0 (1.0 = the busiest-wire bound), got {self.schedule_slack}")
         for lv in self.levels:
@@ -296,6 +317,9 @@ class Fabric:
                 raise ValueError(
                     f"{lv.name}: mesh {lv.mesh} has fewer slots than "
                     f"per_parent {lv.per_parent}")
+        for lv in self.levels:
+            if lv.idle_power_w is not None and lv.idle_power_w < 0:
+                raise ValueError(f"{lv.name}: idle_power_w must be >= 0")
         # physical slot pitch: positive, and non-decreasing toward the top
         # (a parent level's grid step spans at least its child's)
         pitched = [lv for lv in self.levels if lv.slot_pitch_um is not None]
@@ -409,6 +433,8 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
                       params=dict(link.get("params") or {})) if link else None,
             hub_bandwidth_words_per_cycle=bw(lv, "hub_bandwidth_words_per_cycle",
                                              "hub_bandwidth_gbps", lv["name"]),
+            idle_power_w=(None if lv.get("idle_power_w") is None
+                          else float(lv["idle_power_w"])),
             slot_pitch_um=(None if lv.get("slot_pitch_um") is None
                            else float(lv.get("slot_pitch_um"))),
         ))

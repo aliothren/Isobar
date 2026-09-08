@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 300 pass + 1 expected-fail (slow adds group 38), which is
+(`python3 tests/run_tests.py`; currently 338 pass + 0 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -1361,26 +1361,26 @@ current owner and its open items. Bold items move current conclusions.
 | device | weight / K-V write model | append-only geometry + per-cell/row-serial params (our overlay) | write params are platform inputs (DR-5); long-context K/V (O14) |
 | per-op mapping | intra-op loop tiling | **provided by the CiMLoop mapper** (EDP search) under the op's co-residency share (C14) | default greedy path guarded by the residency tripwire |
 | per-op mapping | over-capacity residency policy | three explicit mechanisms + closed-form tiler (C12) | input-row split untested (O15); dynamic ops (O14) |
-| per-op placement | weight blocks -> macro/core/crossbar | Placement object + sequential fill; rankings measured | unpriced links keep it a ranking (O1); search (S3) |
+| per-op placement | weight blocks -> macro/core/crossbar | Placement object + sequential fill; rankings measured, and in joules since C58-c (one per-leaf constant, orders exact) | search (S3); DR-1 swaps the derived prices |
 | per-op placement | shared-buffer attach point | scheme parameter; the hub lever is GATED by grid width (C28: nil on the fill-exact 2x4, 1.67x on the 3x3 variant); the soft heaviest-block lever survives every grid (1.5-2x) | search (S3); the anchored soft-lever table = plan step 2 |
-| on-die wiring | interconnect organisation | scheme registry: star/mesh/tree/bus per level; full-duplex per-direction wires, bus shared (C17) | more schemes (O19); bus wire energy (O8); routing-algorithm asymmetries (XY vs YX replies, O19) |
+| on-die wiring | interconnect organisation | scheme registry: star/mesh/tree/bus per level; full-duplex per-direction wires, bus shared (C17); bus/h-tree energy wire models (C59); folded torus + ring with the count/length accessor split (C60) | O19 queue remainder (express links, duplex split, FlooNoC-class, routing-algorithm asymmetries) |
 | on-die wiring | transfer paradigm | paradigm -> tier mapping in the registry (C26: DMA/shared-SRAM -> the T1 hub axis, compile-time scheduled -> star, NoC -> mesh); `schedule_slack` input (C29); the T1 hub axis itself in analytic closed form (C34) | -- |
 | cross-die mapping | dies per op and split dimension | tiling planner (power-of-two aware, residency enforced) | cross-die addition path unexercised (O15); utilisation loss quantified, not optimised |
 | cross-die mapping | layer/op -> die granularity | feasible 48-die config, two dies/layer (C13); co-resident per-op mapping (C14); the 2,048-token attention context ceiling computed and runtime-guarded (C38) | half-partition is an assumption (register) |
 | cross-die placement | die-group seating on the package | the block's die-sets seated disjointly, three styles (C23) | whole-model seating (**O16**); search (S4) |
-| cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17); producer-to-consumer routing, the tensor once (C23) | O19 applies |
+| cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17); producer-to-consumer routing, the tensor once (C23); ring/torus ordering-spread readout at the die level (C60: weave lever 3.4x on the ordering-penalty axis) | O19 queue remainder applies |
 | traffic accounting | multicast/reduction structure and units | v1 structured traffic in VALUE units (C25: reads / bit-slice, bit and cell-column factors; reassembly guard); down/up components kept, partial sums at 16 bits on wires (C17); the hyperedge membership convention confirmed at the loop-nest level (C38) | partial-sum width in the ENERGY overlay (transport <2% of energy) |
 | traffic accounting | cross-die traffic classes | hidden-state hand-offs + intra-op slices + the offload streams to the attach point (C21); elementwise operators move through the glb only (C19, stated) | host I/O streams |
 | contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default; the max end stated as the bound it is (C29: exact for star / bus, a lower bound for routed grids; `schedule_slack` >= 1 for schedules that cannot reach it); the T1 hub axis analytic in value units, Timeloop's counter-unit throttling kept as validation-only (C34); the PACKET bracket on NoC-paradigm links (C46: [pipelined bound, round-serialized end], explicit link fields, off on every production config) | BookSim residual measurement = plan step 4 (NoC paradigm only) |
 | contention | operating mode | single-pass + pipelined, stage = slower half | bubbles/imbalance beyond the max rule; batch>1 (register) |
 | contention | critical-path composition | write + [max, sum](compute, network) + propagation -- both ends published (C16) | missing terms O24 |
 | calibration | bandwidth operating points | registry `scripts/anchors.py` (C26): grid with `status`, the analog-reality band, chip points, per-axis sweeps at both columns; ESP primary-sourced from the ESSCIRC 2022 paper, status measured (C36); the HERMES per-link rate is published spec, normalized to our per-macro granularity with a self-consistency audit (C36/C37); UCIe-S spec-tier D2D anchor (C40); Mythic t_MVM derived from datasheet TOPS (C36) | MX100 row time blocked on its source (plan step 10); real platform bandwidths on DR-2 |
-| calibration | per-level link energy | macro silicon-calibrated + re-pricing; D2D at GRS band midpoint | core/crossbar at zero (O1; ceiling ~2% of an op after C25); bus (O8) |
+| calibration | per-level link energy | macro silicon-calibrated + re-pricing; D2D at GRS band midpoint; core/crossbar at derived prices in the overlay (C58, 1.11% of ffn1, inside the C25 ceiling) | bus (O8); DR-1 replaces the derived tier |
 | energy | static / idle power | not modeled -- every total is dynamic-only | `idle_power_w` per level (default 0) + closed-form static term, static-share sweep, peak concurrency as an output field (O27) |
 | calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 300 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 338 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -1402,9 +1402,9 @@ P1 device axis), state the model's semantics (P1), then run the search (P3).
 | O27 | no static energy, no peak-concurrency output | idle-power input + closed-form static term; static-share sweep; concurrency field | energy completion (P4) |
 | ~~O21~~ (C38) | was: an unstated ~2.5k-token K/V ceiling | computed 2,048-token ceiling + run-time guard + validity statements | closed |
 | O15 | the input-row split (cross-die addition of partial results) never exercised end to end | the row-split branch of the scaling law (O17) and the expensive half of the spanning mechanism | coverage |
-| O1 | core/crossbar links carry no energy (the 1 xfail) | turns the 3.69x/1.70x and 17.8% rankings into joules -- now bounded to ~2% of an op (C25) | DR-1 input |
-| O8 | bus energy charged by distance-to-driver | removes the artifactual star-bus energy tie | model quality |
-| O19 | four interconnect schemes only | torus / ring / express links / hierarchical NoC join every sweep for free | extensibility |
+| O1 | ~~core/crossbar links carry no energy~~ CLOSED (C58: derived prices, overlay column 1.11% of ffn1; rankings in joules with orders exact; the last xfail promoted) | DR-1 replaces the derived prices outright (a constant swap) | DR-1 input |
+| O8 | ~~bus energy charged by distance-to-driver~~ CLOSED (C59: per-scheme energy wire models -- bus = whole serpentine line, h-tree = registered physical table; the artifact tie retired, span 1.007x -> 1.057x) | real layout lengths swap the example constants | model quality |
+| O19 | ~~four interconnect schemes only~~ torus + ring LANDED (C60, folded models, count/length split; hub lever zeroed by topology, weave lever 3.4x on ordering penalty, the ring flip booked) | queue remainder: express links, duplex split, FlooNoC-class, routing-algorithm params | extensibility |
 | O16 | whole-model multi-die deployment never simulated jointly | ~320-die joint seating; the search's eventual target | scale extension (outside the v5 paper) |
 | O20 | tier-L seated one block at a time | subsumed by O16 | honesty debt (captioned) |
 | O14 | over-capacity K/V (long-context) has no policy | attention at S>~8k simulatable honestly | scale extension (outside the v5 paper) |
@@ -1475,7 +1475,7 @@ die-level semantics corrected in review (the d >= 2560 lines are block
 chains INCLUDING their spanning operators, hence above the
 single-operator probe; the pure hand-off is the d = 1024 line only).
 
-### O1. Only the macro-level router carries an interconnect energy model *(xfail)*
+### O1. Only the macro-level router carries an interconnect energy model *(mechanism closed C58-b; was the last xfail)*
 
 `inter_core_in_macro_spatial` / `inter_crossbar_in_core_spatial` are zero-energy
 fanout markers, so the 3.69× / 1.70× and 17.8% results are rankings, not costs.
@@ -1494,8 +1494,92 @@ returns 32,768 16-bit partial sums, ~24 M word-equivalents per die; at
 (~2%). DR-1 turns the rankings into joules; it cannot make the within-die
 placement an energy lever.
 
+A5 EXECUTION (2026-09-08, C58-a; six-day plan approved with mergers
+2+3 / 5+6; days 1-2 DONE, days 3-6 pending).
+DAY-1 ROUTE RULING (user, before any number ran): the OVERLAY route --
+the CiMLoop account is untouched. Three filed reasons: (i) semantic
+honesty -- the account route would CLAIM "the CiMLoop components carry
+these levels' energy" via a stand-in simulation-grade edit (moving every
+pinned total ~2%, a full re-pin round buying only a relocated constant),
+while the overlay route DECLARES "a supplemental mutual-estimate outside
+the calibrated account", the D2D-surplus convention, at the price of one
+test's acceptance clause; (ii) evidence grades stay where they belong --
+these prices are derived-tier; writing them into the silicon-calibrated
+per-word account would dilute the "inherits calibration" status of that
+layer: CiMLoop account = inherited silicon calibration, overlay = our
+declared supplement; (iii) when DR-1 lands, the overlay route swaps a
+constant; the account route would need another model-change round.
+The xfail's acceptance clause is rewritten accordingly (recorded in the
+test docstring): passes on positive derived prices in the fabric config
+PLUS a positive overlay energy column for both levels (day 3).
+DAY-2 PROVENANCE RULING (user): route (b) -- geometric scaling from the
+calibrated anchor; NOT (a) the 1 pJ/word example default (a sentinel
+built to prove the ceiling, not an estimate). Chain, each step sourced:
+router energy on ffn1 (silicon-calibrated account) 26.68 uJ / 8,912,896
+C25 value-words through glb<->macro = 2.993 pJ/word at 1 hop; scaled by
+the C38 declared pitch ratios (800/400/100 um; energy ~ wire capacitance
+~ length; the pitches are platform-declared example defaults until real
+ones arrive) -> core 1.497, crossbar 0.374 pJ/word. Pre-registered
+BEFORE the run: the route, the fallback rule ((a) only on a broken
+geometry chain, labeled EXAMPLE DEFAULT -- its own provenance class,
+never mixed), and the acceptance gate; the specific price values were
+NOT pre-registered (they are readouts of the chain, not predictions).
+GATE RESULT: charging ffn1's value volumes (10.49 M core-level +
+25.17 M crossbar-level) at the derived prices, 2 hops = 50.3 uJ = 1.86%
+of the 2.70 mJ operator -- the C25 ~2% ceiling reproduced by an
+independent arithmetic; PASS. Artifacts:
+scripts/derive_lower_link_prices.py -> analysis/lower_link_prices.{json,md};
+pins: tests/test_lower_link_prices.py (group 42).
+DAYS 3-4 DONE 2026-09-08 (C58-b; released with two riders, both
+honored): mechanism = fabric carries the derived prices (calibration
+label "derived-C58a route (b); overlay-only; DR-1 replaces outright")
+and analyze_lower_link_energy.py charges the C25 TOUCHED-EXTENT value
+volumes outside the CiMLoop account (rider 2: the conservation gate is
+that caliber -- leaf 25,165,824 words EXACTLY = row reads/7 + adc
+reads/16, upper levels at or below it). Rider 1, the itemized
+breakdown: core 10,485,760 words x 1.0000 mean hops x 1.4967 pJ =
+15.69 uJ; crossbar 25,165,824 x 1.5000 x 0.3742 pJ = 14.12 uJ; total
+29.82 uJ = 1.11% of the 2.70 mJ ffn1 operator -- inside the C25 ~2%
+ceiling, below the day-2 flat-2-hop arithmetic (real mean hops < 2,
+the pre-filed direction). Hops caliber: level-hop = one slot pitch;
+since price ~ pitch, level framing is asserted identical to
+per-leaf-unit charging (the caliber choice cannot move the total).
+The last xfail PASSES under its rewritten acceptance and is PROMOTED
+in this same round (the runner's own rule) -- the suite carries ZERO
+expected-fails for the first time. Group 42 +4 pins.
+DAYS 5-6 DONE 2026-09-08 (C58-c) -- A5 CLOSED.
+Day 5, rankings -> joules, and the order pin passes in its STRONGEST
+form: route (b) prices every level proportionally to its pitch, so all
+three on-die levels share ONE per-leaf-slot price (2.9934/8 = 1.4967/4
+= 0.3742/1 = 0.374177 pJ/word/leaf, asserted to 1e-9) -- every volume x
+distance ranking converts to joules by a single constant, orders and
+ratios preserved EXACTLY by construction: 1.70x stays 1.70x (busiest
+crossbar 0.343 uJ vs lightest 0.202 uJ on the 2x4 default), 3.69x
+stays 3.69x (3x3 variant, 0.276 / 0.075 uJ). Region half: the
+committed 17.8% index metric is UNTOUCHED and reproduced; the
+physical-length re-score (macro step 800 um, core step 400 um --
+pre-registered, since the index metric is anisotropic in disguise)
+reads 21.4% with the ORDER PRESERVED (dataflow order 6.75 uJ/layer vs
+size order 8.58, gap 1.83 uJ/layer, x12 layers 81 vs 103 uJ/pass;
+caliber: inter-operator activation transport, an attribution readout
+at the same per-leaf constant -- in neither the CiMLoop account nor
+the overlay column). THE SEARCH-SIDE SENTENCE (pre-registered
+strengthening, now pinned): distance rankings may be read as energy
+rankings exactly as long as price ~ length holds; a DR-1 with prices
+NOT proportional to wire length can genuinely reorder the maps -- that
+would be a recorded finding, never a parameter adjustment.
+scripts/analyze_ranking_joules.py (region stage host / main stage
+container) -> analysis/ranking_joules.{json,md}; pins group 43.
+Day 6, closeout: the company report's energy decomposition table
+(SUMMARY zh/en 2.1) gains the supplement row -- core/crossbar wires
++29.8 uJ = +1.11% outside the baseline's 100%, itemized 15.7 + 14.1,
+with the "transport < 2% is a lower bound" caveat upgraded to
+"~2.8% all-in, remaining unpriced terms still network terms"; factor
+map re-audited (per-op placement + calibration rows). O1 CLOSED at the
+derived-price tier; DR-1's arrival is a constant swap.
 
-### O8. Bus energy is underestimated by construction
+
+### O8. Bus energy is underestimated by construction *(closed C59 -- per-scheme energy wire models)*
 
 `Bus.hops()` charges Manhattan distance to the driver, so bus and star tie at
 mean_hops 1.3125 and get identical re-priced energy — but a real bus drives the
@@ -1506,6 +1590,124 @@ serialized) is right; the energy side needs a per-scheme wire model (e.g.
 qualitative conclusion (energy is contention-blind) survives, the exact tie
 does not. Same gap, smaller: `h_tree.level_length` defaults to 1 per level
 where a physical H-tree lengthens toward the root.
+
+A6 EXECUTION -- DAY 1 (2026-09-08, C59 pre-registration; inventory
+closed BEFORE any code is touched).
+
+RULING 1 (user): bus wire model = SERPENTINE, line length (N-1) slot
+pitches, charged in full to EVERY transfer regardless of endpoints --
+driver position becomes energy-irrelevant (stays latency-relevant).
+Filed with the user's added reason: physically the natural routing of
+a shared line across a 2x4 grid, AND the disciplinally conservative
+pick -- serpentine >= bounding-box half-perimeter, i.e. the choice
+HARSHER on bus, self-coherent with a correction whose whole point is
+"bus energy was undercounted"; pre-registered as a replaceable example
+model, real layout swaps the constant. RULING 2 (user): h_tree rides
+in the same round, CONDITION: the geometry rule ("subtree span halves
+per branching step, wire length follows the span") must land as a
+LITERAL per-level length TABLE in the registry -- h_tree is the
+collaborator's lambda-1 host topology (S5), their solver must read the
+same table; an embedded formula would force another caliber round.
+Separate pins, no new item.
+
+ENERGY consumers of scheme hops (switch to energy_hops, day 2):
+position_aware_cost's fabric path (scheme mean -> mean energy hops;
+feeds analyze_placement_tradeoff's energy rows), crossbar_comm.
+build_flows d_of + die-flow distance (feeds the per-crossbar maps, the
+C58 overlay column, ranking_joules, and the D2D energy family:
+die_flow_surplus_energy / analyze_scale_tiers / analyze_d2d_energy_
+column). LATENCY/CONTENTION consumers stay on hops(), untouched:
+link_occupancy / serialization, level_max_hops (propagation),
+unit_link_hops, simba_targets, op_breakdown, every descriptive
+mean_hops column.
+
+MOVING-PIN LIST (closed): NO committed numeric test pin moves. Every
+shipped config is star/mesh, and for those energy_hops == hops by
+definition (day-2 gate: default-fabric totals bit-identical). The tie
+pin test_the_energy_tie_identity keeps its numbers (mean_hops 1.3125 /
+1.75 are latency-side facts); its docstring's clause "so identical
+re-priced energy" is rewritten and an energy-side broken-tie assertion
+is added. Moving READOUTS (regenerated day 3): placement_tradeoff.json
++ placement_energy_latency.png + placement_link_loads.png (bus rows).
+
+PRE-REGISTERED EXPECTATIONS, two tiers (the user's supplement 1: the
+component-tier ratio is CONDITIONAL on star's unit price not moving --
+discharged by construction, star's energy_hops == hops is asserted,
+not assumed). Component tier: bus energy_hops = N-1 = 7 (macro level,
+8 slots), constant over endpoints AND drivers; bus/star router-term
+ratio 7/1.3125 = 5.33x. Operator tier: bus-centre 2.7128 mJ ->
+~2.86 mJ (router term 35.0 -> 186.8 uJ), variant energy span 1.007x ->
+~1.06x. SENTENCE TRIAGE, pre-written: (i) "star <-> bus identical
+energy" DIES (the artifact this round exists to retire); (ii) a NEW,
+physically-correct tie appears: bus-centre == bus-corner in energy
+(the whole line swings either way; they still differ in latency);
+(iii) "(b) is a latency finding, not an energy finding" SURVIVES
+(~1.06x energy span vs 8.25x occupancy -- weakened in degree, not in
+kind; the (b) paragraph's numbers are rewritten); (iv) "energy is
+contention-blind" SURVIVES sharpened: the energy account now sees the
+MEDIUM, still not the schedule. h_tree: direction only (lengths grow
+toward the root; the table's values are readouts of the rule, no
+numeric prediction filed).
+
+DOC-REWRITE LIST (user's supplement 1; executed day 3, closed now):
+SUMMARY en 2.3.1b(b) tie numbers + sentence and the zh twin; SUMMARY
+en ~500-504 artifact caveats (2) and (3) + zh ~355; SUMMARY en ~1629
+"There is also 1 xfail" -- STALE since C58 (an A5 leftover caught by
+this inventory), rewrite + check for a zh twin; FIXLIST O8 close +
+factor-map row (the O8 line in the open-items table); test_contention_
+anchors module + tie-test docstrings. Nothing else quotes the tie
+(grep: contention-blind / identical energy / 2.7128 / 8.25).
+
+A5-LINKAGE ANSWER (user's supplement 2, answered at inventory as
+ordered, not filed as N/A): core and crossbar levels are star
+(point-to-point via the hub) in EVERY shipped config, and every sweep
+variant() swaps the MACRO level only -- no bus variant exists at the
+lower levels today. BUT a shared local bus at core->crossbar is a
+plausible real CIM-macro layout, and the C58 overlay column reads
+build_flows distances -- so the lower levels are covered BY
+CONSTRUCTION, not by filing: energy_hops is scheme-generic, build_
+flows switches to it, and a day-4 pin exercises a synthetic bus-at-
+crossbar variant through the overlay column (expectation: each
+transfer inside a core charges the full local line, (n_xbar_slots - 1)
+slot pitches, and the overlay column responds accordingly). If DR-1 or
+the company's layout later declares those levels bus-type, it is a
+config edit, not a model round.
+
+DAYS 2-4 DONE 2026-09-08 (C59) -- O8 CLOSED. Day 2 mechanism:
+energy_hops on the Interconnect base (= hops; point-to-point schemes
+are identity BY DEFINITION), Bus override = the serpentine line (N-1
+= 7 slot pitches, endpoint- and driver-blind; hops()/path() untouched
+so latency and contention still see the driver), HTree override = the
+hops arithmetic over physical_level_length() with the rule's output
+for the shipped lambda-1 host registered as LITERALS
+(anchors.HTREE_MACRO_LEVEL_LENGTH_SLOTS = (2.0, 1.0); rule == literal
+asserted; latency-side flat default untouched per the O8 ruling).
+Consumers switched exactly per the day-1 list (pa re-pricing ->
+mean_energy_hops; build_flows d_of + die distance; die_flow_surplus_
+energy; scale_tiers; d2d_energy_column; multidie_placement). GATE:
+fast suite all green untouched -- zero committed pins moved, as the
+closed list predicted. Day 3 re-run, expectations vs data (two-handed):
+bus rows 2.8580 mJ BOTH (the pre-written physically-correct new tie
+CONFIRMED to 1e-12), span 1.057x (~1.06x pre-filed), h-tree 2.7513 mJ
+(direction confirmed), latency side unmoved (all rows 2.60 ms).
+RECORDED IMPRECISION in the pre-reg: the component-tier 5.33x was
+anchored on the 3x3 host's 1.3125 (where the tie pin lives) -- it
+holds there exactly (7/1.3125); the 2x4 default reads 4.67x (7/1.5).
+Star row 2.7113 vs the C27-era doc quote 2.7128: star is C59-invariant
+by construction (its energy path reads mean_energy_hops == mean_hops),
+so the drift predates this round -- doc refreshed, noted in place.
+Sentence triage executed as pre-written: artifact tie DEAD; new bus
+tie ALIVE; "latency finding, not energy finding" SURVIVES on wire
+models (1.057x vs 8.25x); "contention-blind" SHARPENED (the account
+sees the medium, not the schedule). Day 4: docs (SUMMARY zh/en 2.3.1b
+(b) rewritten with the new numbers; artifact caveats 2/3 marked
+closed; the stale "1 xfail" paragraph found at day-1 inventory
+rewritten in both languages), tie-test docstring + energy-side broken-
+tie asserts (group 14), group 44 (6 pins: identities, serpentine,
+both-grid ratios, registry table, tradeoff readout, and the A5-linkage
+crossbar-level bus variant charging the full 7-pitch local line
+through the same flow machinery the overlay column reads). Real
+layout lengths swap the example constants; no model round needed.
 
 
 
@@ -1628,6 +1830,134 @@ conservative 2x), hierarchical wide-link networks of the FlooNoC class, and
 routing-algorithm parameters (adaptive vs fixed order). Each lands as one
 class in `interconnect.py` plus its hand-derived identity tests; every
 existing analysis then sweeps it for free.
+
+A7 EXECUTION -- DAY 1 (2026-09-08, C60 pre-registration; contract and
+affected-readout list closed BEFORE code).
+
+RULING 1 (user): torus AND ring in one round. Ring is not merely the
+free 1D specialization -- it has independent narrative value at the
+DIE level: the 48-die pipeline's hand-off traffic is neighbor-
+dominated, ring is that flow's natural topology, and "how much of the
+ordering penalty does the ring erase" is a company-facing seating-
+recommendation sentence. RULING 2 (user): sweep minimal set = the
+contention OCCUPANCY table + the HUB-POSITION gating table (group 24
+family); placement_tradeoff's seven-variant table is SKIPPED; plus ONE
+die-level readout row -- the 48-die ordering spread (d2d_impact.json
+assignments, b1 machinery) under ring and torus -- the one product-
+meaning readout of this round, closed-form on existing machinery.
+Expectation pre-written: the spread NARROWS (the ring removes the "far
+end"). RULING 3 (user): SUMMARY zh/en gain the torus/ring row THIS
+round under the standing bilingual-sync practice -- no known-gap note
+left for the writing month; paragraph-level polish stays deferred.
+RULING 4 (the undeclared physical assumption, ruled before start):
+wrap links are NOT free equal-length wires in 2D packaging. Default =
+FOLDED torus: on a folded axis EVERY hop's physical length is 2 slot
+pitches, and both latency (the ns_per_mm chain) and energy (C58's
+price ~ length) charge it; label "folded, per-axis link length"; the
+idealized equal-length build stays available behind an explicit
+param, labeled idealized.
+
+CONTRACT (the registry's three questions, folded model): (1) distance:
+hops(a, b) RETURNS PHYSICAL LENGTH in slot units -- per axis
+min(direct, wrap) x that axis's fold factor (2 where folded) -- which
+is the registry's standing semantics (mesh's Manhattan number is both
+count and length under a uniform pitch), so the ns_per_mm chain and
+the C58 pricing machinery consume the folding automatically, and the
+C59 identity assertion survives VERBATIM: torus and ring are
+point-to-point, energy_hops == hops on physical length. Hop COUNT
+(mean strictly below mesh) is asserted separately in the pins. (2)
+wires: a folded axis of width W >= 3 carries its W wrap-completing
+links; an axis of width <= 2 gets NO wrap links and NO folding --
+torus degenerates to mesh there (the pre-filed degenerate note: on
+the 2x4 macro grid the payoff axis is the 4-wide one; it survives the
+folded model unchanged). Ring = the 1D cycle over the placement
+order, folded: every link 2 slot pitches uniform. (3) routing /
+direction tags follow mesh's convention (dimension-ordered with a
+per-axis wrap decision; XY-vs-YX replies stay an O19-queue item).
+
+REVIEW CLAUSES (filed 2026-09-08 before the run; both land in the
+contract). CLAUSE 1, the real hidden trap behind "hops() returns
+physical length": the platform ALSO carries a per-ROUTER-crossing
+semantics (the A3/C46 packet discipline -- a packet pays a per-router
+constant per hop, a COUNT, not a length; on every shipped mesh the
+two numbers coincide, so the mismatch is silent). Folded torus splits
+them for the first time: a wrap route crosses 1 router but 2 slot
+pitches of wire. Landed as BOTH remedies: the accessors are SPLIT
+(router_hops(a, b) = the count, hops(a, b) = the physical length;
+identical for every unfolded point-to-point scheme, asserted), the
+pins assert them separately, AND fabric validation RAISES if packet
+parameters are activated on a level whose scheme folds (the message
+points at the split accessors) -- the silent-caliber-mismatch avenue
+is closed by construction, not by memory. CLAUSE 2: expectation (b)
+was arithmetically imprecise ("nearly neutralized") -- the ring's
+mean shortest distance is ~3/4 of the line's and the fold doubles it,
+so the fold generally slightly OVERSHOOTS the count saving. The
+precise three-sentence portrait, pre-written: MEAN propagation/energy
+flat to SLIGHTLY WORSE; TAIL (the corner long paths) significantly
+improved (wrap truncates them); the NET benefit is busiest-wire load
+redistribution. A small mean regression is a HIT, not a flip -- and
+these three sentences ARE the honest portrait the company gets when
+asked whether torus is worth building.
+
+DAY-3 EXPECTATIONS, REWRITTEN per ruling 4 + clause 2 (two-handed,
+flips are findings): (a) hop-COUNT mean: torus strictly below mesh on
+any axis wider than 2 -- holds; (b) the three-sentence portrait: mean
+physical propagation/energy flat-to-slightly-worse, tail truncated,
+net benefit = busiest-wire redistribution -- i.e. the corner/centre
+occupancy ratio compresses toward 1 and the hub-position lever
+weakens: torus is the hardware antidote to hub-position sensitivity,
+a control arm for the placement storyline; (c) energy side: the C58
+constant applies to per-axis-weighted PHYSICAL length -- realized
+through hops() itself, C58-c order inheritance BY PHYSICAL LENGTH;
+(d) die level: the 48-die ordering spread narrows under ring (and
+torus), the seating-recommendation sentence quantified. NO shipped
+config changes; NO existing pin moves (new classes only -- the day-2
+gate).
+
+DAYS 2-4 DONE 2026-09-08 (C60) -- torus + ring LANDED. Day 2:
+Torus (folds any axis of width >= 3, per-hop physical length 2 there;
+width <= 2 degenerates to mesh -- the pre-filed note held), Ring (the
+1D cycle over placement order, uniformly folded), the clause-1
+accessor split (router_hops = count / hops = physical length; base
+identity for every unfolded scheme) and the validation guard (packet
+params + folded scheme refuse with a pointer to router_hops). Gate:
+zero committed pins moved. Day 3 readouts (analyze_torus_ring.py ->
+torus_ring.{json,md}; pins group 45, 9 tests): (1) the 3x3
+corner/centre peak lever (pinned 5/3) reads EXACTLY 1.00 under torus
+-- the hub-position lever CAN BE ZEROED BY TOPOLOGY, the strongest
+form of the pre-registered compression; the antidote works for
+ECCENTRIC hubs only (central hubs gain no count -- wrap never helps a
+path <= half-width -- and pay the fold: mean physical wire 1.67-2.0x
+worse on grids this small, exceeding clause 2's 'slight', booked);
+the 2x4 production grid stays 1.00/1.00 -- zero disturbance to the
+frozen claims. (2) THE FLIP, booked per discipline: the 48-die
+ordering spread WIDENS under ring, 6.55x -> 12.26x (a 1D cycle's far
+end is longer than a 2D mesh's; 'the ring removes the far end' is
+true against a chain) while torus NARROWS it to 3.57x; the ordering
+roles swap (ring's native sequential rows reads exactly 1.000, snake
+degrades to 1.745). Day 4, the review's three placements + the
+caliber confirmation, all landed: (i) the company seating sentence is
+now the three honest sentences (ring exactly optimal for in-order
+flow BUT makes ordering more critical; torus is what relaxes ordering
+criticality; mesh between) -- SUMMARY zh/en NEW section 2.9; (ii) the
+weave knob's lever on the ordering-penalty axis = 3.4x (12.26 vs
+3.57), filed beside the scheme and bandwidth knobs as a third hand on
+that boundary -- footnote hooks added at the 12-19x pipeline
+paragraphs in both languages; (iii) the optimal ordering itself swaps
+with the weave -- a direct instance of the paradigm-dependence
+clause; S2's baseline library registers orderings per weave, S6's
+mis-paradigm arm gains a ready-made construction. CALIBER
+CONFIRMATION (the review's B-table ask): the count and phys spread
+columns coincide STRUCTURALLY, not by copying -- BOTH 6x8 axes fold
+(fold 2,2; the review's guessed single-axis cause was wrong in
+detail), so physical length is a uniform scalar of the count for
+every scheme at that level and cancels in worst/best ratios; asserted
+elementwise in the script, flows verified to cross both folded axes;
+the 2x4 macro grid's non-uniform fold (1,2) is the contrast case.
+Conclusion-level ledger: every frozen claim untouched (production
+on-die insensitivity, the 12-19x band -- mesh-caliber, identity
+unchanged, soft lever 1.4-2x); all changes in the design-implication
+layer, the expected shape of A7's stocking-for-search.
 
 ### O20. The 2.7B layers are seated one block at a time
 
@@ -2142,14 +2472,104 @@ external behaviour / robustness) and then the freeze.
    cells where the diagram has play (fast device, shared medium,
    offload-decode, weak D2D x spanning).
 8. **After the freeze: static energy + peak concurrency** (closed-form,
-   cheap; archive: O27). A per-level idle-power input; the static term
-   inherits the latency ranking, giving slow layouts a cost the
-   dynamic-only account cannot see.
+   cheap; archive: O27). MECHANISM DONE 2026-09-08 (C57): idle_power_w
+   platform input; structural crossovers (decode A-vs-B flips to
+   offloaded at 0.085 W chip static -- parameter-free headline; prefill
+   verdicts already aligned); share as a function; schedule-level
+   concurrency counts + the verbatim boundary sentence. CLOSED 2026-09-08 (C57-a):
+   the retrieval returned the honest answer -- neither chip publishes a
+   numeric standby power (power_extracts.md, verbatim) -- so the share
+   stays a FUNCTION and the point value stays a DR item; the two
+   DERIVED active anchors bound the production die's active-class scale
+   at 5.0-25.9 W, making the decode flip threshold 0.33-1.7% of scale:
+   unless static < ~1% of active-class, decode's energy verdict follows
+   the latency verdict (NeuRRAM's gating the one mechanism that could
+   dip under).
+   REVIEW ROUND 2026-09-08 (C57-b), three findings, all landed: (1) the
+   5.0-25.9 W interval is a CROSS-TECHNOLOGY extrapolation (130 nm RRAM
+   end vs 14 nm PCM end) -- kept, but labeled as the third provenance
+   class, order-of-magnitude scaling only, never point conclusions;
+   NeuRRAM end (~5.0 W) is PRIMARY in prose because the production die
+   is the Wan device (a NeuRRAM scale-up), HERMES end is reference.
+   (2) The 0.33-1.7% figure now carries its denominator caliber:
+   denominator = full-stream peak active power; decode is the lowest-
+   utilization regime, so against decode's own active power the ratio
+   is an order of magnitude higher (exact value = the DR static point);
+   the denominator-free anchor is the absolute 0.085 W flip + the
+   NeuRRAM power-gating half-sentence. (3) The PEAK-CONCURRENCY WING
+   was BUILT and PINNED at C57 (analyze_static_energy.py layer 3:
+   schedule-level counts per operating mode, per-die calibrated dynamic
+   rate 0.905 W, 48-die pipelined peak estimate 43.4 W, boundary
+   sentence verbatim; test group 41) but was OMITTED from the closeout
+   report -- verdict "done, not written up"; this sentence is the
+   written-up record. Its three uses (filed from the user): (a) the
+   power-delivery design input -- worst-instant demand, not average;
+   (b) a function of placement/schedule, hence a candidate search
+   CONSTRAINT dimension (prune "latency-optimal but over power
+   budget"); (c) the reviewer's power-density question gets a column.
+   O27 MAIN-BODY DISCIPLINE (filed 2026-09-08 from review, NOT yet
+   executed): layered caliber -- the structural inference (static E =
+   idle power x time, so ordering inherits the latency ordering) is
+   parameter-free; the SHARE requires real idle-power inputs, never
+   estimated here (two sources: platform DR values when they arrive, or
+   literature anchors from NeuRRAM/HERMES whole-chip power breakdowns,
+   entering under the anchor provenance discipline). Peak concurrency =
+   a SCHEDULE-level count only (max simultaneously-active instances x
+   silicon-calibrated unit price), with the boundary declared verbatim:
+   "circuit-level peaks (di/dt, IR-drop) are OUT of scope; this
+   platform outputs schedule-level concurrency for the power team as an
+   input" -- the boundary sentence itself ships to the company.
+   PRE-FLIGHT CHECK (2026-09-08, pre-registered BEFORE computing; the
+   die-level ENERGY column that has never been surfaced): on the
+   existing die-level seating/ordering sweep data, one added column of
+   D2D energy -- zero mapper. CONVENTION CORRECTION to the review's
+   formula: not naive bytes x unit price -- the repo's charge is flat
+   (words x pJ at the reference hop, inside the CiMLoop account) plus
+   the surplus overlay (words x pJ x (hops - ref)), so the TOTAL scales
+   with average hops; the stored surplus_uJ per assignment
+   (d2d_impact.json) already follows it, and the script's gate is to
+   REPRODUCE those stored values from words x (hops-1) x pJ before
+   adding anything. Three numbers per scenario (B1 48-die orderings,
+   B2 2.7B seatings closed-form, B3 4-die probe): worst/best D2D
+   energy ratio, D2D share of the system scenario energy, energy-vs-
+   latency ordering concordance. EXPECTATIONS, two-handed: the review
+   pre-wrote share ~ single-digit percent; OUR arithmetic from the
+   stored words (24.64M x 10 pJ x hops) says SUB-percent (~0.1-0.6% of
+   the 0.30 J prefill account) -- both filed, data decides. Ratio
+   expectation: worst/best = avg-hops ratio (B1: 6.55x, arithmetic-
+   implied). Concordance expectation, pre-flagged from the stored rows:
+   NO anti-ordering (snake is best on both sides), but the max-vs-sum
+   functional split ALREADY shows a latency TIE broken by energy
+   (sequential-rows = snake in latency, 1.75x apart in D2D energy) --
+   so the paper wording decision is expected to land on: "latency-
+   optimized stays energy-free" holds, upgraded to die-level measured,
+   PLUS energy as a declared tie-breaker dimension among latency-equal
+   orderings. Output: the three numbers per scenario + a FIGURE;
+   results are post-v6 -> separate result files, frozen_v6 page
+   untouched, paper citations of the energy claim must upgrade
+   explicitly.
+   PRE-FLIGHT DONE 2026-09-08 (C56; d2d_energy_column.json/.png, group
+   40). Reconciliation: ratio = avg-hops ratio CONFIRMED (B1 6.553x);
+   share = OUR sub-percent hand (0.03-0.76% across all four scenario
+   denominators; the review's single-digit-% hand missed); concordance
+   = the draft's "no anti-ordering" OVERRULED by the data -- B3 shows a
+   genuine off-optimum INVERSION (four-corners beats one-column on
+   latency, costs more energy) and B2's style orderings diverge
+   (row-fill energy-best vs clustered latency-reference, 8.3% apart on
+   a sub-percent account) -- while the AT-OPTIMUM claim survives in
+   every scenario (the latency-best choice is energy-best or within
+   8% of a <1% account => system-level cost < 0.1%). PAPER WORDING
+   DECISION (the pre-registered purpose): the "energy is flat" sentence
+   becomes two-tier -- system-level "latency-optimized stays
+   energy-free" UPGRADES to die-level measured; the D2D account's own
+   orderings diverge (max- vs sum-functional), so energy enters as a
+   DECLARED TIE-BREAKER dimension among latency-equal choices, and
+   D2D energy can never be read off latency rank order.
 9. **Kept, lower** (open model items; archive tags for the sections
    below): the input-row split of die spanning (O15) -- now the one
    stated exception of the measured width law; the long-context K/V
    residency policy (O14); whole-model joint seating (O16 / O20);
-   lower-level link energies (O1, the expected-fail; awaiting DR-1);
+   lower-level link energies (O1: mechanism closed C58-b at derived-price tier; DR-1 swaps the constants);
    bus energy under-estimated by construction (O8); interconnect
    registry growth, torus first (O19).
 10. **Blocked / waiting on external input.** The MX100 row time (no

@@ -117,9 +117,15 @@ def test_layout_alone_costs_1_67x_under_mesh_3x3():
 
 
 def test_the_energy_tie_identity():
-    """Why the energy account cannot see contention: star and bus-centre share
-    mean_hops 1.3125 (so identical re-priced energy) while their busiest wire
-    differs 8x. Same for the corner pair at 1.75."""
+    """Why the energy account cannot see contention: energy reads a MEAN over
+    the load vector, occupancy reads a MAX -- and until C59 the mean was
+    mean_hops, so star and bus-centre (both 1.3125) got identical re-priced
+    energy while their busiest wire differs 8x. C59 (O8) split the energy
+    side onto energy_hops: the mean_hops equalities below are still true --
+    they are latency-side facts -- but the ENERGY tie is dead (a bus swings
+    its whole 7-slot line per transfer, 7/1.3125 = 5.33x star's mean), and
+    the account still cannot see contention: it now sees the MEDIUM, not
+    the schedule."""
     slots = placement.sequential_fill(F).slots["macro"]
     star = ic.Star(slots)
     bus_c = ic.Bus(slots, {"driver": "center"})
@@ -129,6 +135,11 @@ def test_the_energy_tie_identity():
     approx(bus_c.mean_hops(), 1.3125, 1e-12)         # the 8.00x-latency tie
     approx(bus_k.mean_hops(), 1.75, 1e-12)
     approx(mesh_k.mean_hops(), 1.75, 1e-12)          # the 1.60x-latency tie
+    # C59: the ENERGY side of the same pairs is no longer tied --
+    approx(bus_c.mean_energy_hops() / star.mean_energy_hops(),
+           7.0 / 1.3125, 1e-12)
+    approx(bus_k.mean_energy_hops(), bus_c.mean_energy_hops(), 1e-12)
+    approx(mesh_k.mean_energy_hops(), 1.75, 1e-12)   # point-to-point: unmoved
     # and the latency side of the same pairs, at the operating point:
     for topo, params, want in (("star", {}, 1), ("bus", {"driver": "center"}, 8)):
         fab = _with(topo, params)

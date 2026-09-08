@@ -124,7 +124,7 @@ def probe_flows(fab, n, P, C, M):
 
 
 def die_surplus_energy(m, edge_words):
-    return sum(v * max(m.hops(ic.HUB, i) - 1.0, 0.0) * PJ
+    return sum(v * max(m.energy_hops(ic.HUB, i) - 1.0, 0.0) * PJ
                for i, v in enumerate(edge_words))
 
 

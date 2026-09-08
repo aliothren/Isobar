@@ -1119,3 +1119,299 @@ the realizable A3 reopening), the document round with the two slow
 goldens re-derived, the BookSim cross-check (bridge, identity gates,
 two-component decomposition, records propagation), and the robustness
 table with its pre-registered criteria and honest reds.
+
+
+C56 (2026-09-08): the die-level D2D ENERGY column (O27 pre-flight,
+post-v6; pre-registered in FIXLIST step 8 with the convention correction
+to the review's naive bytes-x-price formula). Zero mapper: B1 from the
+stored 48-die ordering sweep (gate: stored surplus_uJ reproduced exactly
+from words x (hops-1) x pJ; total scales with avg hops per the C23
+replace-never-add convention), B3 from the stored 4-die probe (charged
+words inferred and cross-checked across placements; latency read at the
+stored 256-w/c column), B2 closed-form on the 2.7B chain's three seating
+styles (block_die_flows leaves distance=0.0 -- per-flow hops charged
+from the seating via the interconnect; the first uncorrected run's fake
+1.000s caught and fixed). RESULTS: lever real (B1 6.553x = avg-hops
+ratio; B3 5.33x; B2 1.08-1.15x), share SUB-percent everywhere
+(0.03-0.76% -- our filed arithmetic hand; the review's single-digit-%
+hand missed), and the draft's no-anti-ordering expectation OVERRULED:
+B1 surfaces a latency TIE broken by 1.745x energy (sequential-rows vs
+snake), B3 a genuine off-optimum INVERSION, B2 diverging style orders
+-- while the latency-best choice stays energy-best or within 8.3% of a
+sub-percent account in every scenario (system cost < 0.1%). Paper
+wording lands two-tier per the pre-registration. Figure
+d2d_energy_column.png; group 40 (4 tests) pins the gates, the numbers
+and both overruled expectations. Fast suite: 304 / 1 xfail. O27's MAIN
+BODY not started (stopped at the gate per instruction).
+
+
+C56-a (2026-09-08, figure rework on review): the D2D energy-column
+figure recolored (user: not grayscale -- latency blue / energy orange,
+CVD-safe, color follows the MEASURE) and amended three ways: the middle
+panel carries the numbers on the figure (near-optimum zoom inset with
+(lat, E) pairs -- clustered E 1.08, row-fill E 1.00 -- so the capping
+sentence self-certifies; the inversion pair annotated), the title drops
+"energy-free" for "SUB-PERCENT BOUNDED" (no words beyond the figure's
+own conclusions), and the left panel marks "far pairs" as a CONSTRUCTED
+stress position with the real-space spread (1.74x) stated -- preventing
+the "6.5x in real ordering space" misreading.
+
+C57 (2026-09-08): O27 main body -- static energy + peak concurrency,
+closed form, layered caliber per the filed discipline. Schema:
+Level.idle_power_w (per-instance watts, PLATFORM INPUT, default None =
+not modeled; shipped configs unchanged -- asserted). Structural layer
+(parameter-free): E_static = P x makespan inherits the latency ordering;
+the pairwise CROSSOVER powers are real results needing no input --
+prefill: all non-positive (energy and latency verdicts already agree;
+static power only widens offload's lead); decode: the write wall's
+latency penalty becomes an ENERGY penalty at P* = 0.085 W chip static
+power (A-vs-B flips to offloaded) -- the headline. Share layer published
+as a FUNCTION over a labeled input grid (values await the DR /
+literature anchors being retrieved under the provenance discipline).
+Peak concurrency: schedule-level counts (1-die 256 crossbars; 48-die
+pipelined 48 dies / 12,288 crossbars; per-die avg dynamic 0.905 W ->
+pipelined estimate 43.4 W) with the boundary sentence shipped verbatim
+in every output. static_energy.json/.md; group 41 (4 tests). Fast
+suite: 308 / 1 xfail. Anchor integration pending the retrieval.
+
+
+C57-a (2026-09-08): O27 closed -- the anchor retrieval returned the
+honest answer: NEITHER NeuRRAM nor HERMES publishes a numeric standby
+power (NeuRRAM: qualitative power gating with non-volatile retention;
+HERMES: static measured on all supplies and folded into totals, never
+disclosed separately) -- verbatim record in
+analysis/papers/power_extracts.md. Integration under the provenance
+discipline: two DERIVED active-power anchors (NeuRRAM ~20-25 mW /
+active 256x256 core at 130 nm, from GOPS / TOPS-per-W; HERMES ~101
+mW/core at 14 nm, 63.1/9.76 corroborated by 0.86 uJ / 133 ns) bound the
+production die's ACTIVE-CLASS scale at 5.0-25.9 W, against which the
+parameter-free decode flip threshold (0.085 W) reads 0.33-1.7%:
+unless a real chip's static power sits below roughly one percent of
+its active-class scale, the decode energy verdict follows the latency
+verdict -- with NeuRRAM's gating the one published mechanism that could
+dip under. The share layer stays a FUNCTION and the static point value
+stays a DR item, exactly as the layered discipline required. Group 41
++1 test. Fast suite: 309 / 1 xfail. Worklist step 8 CLOSED.
+
+## C57-b (2026-09-08) -- O27 review round: provenance + denominator labels; the peak wing written up
+
+Three review findings on the C57-a closeout, all landed. (1) The
+5.0-25.9 W active-class interval mixes a 130 nm RRAM end with a 14 nm
+PCM end -- it is a CROSS-TECHNOLOGY EXTRAPOLATION, the third provenance
+class that must be declared: kept as an interval, labeled
+order-of-magnitude-scaling-only, never for point conclusions; and since
+the production die is the Wan device (a geometric scale-up of NeuRRAM),
+prose cites the NeuRRAM end (~5.0 W) as PRIMARY and HERMES as the
+cross-technology reference. (2) The 0.33-1.7% figure's numerator and
+denominator were different calibers: the denominator is the FULL-STREAM
+peak active power while decode -- the regime the flip is about -- is the
+lowest-utilization regime; the figure now ships with its denominator
+label plus the note that against decode's own active power the ratio is
+an order of magnitude higher (exact value = the DR static point item);
+the denominator-free anchor is the absolute 0.085 W flip and the
+NeuRRAM power-gating half-sentence, which survive unchanged. (3) The
+peak-concurrency wing (O27's second deliverable) was BUILT and PINNED
+at C57 but omitted from the closeout report -- verdict "done, not
+written up": FIXLIST step 8 now records it explicitly and
+static_energy.md section 3 states its three uses (power-delivery
+worst-instant input; a function of placement/schedule and hence a
+candidate search constraint dimension; the reviewer's power-density
+column). No numbers moved; group 41 +1 label-pinning test
+(test_bracket_provenance_and_denominator_labels). Fast suite: 310 / 1
+xfail.
+
+## C58-a (2026-09-08) -- A5 days 1-2: the overlay route ruling + the derived lower-link prices
+
+Day 1 (route ruling, user, filed before any number ran): the OVERLAY
+route. The CiMLoop account keeps its inherited silicon calibration
+untouched; core/crossbar traffic will be priced as a DECLARED
+supplement outside it (the D2D-surplus convention, words x pJ/word x
+hops). Reasons filed in FIXLIST O1: semantic honesty (declare a
+supplement vs claim account coverage through a stand-in edit that moves
+every pinned total ~2%), evidence grades kept unmixed (calibrated
+account vs derived-tier supplement), and DR-1's arrival becoming a
+constant swap instead of a model-change round. The one price paid: the
+xfail's acceptance clause (energy inside the perceived CiMLoop stats)
+is REWRITTEN -- it now passes on positive derived prices in the fabric
+config plus a positive overlay energy column for both levels
+(analysis/lower_link_energy.json, day 3); the old clause and the ruling
+are recorded in the test docstring. The xfail still fails today, as it
+must until day 3.
+
+Day 2 (provenance ruling, user: route (b), not (a)): the prices are
+DERIVED down a chain with every step sourced -- router energy on the
+frozen ffn1 fixture (the macro link IS silicon-calibrated) 26.68 uJ,
+divided by the C25 value-word volume through glb<->macro (8,912,896,
+crossbar_comm.build_flows) = 2.993 pJ/value-word at reference_hops 1,
+scaled by the C38 declared slot-pitch ratios (macro 800 / core 400 /
+crossbar 100 um; energy ~ wire capacitance ~ length) -> core 1.497,
+crossbar 0.374 pJ/word. The 1 pJ/word value is retired to what it
+always was: a sentinel, now the pre-registered route-(a) FALLBACK that
+fires only on a broken geometry chain and carries its own EXAMPLE
+DEFAULT label. Acceptance gate (the pre-registered number): charging
+ffn1's value volumes at the derived prices, 2 hops = 50.3 uJ = 1.86% of
+the 2.70 mJ operator -- the C25 ~2% ceiling reproduced by an
+independent arithmetic, PASS. The price values themselves were NOT
+pre-registered (readouts, not predictions). New:
+scripts/derive_lower_link_prices.py -> analysis/lower_link_prices.{json,md};
+tests/test_lower_link_prices.py (group 42, 4 tests). Days 3-6 pending.
+Fast suite: 314 / 1 xfail.
+
+## C58-b (2026-09-08) -- A5 days 3-4: the overlay column lands; the last xfail is promoted
+
+Day 3 (mechanism): the two lower links carry their derived prices in
+the fabric config (mlx300.yaml core 1.4967 / crossbar 0.3742 pJ/word
+per LEVEL-hop, calibration label "derived-C58a route (b); overlay-only;
+DR-1 replaces outright" -- the validator's price-monotone-up-the-tree
+check holds), and scripts/analyze_lower_link_energy.py charges the C25
+touched-extent value volumes at those prices outside the CiMLoop
+account (words x pJ/word x hops; edge distances from build_flows are in
+leaf units, hops = distance / pitch ratio; because price ~ pitch, the
+level framing is asserted IDENTICAL to per-leaf-unit charging -- the
+caliber choice cannot move the total). No existing number moved: the
+lower-link pj_per_word had no consumer until this script.
+
+Day 4 (gates, with both riders from the release instruction): G0 price
+tie fabric == derivation; G1 conservation on the C25 touched-extent
+volumes -- leaf 25,165,824 words EXACTLY equals row reads / 7 + adc
+reads / 16, upper levels at or below it (multicast strictness); G2 the
+pre-registered ceiling gate WITH the itemized breakdown table: core
+10,485,760 words x 1.0000 mean hops x 1.4967 pJ = 15.69 uJ; crossbar
+25,165,824 x 1.5000 x 0.3742 pJ = 14.12 uJ; total 29.82 uJ = 1.11% of
+the 2.70 mJ operator -- inside the C25 ~2% ceiling and below the day-2
+flat-2-hop arithmetic (real mean hops < 2, the pre-filed direction).
+All PASS.
+
+xfail_lower_level_links_are_priced PASSES under its rewritten
+acceptance and is PROMOTED to test_* in this same round per the
+runner's own rule (day 6 keeps the closeout bookkeeping). The suite
+carries ZERO expected-fails for the first time since the xfail
+convention was introduced. New artifacts:
+analysis/lower_link_energy.{json,md}; group 42 +4 tests. Fast suite:
+319 / 0 xfail; slow: 330 / 0 xfail. Day 5 (rankings -> joules) NOT
+started -- stopped at its gate per the release instruction.
+
+## C58-c (2026-09-08) -- A5 days 5-6: rankings become joules; A5 closed
+
+Day 5. The conversion turned out to be a structural theorem, not a
+computation: route (b) prices every level proportionally to its slot
+pitch, so all three on-die levels share ONE per-leaf-slot price --
+2.9934 pJ/8 leaf = 1.4967/4 = 0.3742/1 = 0.374177 pJ/word/leaf
+(asserted from the fabric to 1e-9). Every volume x distance ranking
+therefore converts to joules by a single constant, and the
+pre-registered ORDER pin passes in its strongest form: orders AND
+ratios preserved exactly by construction. The maps now have units --
+2x4 default: busiest crossbar 0.343 uJ, lightest 0.202 uJ, 1.70x;
+3x3 variant: 0.276 / 0.075 uJ, 3.69x. Region half: the committed 17.8%
+index metric untouched and reproduced; the pre-registered
+physical-length re-score (the index metric is anisotropic in disguise:
+a macro step is 800 um, a core step 400) reads 21.4% with the order
+PRESERVED -- dataflow order 6.75 uJ/layer vs size order 8.58, gap 1.83
+uJ/layer (x12 layers: 81 vs 103 uJ per model pass); labeled an
+attribution readout (inter-operator activation transport sits in
+neither the CiMLoop account nor the overlay column). The search-side
+sentence is pinned verbatim: distance rankings ARE energy rankings
+exactly as long as price ~ length holds; a DR-1 breaking the
+proportionality can genuinely reorder -- recorded as a finding, never
+re-parameterized. New: scripts/analyze_ranking_joules.py (two-stage:
+region on host with io_study, main in container) ->
+analysis/ranking_joules.{json,md}; tests/test_ranking_joules.py
+(group 43, 4 tests).
+
+Day 6, closeout. The company deliverable: SUMMARY zh/en 2.1's energy
+decomposition table gains the supplement row (+ core/crossbar wires
++29.8 uJ = +1.11%, outside the baseline's untouched 100%, itemized
+15.7 + 14.1 uJ, DR-1-replaceable), and the "transport < 2% is a lower
+bound" caveat is upgraded honestly to "~2.8% all-in; every remaining
+unpriced term is still a network term". FIXLIST factor map re-audited
+(per-op placement + calibration rows); O1 CLOSED at the derived-price
+tier. A5 done end to end: route ruling -> derived prices -> overlay
+column -> gates with the itemized table -> joules with exact order
+preservation -> company row. Fast suite: 323 / 0 xfail.
+
+## C59 (2026-09-08) -- A6: per-scheme ENERGY wire models; O8 closed
+
+The gap (O8, filed at W2): Bus.hops() charged Manhattan-to-driver, so
+the energy re-pricing saw a bus as a point-to-point wire and tied
+star <-> bus-centre exactly (mean hops 1.3125 both) -- "identical
+energy, 8x latency" was partly a model artifact; h_tree's flat
+level_length default (1 per level) was the same gap smaller.
+
+Day 1 (inventory + pre-registration, closed before code): rulings --
+bus = the SERPENTINE line, (N-1) slot pitches charged whole to every
+transfer (deliberately the model harsher on bus; replaceable example);
+h_tree same round, its physical lengths registered as LITERALS
+(anchors.HTREE_MACRO_LEVEL_LENGTH_SLOTS, the S5 collaborator's solver
+reads the same table). Energy-vs-latency consumer split inventoried;
+moving-pin list closed at EMPTY (all shipped configs star/mesh).
+
+Days 2-4: energy_hops() beside hops() -- identity for point-to-point
+schemes (the day-2 gate: fast suite green untouched, zero pins moved),
+Bus and HTree overrides; the six energy call sites switched (pa
+re-pricing, build_flows distances, die surplus, scale tiers, d2d
+column, multidie placement); latency/contention paths untouched.
+Re-run against the pre-registration, two-handed: the artifact tie is
+DEAD (bus 2.8580 mJ vs star 2.7113, 1.054x; component tier 7/1.3125 =
+5.33x on the 3x3 tie host exactly as pre-filed, 7/1.5 = 4.67x on the
+2x4 default -- the pre-reg had conflated the grids, recorded); the
+pre-written NEW physically-correct tie is ALIVE (bus-centre ==
+bus-corner to 1e-12 -- the whole line swings either way, the driver
+position keeps only latency meaning); h-tree 2.7513 mJ (root-weighted
+direction confirmed); variant energy span 1.007x -> 1.057x while the
+latency side did not move. Sentence triage as pre-written: "a latency
+finding, not an energy finding" SURVIVES, now resting on wire models
+(1.057x vs 8.25x); "energy is contention-blind" SHARPENED -- the
+account now sees the MEDIUM, still not the schedule. Star row 2.7113
+vs the C27-era doc quote 2.7128 predates this round (star is
+C59-invariant by construction); docs refreshed with the note in
+place. The A5-linkage pin (user's supplement): a bus variant at the
+CROSSBAR level charges the full 7-pitch local line through the same
+build_flows distances the C58 overlay column reads -- the lower
+levels are covered by construction. Docs: SUMMARY zh/en 2.3.1b(b)
+rewritten, artifact caveats 2/3 closed, the stale "1 xfail" paragraph
+(an A5 leftover caught by the day-1 inventory) rewritten in both
+languages. New: interconnect.energy_hops/mean_energy_hops +
+physical_level_length; tests/test_wire_models.py (group 44, 6 tests) +
+group 14 tie test extended. Fast suite: 329 / 0 xfail.
+
+## C60 (2026-09-08) -- A7: torus + ring join the registry (folded models); O19's first queue items landed
+
+Day 1 (pre-registration, four rulings + two review clauses, all filed
+before code): torus AND ring in one round; sweep minimal set =
+occupancy + hub-gating machinery plus ONE die-level product row (the
+48-die ordering spread); SUMMARY gains the row this round; and the
+undeclared physical assumption ruled before start -- wrap links are
+NOT free: FOLDED models by default (every hop on a folded axis = 2
+slot pitches), with clause 1 splitting the accessors (router_hops =
+crossing count for per-router packet constants, hops = physical
+length for the ns_per_mm and price-per-length chains; a validation
+guard refuses packet params on folded schemes) and clause 2 sharpening
+the expectation to the three-sentence portrait (mean flat-to-worse,
+tail truncated in count, net benefit = busiest-wire redistribution).
+
+Days 2-3: the classes (Torus folds axes of width >= 3, width <= 2
+degenerates to mesh -- the pre-filed note held; Ring = the uniformly
+folded 1D cycle), hand-derived identity pins on both grids, the C59
+energy identity kept verbatim (point-to-point, on physical length),
+zero committed pins moved. Readouts, two-handed against the
+pre-registration: the 3x3 corner/centre peak lever (pinned 5/3) reads
+EXACTLY 1.00 under torus -- the hub-position lever can be zeroed by
+topology, landing the compression prediction in its strongest form;
+the antidote is for eccentric hubs only (central hubs gain no count
+and pay the fold, mean physical 1.67-2.0x worse on these small grids
+-- clause 2's 'slight' exceeded, booked); and THE FLIP: the 48-die
+ordering spread WIDENS under ring (6.55x -> 12.26x; a 1D cycle's far
+end beats a 2D mesh's) while torus narrows it (3.57x), with the
+ordering roles swapping (ring's native sequential rows = exactly
+1.000). Day 4: the caliber confirmation (count and phys spread
+columns coincide structurally -- both 6x8 axes fold, the uniform
+scalar cancels; asserted elementwise) and the three doc placements:
+SUMMARY zh/en new section 2.9 (the three honest seating sentences +
+the weave knob's 3.4x lever on the ordering-penalty axis as a third
+hand + the paradigm-dependence instance: the ordering BASELINE swaps
+with the weave), footnote hooks at the 12-19x pipeline paragraphs,
+registry rows updated, FIXLIST factor map re-audited. Every frozen
+claim untouched. New: interconnect.Torus/Ring + router_hops split +
+the fabric packet guard; scripts/analyze_torus_ring.py;
+tests/test_torus_ring.py (group 45, 9 tests). Fast suite: 338 / 0
+xfail.

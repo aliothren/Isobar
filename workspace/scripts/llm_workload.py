@@ -433,7 +433,7 @@ def die_flow_surplus_energy(flows, fabric, placement=None, pj_per_word=None,
     for f in flows:
         a, b = f["nodes"]
         tot += (f["volume"] * float(f.get("width", 1.0))
-                * max(m.hops(a, b) - ref, 0.0) * (pj or 0.0) * 1e-12)
+                * max(m.energy_hops(a, b) - ref, 0.0) * (pj or 0.0) * 1e-12)
     return tot
 
 

@@ -306,7 +306,10 @@ def position_aware_cost(
                 f"{name}: per-die stats fanout {fanout} != {lvl} slots "
                 f"{len(slots)} -- fabric config and run diverged")
         from scripts import interconnect as ic_mod
-        return ic_mod.build(fabric, lvl, placement).mean_hops()
+        # C59 (O8): the energy re-pricing reads the ENERGY wire length --
+        # equal to mean_hops for every point-to-point scheme, the full line
+        # for a bus, the physical table for an h-tree.
+        return ic_mod.build(fabric, lvl, placement).mean_energy_hops()
 
     rows = []
     tot_base = tot_pa = 0.0

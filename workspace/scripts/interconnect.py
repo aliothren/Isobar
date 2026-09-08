@@ -108,15 +108,44 @@ class Interconnect:
                     seen.append(r)
         return seen
 
+    def router_hops(self, a: int, b: int) -> float:
+        """The ROUTER-CROSSING COUNT of one transfer (C60, review clause 1:
+        what per-router packet constants consume). Default: identical to
+        hops() -- on every unfolded point-to-point scheme count and length
+        coincide. A folded scheme (torus, ring) overrides: a wrap route
+        crosses 1 router over 2 slot pitches of wire, and quietly reading
+        the folded length as a router count would be the silent caliber
+        mismatch this accessor exists to prevent."""
+        return self.hops(a, b)
+
+    def energy_hops(self, a: int, b: int) -> float:
+        """The ENERGY-side wire length of one transfer, in slot units (C59/O8).
+
+        Default: identical to hops() -- for point-to-point schemes (star,
+        mesh) the wire actually driven IS the route, so the two sides share
+        one number and every pre-C59 account is reproduced bit for bit.
+        Schemes where the driven wire is not the route override: a bus swings
+        the WHOLE line's capacitance per transfer regardless of endpoints, a
+        physical H-tree's wires lengthen toward the root. Latency and
+        contention keep reading hops(); only energy pricing reads this."""
+        return self.hops(a, b)
+
     # ----------------------------------------------------------- aggregates
     def max_hops(self) -> float:
         """Worst-case hub->node distance: the parallel branches' critical path."""
         return max((self.hops(HUB, i) for i in range(len(self.slots))), default=0.0)
 
     def mean_hops(self) -> float:
-        """Mean hub->node distance: what the energy re-pricing scales by."""
+        """Mean hub->node distance (the LATENCY-side statistic; until C59 the
+        energy re-pricing also read this -- it now reads mean_energy_hops)."""
         n = len(self.slots)
         return sum(self.hops(HUB, i) for i in range(n)) / n if n else 0.0
+
+    def mean_energy_hops(self) -> float:
+        """Mean hub->node ENERGY wire length: what the re-pricing scales by
+        since C59 (equal to mean_hops for every point-to-point scheme)."""
+        n = len(self.slots)
+        return sum(self.energy_hops(HUB, i) for i in range(n)) / n if n else 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -248,6 +277,145 @@ class Mesh(Interconnect):
 
 
 # --------------------------------------------------------------------------- #
+class Torus(Mesh):
+    """Wrap-around mesh, FOLDED by default (C60 / A7 ruling 4).
+
+    The wrap link is not a free equal-length wire in 2D packaging: the
+    standard build FOLDS the torus, and the price is that EVERY hop on a
+    folded axis is 2 slot pitches of physical wire. Hence the split the
+    folded torus forces for the first time (review clause 1):
+
+      * hops(a, b)        -> PHYSICAL length in slot units (per axis
+                             min(direct, wrap) x the axis fold factor) --
+                             what the ns_per_mm latency chain and the C58
+                             price-per-length energy machinery consume.
+      * router_hops(a, b) -> the CROSSING COUNT (per axis min(direct,
+                             wrap)) -- what per-router packet constants
+                             consume. On every unfolded point-to-point
+                             scheme the two coincide.
+
+    An axis of width <= 2 gets no wrap links and no folding: the torus
+    degenerates to the mesh there (on the 2x4 macro grid the payoff axis
+    is the 4-wide one). `idealized: true` builds equal-length wrap links
+    (fold factor 1) and is labeled what it is -- an idealization.
+    """
+
+    NAME = "torus"
+    PARAMS = {**Mesh.PARAMS,
+              "idealized": (False, "true = equal-length wrap links (fold "
+                                   "factor 1, an IDEALIZATION); default "
+                                   "false = folded, per-axis link length 2")}
+
+    def _setup(self):
+        super()._setup()
+        self.idealized = bool(self.params.get("idealized", False))
+        xs = [int(round(s[0])) for s in self.slots]
+        ys = [int(round(s[1])) for s in self.slots]
+        self._lo = (min(xs), min(ys))
+        self._w = (max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+        self._wraps = tuple(w >= 3 for w in self._w)
+        self._fold = tuple((2.0 if (wr and not self.idealized) else 1.0)
+                           for wr in self._wraps)
+
+    def _axis_count(self, axis: int, c0: int, c1: int) -> float:
+        d = abs(c0 - c1)
+        if self._wraps[axis]:
+            d = min(d, self._w[axis] - d)
+        return float(d)
+
+    def router_hops(self, a: int, b: int) -> float:
+        (x0, y0), (x1, y1) = self.coord(a), self.coord(b)
+        return (self._axis_count(0, int(round(x0)), int(round(x1)))
+                + self._axis_count(1, int(round(y0)), int(round(y1))))
+
+    def hops(self, a: int, b: int) -> float:
+        (x0, y0), (x1, y1) = self.coord(a), self.coord(b)
+        return (self._axis_count(0, int(round(x0)), int(round(x1))) * self._fold[0]
+                + self._axis_count(1, int(round(y0)), int(round(y1))) * self._fold[1])
+
+    def _route(self, src: Slot, dst: Slot) -> List[Slot]:
+        """Dimension-order route with a per-axis wrap decision; the wrap
+        jump appears as one step from the edge slot to the opposite edge."""
+        pts = [(int(round(src[0])), int(round(src[1])))]
+        cx, cy = pts[0]
+        tx, ty = int(round(dst[0])), int(round(dst[1]))
+        order = ((0, tx), (1, ty)) if self.routing == "xy" else ((1, ty), (0, tx))
+        for axis, target in order:
+            cur = cx if axis == 0 else cy
+            w, lo = self._w[axis], self._lo[axis]
+            d = abs(cur - target)
+            direct = (not self._wraps[axis]) or d <= w - d
+            step = (1 if target > cur else -1) if direct \
+                else (-1 if target > cur else 1)
+            while cur != target:
+                cur = lo + (cur - lo + step) % w
+                if axis == 0:
+                    cx = cur
+                else:
+                    cy = cur
+                pts.append((cx, cy))
+        return pts
+
+
+class Ring(Interconnect):
+    """The 1D cycle over the placement order, FOLDED by default (C60).
+
+    The die level's natural scheme for a neighbor-dominated pipeline: a
+    stage talks to the next stage over one cycle edge. Folded build:
+    every link is 2 slot pitches (uniform), so hops() returns 2x the
+    crossing count and router_hops() the count itself; `idealized: true`
+    keeps 1-pitch links. The hub (the package attach point) sits at a
+    node (`hub: node:<i>`, default node 0)."""
+
+    NAME = "ring"
+    PARAMS = {"hub": (False, "node:<i> -- the attach node (default node 0)"),
+              "idealized": (False, "true = 1-pitch links (an IDEALIZATION); "
+                                   "default false = folded, every link 2")}
+
+    def _setup(self):
+        self.n = len(self.slots)
+        self.idealized = bool(self.params.get("idealized", False))
+        self._fold = 1.0 if self.idealized else 2.0
+        spec = self.params.get("hub", "node:0")
+        if not (isinstance(spec, str) and spec.startswith("node:")):
+            raise ValueError(f"ring: hub must be node:<i>, got '{spec}'")
+        self._hub_i = int(spec.split(":", 1)[1])
+
+    def hub_coord(self) -> Slot:
+        return self.slots[self._hub_i]
+
+    def _idx(self, node: int) -> int:
+        return self._hub_i if node == HUB else node
+
+    def router_hops(self, a: int, b: int) -> float:
+        d = abs(self._idx(a) - self._idx(b))
+        return float(min(d, self.n - d))
+
+    def hops(self, a: int, b: int) -> float:
+        return self.router_hops(a, b) * self._fold
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        i, j = self._idx(a), self._idx(b)
+        if i == j:
+            return []
+        d = (j - i) % self.n
+        step = 1 if d <= self.n - d else -1          # shorter arc; tie -> "+"
+        out, cur = [], i
+        while cur != j:
+            nxt = (cur + step) % self.n
+            edge = cur if step == 1 else nxt          # edge k = k -> k+1
+            out.append((f"{self.NAME}:seg{edge}", "+" if step == 1 else "-"))
+            cur = nxt
+        return out
+
+    def path(self, a: int, b: int) -> List[str]:
+        return [r for r, _ in self.path_directed(a, b)]
+
+    def resources(self) -> List[str]:
+        return [f"{self.NAME}:seg{k}" for k in range(self.n)]
+
+
+# --------------------------------------------------------------------------- #
 class HTree(Interconnect):
     """k-ary tree rooted at the hub -- the classic CIM distribution network
     (ISAAC, NeuroSim's default) and the topology the collaborator's lambda-1
@@ -309,6 +477,35 @@ class HTree(Interconnect):
             d -= 1
         climbed = self.depth - d
         return 2.0 * sum(self.level_length[self.depth - climbed:])
+
+    def physical_level_length(self) -> List[float]:
+        """C59 (O8): the ENERGY-side per-level wire lengths, root-first, in
+        slot units. RULE: each branching step halves the subtree's linear
+        span, and the wire length follows the span -- level l = extent /
+        2**l, extent = the larger grid dimension of this level's slots. For
+        the shipped lambda-1 host (macro 2x4, k=4, depth 2) this yields
+        [2.0, 1.0], registered as LITERALS in
+        anchors.HTREE_MACRO_LEVEL_LENGTH_SLOTS (ruling: the collaborator's
+        solver must read the same table, no embedded formula); a test
+        asserts rule == literals. The latency-side level_length is
+        untouched (O8 ruled the latency side right)."""
+        xs = [s[0] for s in self.slots]
+        ys = [s[1] for s in self.slots]
+        extent = max(max(xs) - min(xs) + 1.0, max(ys) - min(ys) + 1.0)
+        return [extent / (2.0 ** level) for level in range(1, self.depth + 1)]
+
+    def energy_hops(self, a: int, b: int) -> float:
+        """hops() arithmetic over the PHYSICAL per-level lengths (C59)."""
+        phys = self.physical_level_length()
+        if a == b:
+            return 0.0
+        if a == HUB or b == HUB:
+            return sum(phys)
+        d = self.depth
+        while d > 0 and self.parent_at(a, d - 1) != self.parent_at(b, d - 1):
+            d -= 1
+        climbed = self.depth - d
+        return 2.0 * sum(phys[self.depth - climbed:])
 
     def path(self, a: int, b: int) -> List[str]:
         node = b if a == HUB else a
@@ -380,6 +577,17 @@ class Bus(Interconnect):
     def hops(self, a: int, b: int) -> float:
         return _manh(self.coord(a), self.coord(b))
 
+    def energy_hops(self, a: int, b: int) -> float:
+        """C59 (O8): every transfer swings the WHOLE line's capacitance, so
+        the energy length is the full line -- the SERPENTINE model (ruling:
+        a line threading all N slots is (N-1) slot pitches; the physically
+        natural routing of a shared line over a grid, and deliberately the
+        model HARSHER on bus than the bounding-box alternative). Endpoints
+        and driver position are energy-irrelevant; both stay latency- and
+        contention-relevant through hops()/path(). A replaceable example
+        model: the real layout's line length swaps this constant."""
+        return float(max(len(self.slots) - 1, 0))
+
     def path(self, a: int, b: int) -> List[str]:
         return [f"{self.NAME}:medium"]
 
@@ -443,3 +651,9 @@ register(Star)
 register(Mesh)
 register(HTree)
 register(Bus)
+register(Torus)
+register(Ring)
+
+#: schemes whose folded build splits router count from physical length --
+#: fabric validation refuses packet parameters on these levels (C60 clause 1)
+FOLDED_SCHEMES = ("torus", "ring")
