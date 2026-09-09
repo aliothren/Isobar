@@ -559,16 +559,45 @@ def attention_die_context_ceiling(cfg: GptConfig) -> int:
     return int((DIE_WEIGHT_CELLS - resident_cells) // per_token_cells)
 
 
-def check_context_ceiling(cfg: GptConfig, context: int):
-    """Raise when a context (prompt + generated tokens) exceeds the
-    two-dies-per-layer seating's K/V ceiling (O21)."""
+#: A3 (C62-a): the honest notes that travel with window mode, verbatim.
+WINDOW_MODE_DECLARATION = (
+    "window mode CHANGES THE MODEL'S SEMANTICS: the resident K/V holds only "
+    "the last <ceiling> tokens, i.e. the computation is equivalent "
+    "sliding-window attention, not full attention; the accuracy impact of "
+    "that change is OUTSIDE this platform's evaluation scope.")
+
+
+def check_context_ceiling(cfg: GptConfig, context: int,
+                          over_ceiling: str = "reject") -> int:
+    """The O21 gate, with the A3/O14 declaration tier (C62-a).
+
+    VALIDITY DOMAIN: S <= 2048 under full-attention semantics; ANY S under
+    window mode, with the semantic change declared on file
+    (WINDOW_MODE_DECLARATION). Returns the EFFECTIVE context.
+
+    over_ceiling="reject" (default, the pre-A3 behavior verbatim): raise
+    when a context (prompt + generated tokens) exceeds the
+    two-dies-per-layer seating's K/V ceiling (O21).
+    over_ceiling="window": truncate to the ceiling -- a DECLARATION-tier
+    mode only: no eviction machinery is built, nothing is re-priced; the
+    K/V account below the ceiling is unchanged and the semantics note
+    above ships with every truncation. Eviction and tiered residency stay
+    an un-built design space awaiting product intent (O14 archive)."""
     cap = attention_die_context_ceiling(cfg)
-    if context > cap:
-        raise ValueError(
-            f"context {context} tokens exceeds the attention die's K/V "
-            f"ceiling of {cap} for the two-dies-per-layer seating (O21): "
-            f"the 48-die configuration is INVALID past it -- the "
-            f"long-context mechanism itself is O14")
+    if context <= cap:
+        return context
+    if over_ceiling == "window":
+        print(f"    [O21/A3 window mode: context {context} truncated to the "
+              f"{cap}-token ceiling -- {WINDOW_MODE_DECLARATION}]", flush=True)
+        return cap
+    if over_ceiling != "reject":
+        raise ValueError(f"over_ceiling must be 'reject' or 'window', "
+                         f"got '{over_ceiling}'")
+    raise ValueError(
+        f"context {context} tokens exceeds the attention die's K/V "
+        f"ceiling of {cap} for the two-dies-per-layer seating (O21): "
+        f"the 48-die configuration is INVALID past it -- the "
+        f"long-context mechanism itself is O14")
 
 
 def static_rewrite_cost(op: Op, e_write=E_WRITE_PER_CELL_J,
@@ -628,7 +657,7 @@ def _die_tiling(c_res: int, m_res: int):
     return best[1] if best else None
 
 
-def plan_spatial(op: Op, max_dies: int = 24, dims=("M", "C")):
+def plan_spatial(op: Op, max_dies: int = 24, dims=("M", "C"), min_dies=None):
     """How many dies the op ACTUALLY needs under the residency constraint,
     with the split dim and per-die tiling. May exceed dies_for_op (the raw
     capacity ceiling): the power-of-two fanout grid cannot always realise a
@@ -638,6 +667,11 @@ def plan_spatial(op: Op, max_dies: int = 24, dims=("M", "C")):
     multicast) -- the scaling-law probes (O17c) run in that regime only; the
     row split is the O15 branch and stays unexercised."""
     lo = dies_for_op(op)
+    if min_dies is not None:
+        # A2/C61 probe knob: a VOLUNTARY span (e.g. the d=1024
+        # replication-alternative probe forces 2 half-full dies). Never
+        # set by any default path; capacity still rules the floor.
+        lo = max(lo, int(min_dies))
     for n in range(lo, max_dies + 1):
         for dim in dims if n > 1 else (None,):
             if dim is not None and getattr(op, dim) % n:
@@ -702,7 +736,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            phase: str = "prefill", t_set_ns=T_SET_NS, hop_latency_ns=None,
            placement=None, overcapacity: str = "reject",
            share_plan=None,
-           spatial_dims=("M", "C"), spatial_max_dies=24,
+           spatial_dims=("M", "C"), spatial_max_dies=24, spatial_min_dies=None,
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
            hist_source=DEFAULT_HIST_SOURCE,
            value_mode="uniform", value_source="synthetic",
@@ -722,7 +756,8 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         # a fitting-but-untilable shape (e.g. C=2560 on the power-of-two
         # fanout grid) would otherwise fall through to the greedy default and
         # reload silently.
-        spatial_plan = plan_spatial(op, max_dies=spatial_max_dies, dims=spatial_dims)
+        spatial_plan = plan_spatial(op, max_dies=spatial_max_dies, dims=spatial_dims,
+                                    min_dies=spatial_min_dies)
         if spatial_plan[0] != n_dies_op:
             print(f"    [O10 spatial: capacity says {n_dies_op} die(s) but "
                   f"the power-of-two fanout grid needs {spatial_plan[0]} -- "

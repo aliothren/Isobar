@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 338 pass + 0 expected-fail (slow adds group 38), which is
+(`python3 tests/run_tests.py`; currently 354 pass + 0 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -1380,7 +1380,7 @@ current owner and its open items. Bold items move current conclusions.
 | calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 338 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 354 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -1401,13 +1401,13 @@ P1 device axis), state the model's semantics (P1), then run the search (P3).
 | S1--S6 | no search code exists; the evaluator-proxy question is unmeasured | first search results and the proxy-optimization study | search (P3) |
 | O27 | no static energy, no peak-concurrency output | idle-power input + closed-form static term; static-share sweep; concurrency field | energy completion (P4) |
 | ~~O21~~ (C38) | was: an unstated ~2.5k-token K/V ceiling | computed 2,048-token ceiling + run-time guard + validity statements | closed |
-| O15 | the input-row split (cross-die addition of partial results) never exercised end to end | the row-split branch of the scaling law (O17) and the expensive half of the spanning mechanism | coverage |
+| ~~O15~~ RESOLVED (A2/C61) | was: the input-row split never exercised end to end | measured: a load-relocation valve between levels (on-die relaxes up to 4x, the bill moves to the psum-dominated die edge; two-level statement is the hard rule); underfull direction refuted except C-heavy shapes; ffn1 identity sentinel pinned (group 46) | coverage |
 | O1 | ~~core/crossbar links carry no energy~~ CLOSED (C58: derived prices, overlay column 1.11% of ffn1; rankings in joules with orders exact; the last xfail promoted) | DR-1 replaces the derived prices outright (a constant swap) | DR-1 input |
 | O8 | ~~bus energy charged by distance-to-driver~~ CLOSED (C59: per-scheme energy wire models -- bus = whole serpentine line, h-tree = registered physical table; the artifact tie retired, span 1.007x -> 1.057x) | real layout lengths swap the example constants | model quality |
 | O19 | ~~four interconnect schemes only~~ torus + ring LANDED (C60, folded models, count/length split; hub lever zeroed by topology, weave lever 3.4x on ordering penalty, the ring flip booked) | queue remainder: express links, duplex split, FlooNoC-class, routing-algorithm params | extensibility |
-| O16 | whole-model multi-die deployment never simulated jointly | ~320-die joint seating; the search's eventual target | scale extension (outside the v5 paper) |
-| O20 | tier-L seated one block at a time | subsumed by O16 | honesty debt (captioned) |
-| O14 | over-capacity K/V (long-context) has no policy | attention at S>~8k simulatable honestly | scale extension (outside the v5 paper) |
+| ~~O16~~ MEASURED under the static-spread hypothesis (A4/C62-b) | was: whole-model deployment never simulated jointly | one measured flat seating (544 dies, 17/layer x 32): whole vs block x 32 = +1.27% latency at GRS (+12% at 0.1 GB/s), +1.83% energy -- geometry-dominated increment, the ~4% D2D share cited with its geometry attached; hybrid residency = decision-layer future work; the seating is the S4 test payload | scale extension (outside the v5 paper) |
+| ~~O20~~ | tier-L seated one block at a time | subsumed by O16, now measured (A4/C62-b): the published block rows ARE the lower bound, and the whole-machine surcharge is quantified (+1.27% latency at GRS) | honesty debt (captioned, now quantified) |
+| ~~O14~~ CLOSED at the declaration tier (A3/C62-a) | was: over-capacity K/V has no policy | O21 gate gained the opt-in window mode (truncate + the verbatim semantics note: equivalent sliding-window attention, accuracy outside scope); validity domain re-stated (S<=2048 full attention / any S windowed, declared); eviction + tiered residency archived as un-built design space awaiting product intent -- no machinery, no pricing, no scans | scale extension (outside the v5 paper) |
 | O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the collaborator's solver (S5); lifts the 47% citation ban | search prereq (on hold) |
 
 ### O27. Energy is dynamic-only; static power and peak concurrency are absent
@@ -1712,7 +1712,20 @@ layout lengths swap the example constants; no model round needed.
 
 
 
-### O14. Long-context K/V arrays have no over-capacity policy
+### O14. Long-context K/V arrays have no over-capacity policy *(closed at the declaration tier, A3/C62-a)*
+
+A3 EXECUTION (2026-09-09, half-day unit, per the narrowed ruling: the
+company's roadmap is nowhere near long context and the item is weakly
+tied to the paper's claims -- minimum-cost closeout, no execution
+machinery). Landed: check_context_ceiling gained over_ceiling="window"
+(default "reject" byte-identical, pinned); window mode truncates to the
+2,048-token ceiling and ships WINDOW_MODE_DECLARATION verbatim (the
+semantics change to equivalent sliding-window attention; the accuracy
+impact is outside this platform's evaluation scope). Validity domain:
+S <= 2048 (full attention) / any S (window mode, semantic change
+declared on file) -- stated in the guard docstring, SUMMARY zh/en, and
+here. EVICTION and TIERED residency: design space exists, awaiting
+product intent -- NOT built, NOT priced, in NO scan.
 
 `temporal_rewrite` raises NotImplementedError for dynamic ops, and K/V
 arrays grow with context: at S~8k a single head-group's K array exceeds one
@@ -1724,7 +1737,196 @@ set. Files: `llm_workload.py` (plan_spatial for dynamic kinds + write
 routing), `test_capacity.py`. Scope: outside the v5 paper (residency
 detail).
 
-### O15. Of the two ways to split an op across dies, the expensive one has never run
+### O15. Of the two ways to split an op across dies, the expensive one has never run *(resolved C61 -- A2 measured it end to end)*
+
+A2 EXECUTION -- PRE-REGISTRATION (2026-09-09, C61; filed with the
+review's three amendments BEFORE any mapper fires).
+
+WHAT A2 IS: the scaling law (trunk d/114,688, flip 1,220-1,350,
+multiplier x4, S cancelling) was measured under COLUMN SPLIT ONLY --
+the regime line in scaling_probes.json says so. Row split (cut the
+input dim C; partial sums add across macros/dies at 24-bit words, 3x
+activation width) is the law's ONE declared exception and R10's "the
+other capacity regime". A2 turns that exception into measured rows.
+Expected shape: a tail-piece, not a reversal.
+
+DAY 0 -- THE IDENTITY RERUN (the single most important step; gate
+clause physically executed). Re-run the mapper, settings untouched
+from O17c (fabric, seeds, heuristics, column split only), at d = 1024
+/ 2560 / 4096, S = 512, all six block matmuls (18 runs) into a
+SEPARATE file (a2_identity_rerun.json; scaling_probes.json is frozen
+and not touched), and compare per (d, op) against the frozen probes.
+JUDGMENT STANDARD (amendment 3): three tiers -- EXACT (bitwise);
+NOISE (float drift, relative <= 1e-9 -- the fast suite's standing
+tight tolerance, NOT a new convention): recorded as mechanical noise,
+no blockage; DRIFT (anything beyond, or ANY structural mismatch:
+dies / split / piece shapes / bottleneck resource / direction): A2
+SUSPENDS on the spot, the drift becomes its own prior item. Only
+after day 0 passes does any later difference attribute to the split
+switch -- single-variable discipline.
+DAY 0 RESULT (2026-09-09): PASS in the strongest form -- 18/18 EXACT,
+worst relative drift 0.000e+00 (not even noise-tier): every structural
+field, bottleneck resource/direction and per-edge down/up volume
+bitwise identical to the frozen probes. The environment did not move;
+from here every difference attributes to the split switch.
+
+DAY 1 -- HAND GATE (Simba precedent): one hand-computable operator,
+FORCED C split; reduction membership, 3-byte psum volumes and the
+conservation identities locked by hand integers. The mechanism had
+one closed-form endorsement on the Simba path (res4b C:4, psum x3);
+what A2 adds is the MAIN path, so the gate's target is "the mapper's
+row-split structure is correctly EXTRACTED by traffic.py", not the
+mechanism. Extraction wrong => stop at the gate, fix extraction only.
+DAY 1 RESULT (2026-09-09): PASS, 13/13 hand checks first try
+(scripts/a2_hand_gate.py -> a2_hand_gate.json). The hand operator
+(P=128, C=16,384, M=1024 -- exactly 2 dies, C:2 pieces exactly one
+full die each, all powers of two): planner picks C:2; the mapping
+carries the die-level C split and run_op's residency guards hold (no
+temporal reload, fanout used); traffic.extract reads the split, the
+edge volumes land on the hand integers EXACTLY (down 1,048,576/die =
+the disjoint slice, 2x = the full input once -- a row split
+multicasts nothing; up 131,072/die = the FULL-M unmerged partial
+sums), the reduction hyperedge is [[0, 1]], and build_flows carries
+the same numbers into the flow structure the pricing machinery eats.
+CALIBER NOTE recorded in the gate file: psum pricing here is DR-7
+16-bit (x2 words); the review's "3 bytes" was the Simba round's
+24-bit wire caliber -- never to be mixed. One correction to this
+pre-registration's own text during the gate build: DIE_WEIGHT_CELLS
+is 256 x 256 x 256 = 16,777,216 (arrays are 256x256), so the hand
+operator was sized C=16,384, not 8,192 -- caught by the planner
+check, fixed before the mapper fired.
+
+DAY 2 -- PREDICTIONS (three + one closed-form condition, written
+before the scan):
+ P1 (busiest-wire family swap), PER LEVEL by amendment 1: the
+    reduction aggregates at whichever level the split lands on, so the
+    inequality "reduction volume x3 > input-trunk volume x1" (C25
+    value caliber) is filed as ONE LINE PER LEVEL -- macro-level wires
+    and die-level links judged separately; a "die level swaps, macro
+    level does not" outcome must reconcile against its own line
+    without ad-hoc explanation.
+ P2 (S-cancellation survives), WELDED to its scope by amendment 2:
+    the argument -- trunk and psum volumes both scale linearly with S
+    -- holds for PROJECTIONS AND FFN, exactly this round's scope, so
+    cancellation should survive globally HERE; the pre-registration
+    records the dependency ("no S^2 term in scope") so the conclusion
+    cannot later be mis-extended to attention row splits.
+ P3 (the design-bearing one): the below-flip anomaly is the mapper
+    REPLICATING weights on underfull dies; row split is the other exit
+    -- pre-write "with row split allowed, underfull widths (production
+    d = 1024 included) MAY pull back toward the trunk line".
+ FROZEN-NUMBER FENCE: 0.81 GB/s, the flip interval, the trunk
+    constant, x4 -- all four gain the "column-split regime" label
+    (identity changes, numbers do not); every A2 readout lands in NEW
+    rows (field row_split). If d=1024/row-split reads near 0.40 that
+    is a new conclusion entered as a new row + one prose sentence;
+    0.81 stays in place, the replication-signature narrative wording
+    untouched.
+
+DAY 2 CONCRETIZATION (2026-09-09, filed BEFORE the scan; the
+closed forms below are paper arithmetic, no mapper has run).
+P1 PER-LEVEL CLOSED FORMS (amendment 1 executed -- one line per
+level, each judged against its own account):
+  DIE-LEVEL line (C:n split, psum x2 word-equivalents, DR-7): the die
+  edge's family swaps to psum when  2 x M x n > C.  Per op:
+    qkv_proj  (C=d, M=3d):  6dn > d  -> psum-dominated for EVERY n.
+    out_proj  (C=d, M=d):   2dn > d  -> psum for every n.
+    ffn1      (C=d, M=4d):  8dn > d  -> psum for every n.
+    ffn2      (C=4d, M=d):  2dn vs 4d -> n=2 is an EXACT TIE to the
+      word (2 x d x 2 = 4d); n >= 3 psum. Pre-written: at ffn2's
+      minimal split the two families carry literally equal volume --
+      the direction tag is read from the data, not predicted.
+  MACRO-LEVEL line (inside each die, piece C/n x full M): family
+  swaps when  2 x (M / m_M) > (C/n) / m_C  with m_C, m_M the
+  mapping's macro spatial factors -- the FORMULA is filed, the
+  factors are read from each run's mapping (they are the tiler's
+  choice, not ours). Direction expectation: the row split makes the
+  on-die piece M-heavy (full M, thin C), so the macro line MAY swap
+  too -- but each level reconciles against its own line; "die swaps,
+  macro does not" is a legal outcome that must not need prose.
+P2, WELDED (amendment 2 executed): the S-check pair is (d=2560,
+  ffn2, S in {128, 512}) forced-C -- both volumes (down P x C/n, up
+  P x M x 2) are linear in S=P, no S^2 term exists in the
+  projection/FFN scope, so every row-split ratio must be S-free
+  HERE; the weld line travels with the readout.
+P3 EXPERIMENT SHAPE: (a) natural spans -- forced-C at d in {2560,
+  4096, 5120, 6144, 8192}, four statics each; a (d, op) with NO
+  feasible C-only tiling is a RESULT (the row split's feasibility
+  frontier, recorded, never patched around). (b) the
+  replication-alternative probe at d=1024: a VOLUNTARY 2-die C:2
+  (probe-side forced n, not a tiler change; pieces quarter-to-half
+  die). If the residual tiler cannot express the shape -> record,
+  queue to O16, stop (the R10 boundary). If it runs, pre-written
+  direction: the boundary threshold MAY fall from the 0.81 GB/s
+  replication-shaped reading back toward the trunk line (~0.40-class
+  numbers); either way it lands in a NEW row.
+FENCE EXECUTION: SUMMARY zh/en scaling section gains the explicit
+  regime tag on its four numbers + the "A2 row_split readouts land in
+  new rows only" pointer (done with this filing); frozen_v6.md is
+  frozen and untouched; the tex tables (report + company) quote 0.81
+  and are deferred to the writing month per the standing
+  md-only-tex-on-request rule -- noted here so the deferral is a
+  decision, not an oversight. Scan output: analysis/a2_row_split.json
+  (separate file; scaling_probes.json stays frozen).
+RUN MATRIX (day 3+4): 5 widths x 4 statics forced-C (~20 mapper
+  runs, minus infeasible rows) + ffn2@2560 S=128 (+1) + d=1024
+  voluntary C:2 x 4 statics (+4): ~25 runs.
+
+DAYS 3+4 (mergeable) -- the scan: row split enabled, O17c width
+family + flip-interval probes; reconcile against P1-P3. SCOPE FENCES,
+two cuts: attention ops OUT (K/V-array row split drags residency
+policy -- O14/DR-5's territory; the company path is offload, no
+consumer) -- projections + FFN only; O16/O20 joint seating OUT: if
+the residual tiler does not support "each die holds a C slice's full
+M weights", STOP at "record the unsupported shape, queue to O16" --
+A2 walks TO R10's boundary, never past it.
+
+DAYS 3+4 RESULT (2026-09-09): 25/25 points ran, feasibility
+frontier EMPTY (the R10 boundary was never reached; the voluntary
+d=1024 C:2 was expressible, no O16 queue entry needed). Reconciliation
+(full table analysis/a2_row_split.md): P1 die line 100% (20/20 natural
+psum; ffn2@1024 n=2 the EXACT TIE, verbatim); P1 per-level vindicated
+("die swaps, macro does not" in 6 small-n rows, each squared by its
+own inequality + tiler factors); P2 S weld holds (ffn2 S=128 == S=512
+at 0.0179). P3 REFUTED IN THE MAIN: the voluntary underfull row split
+makes M-heavy ops exactly 2x WORSE on-die (compute halves, full-M
+psum stays) and only ffn2 (C-heavy) halves -- the company sentence
+flips to "replication stays the better underfull exit except for
+C-heavy shapes". TWO NEW FINDINGS booked: (1) at trunk-regime widths
+row split RELIEVES the on-die busiest wire up to 4x (ffn2 0.0714 ->
+0.0179) by thinning the per-die trunk, with the price relocated to
+the psum-dominated die edge -- a two-level statement, mandatory; die
+counts move both ways (qkv 10 vs 15 at d=5120: row split can tile
+BETTER). (2) ffn1's row ratio == its column ratio at every d with the
+direction flipped dn -> up (the C=d, M=4d arithmetic identity).
+
+DAY 5 DONE 2026-09-09 (C61 closeout). The archive wording carries
+the review's two framings verbatim: (1) the row split is NOT a
+good/bad switch but a LOAD-RELOCATION VALVE between levels -- the
+on-die side buys margin, the die level pays the bill -- and the HARD
+RULE (the first constraint the search side must encode if the split
+regime joins the variable set): any use is stated at BOTH levels,
+the on-die number alone yields exactly the wrong recommendation; die
+counts moving both ways shows the valve relocates load, not area.
+(2) the ffn1 identity is pinned as a FREE REGRESSION SENTINEL: two
+independent code paths must forever emit the same number at every
+width; either breaking turns that pin red first. Deliverables landed:
+SUMMARY zh/en row-split subsection (valve + hard rule + flipped
+company sentence: replication stays the better underfull exit except
+C-heavy shapes); R10 note -> the named other regime is MEASURED, the
+column-split structure stands unmoved in its own regime; O15 RESOLVED
+(open-items row + archive title); pins group 46 (9 tests: day-0
+18/18, day-1 13/13, P1 die line + exact tie, per-level split rows,
+P2 weld, P3 refutation with the exact 2x, the relief valve at both
+levels, the ffn1 sentinel read from BOTH files, the regime fence);
+C61 filed. No phase-figure psum family this round: the on-die busiest
+wire under row split stays below or at the column-split line at every
+measured width -- the boundary family the figure draws is unchanged;
+noted as the reason, not skipped silently.
+
+BUDGET AND STOP-LOSSES: 1-2 days of machine time, one mapper pass per
+width point; both stop-losses (day-0 identity, day-1 gate) are reused
+discipline, nothing new.
 
 A spanning op can be split two ways. By OUTPUT columns: each die produces a
 disjoint piece of the output, the input is broadcast to every die, and the
@@ -1742,22 +1944,111 @@ test. Files: probe in `test_d2d.py` (slow tier) or a script probe.
 Also the row-split branch of O17's scaling law (per-die input / k, partial
 sums x k): the law is stated for the column split until this runs.
 
-### O16. The 2.7B results examine one op at a time; a real deployment seats everyone at once
+### O16. The 2.7B results examine one op at a time; a real deployment seats everyone at once *(A4 in progress -- static spread, the only hypothesis this round)*
 
-Today's tier-L numbers take each operator ALONE, place its 4--5 dies on the
-package, measure, and hand the dies back. A real deployment keeps ALL 32
-layers' weights resident simultaneously: roughly 320 dies, every operator's
-die group claiming a disjoint region of the package, and each operator's
-output crossing the package into the next operator's region. That joint
-question -- who gets which region, and what the traffic between regions
-costs -- has never been simulated, and it is exactly the problem the
-placement search will ultimately have to solve.
-**Fix:** a ~320-die fabric variant; an allocator that seats all die groups
-disjointly; hand-off flows between consecutive operators' regions; score
-latency/energy under 2--3 seating heuristics. Files: new fabric variant,
-`analyze_deployment.py` (new); the op-chain hand-off volumes already exist
-in `llm_workload.py`. Scope: outside the v5 paper; it remains the search's
-eventual target (S4).
+Tier-L numbers take each operator ALONE, place its 4-5 dies on the
+package, measure, and hand the dies back. A real deployment keeps ALL
+32 layers' weights resident simultaneously -- by the STANDING
+block_chain rule that is 17 dies per layer (qkv 4 + attention 1 +
+out_proj 2 + ffn1 5 + ffn2 5; per-op residency and power-of-two tiling
+charged honestly), 544 dies for the model. The joint question -- who
+gets which region and what the traffic between regions costs -- is
+exactly the die-level search's eventual target (S4).
+
+A4 EXECUTION (narrowed ruling, 2026-09-09: STATIC SPREAD ONLY, the
+simplest hypothesis, 2-3 days. The platform's true mechanism binary --
+spatial_multi_die vs temporal_rewrite -- is already in the machinery;
+hybrid residency and friends are DECISION-layer optimization, not
+platform mechanism: future work, not built. The rewrite path does NOT
+run at machine scale -- one closed-form line bounds it out as the
+"static spread is the only realistic hypothesis" footnote. Product
+side-goal: the seating becomes the S4 die-level search's test
+payload.)
+
+PRE-REGISTRATION (day 1, all numbers produced BEFORE the readout
+script existed; the review's three amendments integrated in place):
+
+* SEATING RULE: each layer = the standing block_chain die-sets
+  (17/layer, from the mapper-measured scale_2p7b_per_op.json), layers
+  laid contiguously in the placement's slot order (row-fill);
+  handoffs = the tensor-once convention. Die-count REVISION recorded:
+  the review's "~320-die scale" was a capacity-packing estimate
+  (~10/layer); the declared rule gives 17 x 32 = 544 seated.
+* GEOMETRY DECLARED, not sourced: 24 x 24 = 576 slots (32 spare),
+  near-square, no product basis -- the same provenance class as the
+  ruled 16 x 20, recorded as a revision, not a quiet swap. It shapes
+  the adjacent-handoff distances and the busiest-link position; the
+  readout's sensitivity to the grid aspect is OUT of this round's
+  scope (an S4 search question if it ever matters). Fabric:
+  models/fabric/mlx300_multidie576.yaml (config-only).
+* COMPOSITION SEMANTICS: the end-to-end whole-machine latency is the
+  PURE SERIAL sum of 32 layers (the layer-sequential assumption's
+  direct extension), batch-1 single-request -- NEVER to be tabled
+  against b1_orderings' pipeline readouts; direct comparison
+  forbidden.
+* TWO-AXIS EXPECTATIONS (each axis judged by its own account; no
+  cross-frame verdicts):
+  LATENCY -- whole-machine >= the block x 32 extrapolation; the main
+  term is the 31 inter-layer boundaries (absent from the
+  extrapolation). Closed-form pre-estimate: baseline 32 x 27.523 ms
+  = 880.7 ms (matmul account); boundary words 31 x S x d =
+  40,632,320; at GRS 12.5 GB/s +3.25 ms = +0.369%, at 0.4 GB/s
+  +101.6 ms = +11.5%; propagation ~0.6 us, negligible.
+  ENERGY -- whole-machine ~= extrapolation + the D2D increment, and
+  THERE B2's sub-percent frame applies: flat 40.63 M words x 10 pJ =
+  +0.406 mJ on 2.270 J = +0.018%; adjacent hops = the reference, the
+  surplus overlay adds zero on top.
+
+DAY 1 DONE 2026-09-09: the fabric variant loads and validates; the
+closed-form numbers above are on file.
+
+DAY 2 DONE 2026-09-09 (analyze_full_model_seating.py ->
+a4_full_model.{json,md}; closed form, zero mapper; both columns carry
+the full account -- matmuls from the stored mapper-measured file,
+elementwise/digital terms, and D2D flat + surplus + propagation
+SYMMETRICALLY). Headline (batch-1 pure-serial semantics, the wrap
+boundary excluded): whole-machine 1034.8 ms at GRS vs the block x 32
+extrapolation 1021.8 ms = +1.27%; +5.2% at 2 GB/s, +10.0% at
+0.4 GB/s, +12.0% at 0.1 GB/s. Energy: 2.394 vs 2.351 J = +1.83%.
+RECONCILIATION, three parts: (1) latency direction HELD at every
+anchor; magnitudes explained, not adjusted -- the pre-estimate
+assumed tensor-once x1 while the STANDING block_die_flows convention
+multicasts to every consumer die (qkv column-split on 4 -> measured
+inter-layer words exactly 4x the estimate: 162.5 M, +13.0 ms at GRS
+= 4 x 3.25), and the estimate's baseline was matmul-only. (2) energy
+direction held but MAGNITUDE EXCEEDS THE PRE-REGISTERED FRAME: +1.83%
+vs B2's sub-percent -- booked as a FINDING with the cause identified
+(the frame assumed tensor-once near-adjacent hops; the measured
+increment carries the x4 multicast and a 5.6 mean-hop profile on the
+declared geometry; surplus 82.5 mJ dominates the 14.2 mJ flat).
+Corollary: whole-machine D2D energy ~4.0% of the account -- a few
+percent, not sub-percent, at machine scale. (3) propagation 29.7 us,
+negligible as pre-written.
+
+DAY 3 DONE 2026-09-09 (C62-b closeout; the review's decomposition ask
+executed first). THE INCREMENT SPLIT BY NATURE, one division each:
+43.03 mJ = 1.63 caliber (the x4 multicast flat -- an accounting-
+convention correction, geometry-free) + 9.99 inter-layer hop surplus
++ 31.41 layer-offset variation -- and the data sharpened the review's
+two-way split into three terms: the LARGEST single term is the
+layer-offset variation (layer 0, the extrapolation base, is the one
+cluster seated wholly inside a grid row; the other 31 straddle row
+wraps and carry higher intra surplus), itself a declared-geometry
+product. Verdict: GEOMETRY-DOMINATED, 96.2% -- so the "~4.0%" share
+sentence ships QUALIFIED: it carries the declared-geometry factor,
+moves with the grid shape and the layer path, and is never to be
+cited as a bare constant. The review's two confirmations recorded:
+the extrapolation baseline is the measured block account x 32
+INCLUDING its own D2D (flat + surplus + propagation, symmetric
+columns), NOT day 1's matmul-only 880.7 ms; and the mid-run column-
+asymmetry bug was fixed before any number was read (note retained,
+now pinned). S4 payload shipped inside a4_full_model.json with the
+review's seam rider: the 16-package x 2-layer example split field
+(package_of_layer map + the 15 seam boundaries), so the search month
+re-prices seam-cost upper-bound variants directly. Pins group 47
+(6 tests); SUMMARY zh/en subsection; O16 MEASURED under the
+static-spread hypothesis / O20's captioned debt now quantified;
+C62-b.
 
 ### O17. The device-speed axis: one hard-coded number, and the on-die scaling in d an open question
 
@@ -2565,13 +2856,18 @@ external behaviour / robustness) and then the freeze.
    orderings diverge (max- vs sum-functional), so energy enters as a
    DECLARED TIE-BREAKER dimension among latency-equal choices, and
    D2D energy can never be read off latency rank order.
-9. **Kept, lower** (open model items; archive tags for the sections
-   below): the input-row split of die spanning (O15) -- now the one
-   stated exception of the measured width law; the long-context K/V
-   residency policy (O14); whole-model joint seating (O16 / O20);
-   lower-level link energies (O1: mechanism closed C58-b at derived-price tier; DR-1 swaps the constants);
-   bus energy under-estimated by construction (O8); interconnect
-   registry growth, torus first (O19).
+9. **Kept, lower -- NOW EMPTY (the A group cleared it, 2026-09-08/09)**:
+   the input-row split (O15) MEASURED, A2/C61 -- the load-relocation
+   valve, the width law's exception now a measured row; long-context
+   K/V (O14) CLOSED at the declaration tier, A3/C62-a (window mode +
+   semantics note); whole-model joint seating (O16/O20) MEASURED under
+   the static-spread hypothesis, A4/C62-b (+1.27% latency at GRS,
+   geometry-qualified ~4% D2D share, S4 payload shipped); lower-level
+   link energies (O1) CLOSED C58 at the derived-price tier; bus/h-tree
+   wire energy (O8) CLOSED C59; registry growth (O19) torus + ring
+   LANDED C60 (queue remainder -- express links, duplex split,
+   FlooNoC-class, routing params -- stays low priority, on demand from
+   the search side).
 10. **Blocked / waiting on external input.** The MX100 row time (no
     published rate as of 2026-09-01; revisit on TetraMem's 22nm SoC
     publication). Platform inputs: DR-1 (lower-level link energies),

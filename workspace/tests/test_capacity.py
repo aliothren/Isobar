@@ -134,3 +134,29 @@ def test_die_to_die_activation_guards_the_48_die_seating():
         assert "O21" in str(e)
     else:
         raise AssertionError("the 48-die path accepted a 2500-token context")
+
+
+def test_window_mode_is_declaration_tier_only():
+    """A3 (C62-a): the O14 declaration-tier closeout. Default behavior is
+    byte-identical (the two tests above); window mode truncates to the
+    ceiling WITHOUT raising and the semantics note ships verbatim --
+    equivalent sliding-window attention, accuracy impact outside the
+    platform's scope. No eviction machinery exists; nothing re-priced."""
+    import inspect
+
+    from scripts import llm_workload as lw
+    cfg = lw.GptConfig()
+    assert lw.check_context_ceiling(cfg, 512) == 512          # returns effective
+    assert lw.check_context_ceiling(cfg, 4096, over_ceiling="window") == 2048
+    assert lw.check_context_ceiling(cfg, 2048, over_ceiling="window") == 2048
+    sig = inspect.signature(lw.check_context_ceiling)
+    assert sig.parameters["over_ceiling"].default == "reject"  # opt-in only
+    d = lw.WINDOW_MODE_DECLARATION
+    assert "sliding-window attention" in d
+    assert "OUTSIDE this platform's evaluation scope" in d
+    try:
+        lw.check_context_ceiling(cfg, 4096, over_ceiling="evict")
+    except ValueError as e:
+        assert "over_ceiling" in str(e)
+    else:
+        raise AssertionError("an unknown over-ceiling policy validated")

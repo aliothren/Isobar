@@ -1415,3 +1415,106 @@ claim untouched. New: interconnect.Torus/Ring + router_hops split +
 the fabric packet guard; scripts/analyze_torus_ring.py;
 tests/test_torus_ring.py (group 45, 9 tests). Fast suite: 338 / 0
 xfail.
+
+## C61 (2026-09-09) -- A2: the row split measured end to end; O15 resolved
+
+The scaling law's one declared exception (row split: cut C, add
+partial sums across dies) becomes measured rows. Day 0, the identity
+rerun: 18 mapper runs (d 1024/2560/4096 x six matmuls, O17c settings
+verbatim) reproduce the frozen probes 18/18 BITWISE -- worst relative
+drift 0.000e+00, the noise tier never used; every later difference
+attributes to the split switch alone. Day 1, the hand gate: 13/13 on
+the first try (P=128, C=16,384, M=1024 -- exactly 2 dies, C:2 pieces
+exactly one die each): the mapper carries the die-level C split, the
+extraction reads it, the edge volumes land on the hand integers
+exactly (down = the disjoint slice, twice = the full input once -- a
+row split multicasts nothing; up = full-M unmerged psums), the
+reduction hyperedge is [[0,1]]; caliber note filed (psum pricing is
+DR-7 16-bit x2; "3 bytes" was Simba's 24-bit wire). Day 2:
+pre-registration concretized -- per-LEVEL swap inequalities (die:
+2Mn > C; macro: the formula with the mapping's factors), the S weld
+tied to its projections/FFN scope, the frozen-number fence (regime
+tags in SUMMARY zh/en; new rows only; tex deferred by standing rule).
+
+Days 3-4, the scan (25 points, resumable; probe knobs min_dies /
+dims added default-neutral): feasibility frontier EMPTY. P1 die line
+100% with ffn2's minimal-split EXACT tie (2Mn = C = 4096); the
+per-level split is real (die psum / macro trunk in the small-n rows);
+P2 weld holds (ffn2 S-free at 0.0179). P3 REFUTED IN THE MAIN: the
+voluntary underfull row split is exactly 2x worse on-die for M-heavy
+ops (compute halves, full-M psum stays) and better only for C-heavy
+ffn2 -- the company sentence flips to "replication stays the better
+underfull exit, except C-heavy shapes". Two findings booked: the
+LOAD-RELOCATION VALVE (row split relaxes the on-die busiest wire up
+to 4x -- ffn2 0.0714 -> 0.0179 -- while the die edge goes
+psum-dominated everywhere; the HARD RULE: both levels, always, and
+this is the first constraint a future split-regime search variable
+must encode; die counts move both ways, so load relocates, not area)
+and the ffn1 IDENTITY SENTINEL (row ratio == column ratio at every
+width, direction flipped dn -> up; pinned across the two independent
+files as a free regression tripwire). Day 5: SUMMARY zh/en row-split
+subsection, R10's note upgraded (the named other regime is MEASURED;
+the column-split structure unmoved in its own regime), O15 RESOLVED,
+no phase-figure psum family (the row-split busiest wire never exceeds
+the column line at any measured width -- reason recorded). New:
+scripts/a2_identity_rerun.py, a2_hand_gate.py, run_a2_row_split.py;
+analysis/a2_*.json + a2_row_split.md; tests/test_row_split.py
+(group 46, 9 tests). Fast suite: 347 / 0 xfail.
+
+## C62-a (2026-09-09) -- A3: O14 closed at the declaration tier
+
+The narrowed ruling executed (half a day, no execution machinery: the
+company's roadmap is nowhere near long context and the item is weakly
+tied to the paper). check_context_ceiling gained an OPT-IN
+over_ceiling="window" mode -- the default "reject" is byte-identical
+and its pins unchanged -- which truncates to the 2,048-token ceiling
+and ships WINDOW_MODE_DECLARATION verbatim: the computation becomes
+equivalent sliding-window attention (a semantics change), and the
+accuracy impact of that change is OUTSIDE this platform's evaluation
+scope. The validity domain is re-stated in the guard, SUMMARY zh/en
+and FIXLIST: S <= 2048 under full-attention semantics / any S under
+window mode with the semantic change declared on file. Eviction and
+tiered residency are archived as un-built design space awaiting
+product intent -- no machinery, no pricing, in no scan. Also filed
+(before A4 starts): the review's three A4 pre-registration amendments
+-- the two-axis deviation expectation (latency: handoff propagation +
+occupancy, closed-form number pre-estimated; energy: the B2
+sub-percent frame, which is where that frame actually applies), the
+16x20 grid declared example geometry with the aspect-sensitivity
+half-sentence (an S4 question, out of scope), and the pure-serial
+composition semantics declaration (batch-1 single-request; never
+tabled against b1_orderings' pipeline readouts). Group O21 block +1
+test. Fast suite: 348 / 0 xfail.
+
+## C62-b (2026-09-09) -- A4: the whole-model static spread measured; O16 under its only realistic hypothesis
+
+Days 1-3 under the narrowed ruling (static spread only; hybrid
+residency = decision-layer future work; rewrite bounded out in one
+closed-form line). Day 1: seating rule declared (block_chain 17
+dies/layer x 32 = 544 -- the review's ~320 was a capacity-packing
+estimate, revision recorded), 24x24 = 576 grid DECLARED (near-square,
+no product basis; aspect sensitivity out of scope, an S4 question),
+and the two-axis closed-form pre-estimates produced before the script
+existed. Day 2 (closed form, zero mapper; symmetric columns, the
+mid-run asymmetry bug fixed before numbers): whole machine 1034.8 ms
+at GRS vs block x 32 extrapolation 1021.8 = +1.27% (+12.0% at
+0.1 GB/s); energy 2.394 vs 2.351 J = +1.83%. Latency direction held
+everywhere; magnitudes explained -- the pre-estimate missed the
+standing multicast-to-every-consumer-die convention (inter-layer words
+exactly 4x) and used a matmul-only baseline. Energy EXCEEDED the
+pre-registered B2 sub-percent frame: booked as a finding and, per the
+day-3 review, DECOMPOSED BY NATURE -- 43.03 mJ = 1.63 accounting
+caliber (the x4 multicast flat, geometry-free) + 9.99 inter-layer hop
+surplus + 31.41 layer-offset variation (the data's sharpening of the
+review's two-way split: the largest term is that layer 0, the
+extrapolation base, is the one row-tight cluster) -- verdict
+GEOMETRY-DOMINATED at 96.2%, so the corollary "whole-machine D2D
+energy ~4.0% of the account" ships QUALIFIED: it carries the declared
+geometry and is never a bare constant. Semantics fence pinned: batch-1
+pure serial, never tabled against b1_orderings' pipeline readouts.
+S4 payload shipped (seating map + the 16-package x 2-layer seam
+example split field). New: models/fabric/mlx300_multidie576.yaml,
+scripts/analyze_full_model_seating.py -> a4_full_model.{json,md};
+tests/test_full_model_seating.py (group 47, 6 tests). O16 MEASURED
+under the hypothesis; O20's captioned debt quantified. Fast suite:
+354 / 0 xfail.

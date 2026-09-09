@@ -120,7 +120,9 @@ def main():
     row("R10", "trunk law d/114,688; flip d* 1.2-1.35k; S cancels",
         "MEASURED-EXACT", "mapper-measured structure",
         {"2x": "immune", "5x": "immune", "overlay": "immune"},
-        "movable only by another mapper/capacity regime (named)")
+        "the named other regime (row split, O15) is now MEASURED (A2/C61):"
+        " the column-split structure stands unmoved in its own regime; the"
+        " row-split rows live beside it, never replacing these numbers")
 
     # R11 HERMES audit -- discrimination radius (review-corrected)
     h = hermes["headroom"]

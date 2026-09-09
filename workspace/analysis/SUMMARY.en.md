@@ -731,7 +731,62 @@ levels coincide for d ≥ 2560: mesh's ×4 multicast equals ffn2's 4d-wide
 tensor, one number by two mechanisms. The scaling law is now MEASURED (O17c done, C32:
 `run_scaling_probes.py`, 48 mapper runs, single core ~35 minutes,
 resumable; column split, full input per die, one full die per piece, the
-O15 row split untouched; dh = 64, prefill). Three findings, each replacing
+O15 row split untouched; dh = 64, prefill). REGIME TAG (A2, C61): every
+number in this subsection -- the trunk ratio d/114,688, the flip d* =
+1,220-1,350, the x4 routed multiplier and the thresholds derived from
+them (0.81 GB/s at d = 1024 included) -- is a COLUMN-SPLIT-regime
+reading; the row-split (O15) readouts land in new `row_split` rows
+only, never by editing these.
+
+**The row split, measured (A2, C61 -- O15 resolved).** The law's one
+declared exception ran end to end (identity rerun 18/18 bitwise first;
+hand gate 13/13; 25 forced-C mapper points, feasibility frontier
+empty). What it turned out to be is not a good/bad switch but a
+**load-relocation valve between levels**: at trunk-regime widths the
+per-die input trunk thins and the on-die busiest wire RELAXES up to 4×
+(ffn2 0.0714 → 0.0179 at d = 4096/8192), while the bill moves to the
+die edge -- full-M unmerged partial sums, psum-dominated at every
+natural split (closed form 2Mn > C, 20/20; ffn2's minimal split is an
+exact tie, 2Mn = C = 4096). **Hard rule, and the first constraint the
+search side must encode if the split regime ever joins the variable
+set: any use of this lever is stated at BOTH levels -- the on-die
+number alone yields exactly the wrong recommendation.** The per-level
+verdicts genuinely split (die swaps to psum while macro stays trunk at
+small n); die counts move both ways (qkv 10 vs 15 at d = 5120 -- row
+split can tile better), so the valve relocates load, not area. The S
+weld holds (ffn2 ratio S-free, projections/FFN scope only). The
+underfull probe REFUTED its pre-written direction: a voluntary 2-die
+row split at d = 1024 is exactly 2× worse on-die for the M-heavy ops
+and better only for C-heavy ffn2 -- **for the company: weight
+replication stays the better underfull exit, except for C-heavy
+shapes**. Bonus sentinel, pinned: ffn1's row ratio equals its column
+ratio at every width with the direction flipped dn→up (the C = d,
+M = 4d arithmetic) -- two independent code paths must forever emit the
+same number, and this pin goes red first if either breaks. Data:
+`a2_row_split.{json,md}` (new rows), `a2_identity_rerun.json`,
+`a2_hand_gate.json`; pins group 46.
+
+**The whole-model static spread, measured (A4, C62-b — O16 under its
+only realistic hypothesis).** All 32 layers of the 2.7B class seated
+simultaneously — 544 dies (17/layer by the standing block rule) on a
+declared 24×24 grid — replacing "block × 32" extrapolation with one
+measured flat seating (closed form on the stored mapper-measured
+account; zero new mapper runs). Whole machine vs extrapolation:
+**+1.27% latency at GRS** (+5.2% at 2, +10.0% at 0.4, +12.0% at
+0.1 GB/s) and **+1.83% energy** — the published block rows are indeed
+the lower bound, now with the surcharge quantified. The energy
+increment decomposes by nature: 4% accounting caliber (the ×4
+multicast the pre-estimate missed) vs **96% declared geometry** (the
+inter-layer hop surplus plus the dominant layer-offset variation:
+layer 0 is the one row-tight cluster, the other 31 straddle row
+wraps). Whole-machine D2D energy is **~4.0% of the account — cited
+with its geometry attached, never as a bare constant**. Semantics
+fence: this is the batch-1 PURE-SERIAL number (layer-sequential);
+direct comparison against the 48-die pipeline readouts is forbidden.
+The temporal-rewrite alternative is bounded out in one closed-form
+line (544 dies reprogramming 16.78 M cells per pass). The seating map
+plus a 16-package × 2-layer seam example ship as the die-level search
+test payload. Data: `a4_full_model.{json,md}`; pins group 47. Three findings, each replacing
 a guess: (1) above the flip the busiest wire IS the input trunk — down =
 S×d words per macro edge exactly, ratio = d / 114,688 (= 16,384
 words/cycle × 7 slices): "knee ∝ d" with slope exactly 1, the closed form
@@ -1202,7 +1257,7 @@ The die level is no longer degenerate: the multi-die variant
 a 6×8 package grid; at the honest capacity a layer is 1.5 dies, so the
 feasible assignment is TWO dies per layer — attention half + FFN half, the
 latter filling its die exactly; the attention die also hosts the growing
-K/V arrays, bounding this seating's validity to **2,048 tokens** — the computed cell ceiling (16.78M − 8d² cells over 4d cells per token; a guard raises past it, O21/C38)) gives the
+K/V arrays, bounding this seating's validity to **2,048 tokens** under full-attention semantics — the computed cell ceiling (16.78M − 8d² cells over 4d cells per token; the guard raises past it by default, O21/C38; since A3/C62-a an opt-in window mode truncates instead, valid at ANY S with the semantic change declared on file: equivalent sliding-window attention, accuracy impact outside this platform's scope — declaration tier only, no eviction machinery, nothing re-priced)) gives the
 die link a scheme (mesh / star /
 bus, the same registry), a bandwidth, a per-word energy (10 pJ — the midpoint of Simba GRS's
 measured 6.6–14 pJ/word band, see ANCHORS.md), and `reference_hops`. All three

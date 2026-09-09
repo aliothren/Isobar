@@ -68,12 +68,13 @@ def points():
     return pts
 
 
-def run_one(op, fab, fab_bw, pl, pl_bw, max_dies):
+def run_one(op, fab, fab_bw, pl, pl_bw, max_dies, dims=("M",), min_dies=None):
     pol = "spatial_multi_die" if op.kind == "static" else "reject"
-    plan = (lw.plan_spatial(op, max_dies=max_dies, dims=("M",))
+    plan = (lw.plan_spatial(op, max_dies=max_dies, dims=dims, min_dies=min_dies)
             if op.kind == "static" else None)
     r = lw.run_op(op, phase="prefill", overcapacity=pol, save_comm=False,
-                  spatial_dims=("M",), spatial_max_dies=max_dies)
+                  spatial_dims=dims, spatial_max_dies=max_dies,
+                  spatial_min_dies=min_dies)
     res = r["result"]
     flows, _, _, _ = cc.build_flows(res.output_dir, verbose=False,
                                     fabric=fab, placement=pl)
@@ -101,6 +102,7 @@ def run_one(op, fab, fab_bw, pl, pl_bw, max_dies):
                        "volume": bo.get("volume"),
                        "seconds": bo.get("seconds")},
         "macro_edges": edges,
+        "output_dir": res.output_dir,
     }
 
 
