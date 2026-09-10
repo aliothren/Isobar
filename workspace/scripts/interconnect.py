@@ -186,9 +186,12 @@ class Mesh(Interconnect):
     congests. (With `star` every node has a private wire and permuting a
     placement provably changes nothing -- see tests/test_contention_scope.py.)
 
-    Segments are undirected: our flow volumes already merge the down (input) and
-    up (output) traffic of an edge, so the two directions share a resource. A
-    full-duplex variant would split them; add a param when a consumer needs it.
+    Segments are FULL-DUPLEX since O22: path_directed() tags each traversal
+    "+"/"-" and link_occupancy keys resources per direction (the physical
+    two-wires-per-segment norm; `duplex=False` reproduces the pre-O22 shared
+    account and survives only as an explicit comparison knob in tests).
+    [C63-a: this docstring previously still claimed undirected segments --
+    the stale sentence that misled the O19 batch plan's duplex item.]
 
     A node co-located with the hub traverses no segment at all, which is the
     right answer and is why `hub` placement is a real modelling choice.
@@ -196,18 +199,32 @@ class Mesh(Interconnect):
 
     NAME = "mesh"
     PARAMS = {
-        "routing": (False, "xy (default) | yx -- dimension order"),
+        "routing": (False, "xy (default) | yx -- dimension order; o1turn = "
+                           "the balanced-order model, DECLARED as the parity "
+                           "rule (even-indexed sources route XY, odd YX; the "
+                           "50/50-split oracle needs fractional paths this "
+                           "interface does not carry -- C63-f)"),
         "hub": (False, "center (default) | corner | node:<i> -- where the "
                        "parent's aggregation point attaches"),
         "multicast": (False, "native (a shared slice crosses a segment once, "
                              "default) | replicated (unicast NoC: once per "
                              "destination)"),
+        "reply": (False, "retrace (default: node->hub retraces the down "
+                         "route) | yx: replies ride the OPPOSITE dimension "
+                         "order -- the common real-NoC form; up load lands "
+                         "on segments the down route never uses (C63-f; "
+                         "the asymmetry noted since O22, now a knob)"),
     }
 
     def _setup(self):
         self.routing = self.params.get("routing", "xy")
-        if self.routing not in ("xy", "yx"):
-            raise ValueError(f"mesh: routing must be xy or yx, got {self.routing}")
+        if self.routing not in ("xy", "yx", "o1turn"):
+            raise ValueError(f"mesh: routing must be xy, yx or o1turn, "
+                             f"got {self.routing}")
+        self.reply = self.params.get("reply", "retrace")
+        if self.reply not in ("retrace", "yx"):
+            raise ValueError(f"mesh: reply must be retrace or yx, "
+                             f"got {self.reply}")
         self.multicast = self.params.get("multicast", "native")
         if self.multicast not in ("native", "replicated"):
             raise ValueError(f"mesh: multicast must be native or replicated")
@@ -232,12 +249,22 @@ class Mesh(Interconnect):
     def hops(self, a: int, b: int) -> float:
         return _manh(self.coord(a), self.coord(b))
 
-    def _route(self, src: Slot, dst: Slot) -> List[Slot]:
+    def _order_for(self, src_node) -> str:
+        """The dimension order one flow uses. o1turn (C63-f): the declared
+        parity rule -- even-indexed sources XY, odd YX (HUB counts even)."""
+        if self.routing != "o1turn":
+            return self.routing
+        return "xy" if (src_node is None or src_node == HUB
+                        or int(src_node) % 2 == 0) else "yx"
+
+    def _route(self, src: Slot, dst: Slot, order_kind: str = None) -> List[Slot]:
         """Grid points visited, dimension-order."""
+        kind = order_kind or (self.routing if self.routing != "o1turn"
+                              else "xy")
         x0, y0 = int(round(src[0])), int(round(src[1]))
         x1, y1 = int(round(dst[0])), int(round(dst[1]))
         pts = [(x0, y0)]
-        order = ((x1, "x"), (y1, "y")) if self.routing == "xy" \
+        order = ((x1, "x"), (y1, "y")) if kind == "xy" \
             else ((y1, "y"), (x1, "x"))
         cx, cy = x0, y0
         for target, axis in order:
@@ -257,10 +284,22 @@ class Mesh(Interconnect):
         """Segments are canonical (lo-hi); the tag records which way this
         route traverses each: "+" = lo->hi, "-" = hi->lo. Opposite-direction
         traffic on a full-duplex segment occupies different wires. A
-        node->hub route retraces the hub->node route (see the base class)."""
+        node->hub route retraces the hub->node route by default; with
+        reply="yx" it rides the opposite dimension order instead (C63-f)."""
         if b == HUB and a != HUB:
-            return reverse_directed(self.path_directed(HUB, a))
-        pts = self._route(self.coord(a), self.coord(b))
+            if self.reply == "retrace":
+                return reverse_directed(self.path_directed(HUB, a))
+            base = self._order_for(a)
+            up_kind = "yx" if base == "xy" else "xy"
+            pts = self._route(self.coord(a), self.coord(b), up_kind)
+            out = []
+            for p, q in zip(pts, pts[1:]):
+                lo, hi = sorted((p, q))
+                out.append((f"{self.NAME}:seg{lo}-{hi}",
+                            "+" if p == lo else "-"))
+            return out
+        pts = self._route(self.coord(a), self.coord(b),
+                          self._order_for(a if a != HUB else b))
         out = []
         for p, q in zip(pts, pts[1:]):
             lo, hi = sorted((p, q))
@@ -333,13 +372,16 @@ class Torus(Mesh):
         return (self._axis_count(0, int(round(x0)), int(round(x1))) * self._fold[0]
                 + self._axis_count(1, int(round(y0)), int(round(y1))) * self._fold[1])
 
-    def _route(self, src: Slot, dst: Slot) -> List[Slot]:
+    def _route(self, src: Slot, dst: Slot, order_kind: str = None) -> List[Slot]:
         """Dimension-order route with a per-axis wrap decision; the wrap
-        jump appears as one step from the edge slot to the opposite edge."""
+        jump appears as one step from the edge slot to the opposite edge.
+        order_kind (C63-f): the caller's dimension order (reply/o1turn)."""
+        kind = order_kind or (self.routing if self.routing != "o1turn"
+                              else "xy")
         pts = [(int(round(src[0])), int(round(src[1])))]
         cx, cy = pts[0]
         tx, ty = int(round(dst[0])), int(round(dst[1]))
-        order = ((0, tx), (1, ty)) if self.routing == "xy" else ((1, ty), (0, tx))
+        order = ((0, tx), (1, ty)) if kind == "xy" else ((1, ty), (0, tx))
         for axis, target in order:
             cur = cx if axis == 0 else cy
             w, lo = self._w[axis], self._lo[axis]
@@ -596,6 +638,278 @@ class Bus(Interconnect):
 
 
 # --------------------------------------------------------------------------- #
+class CMesh(Mesh):
+    """Concentrated mesh: k nodes share one router (C63-c, O19 item 3).
+
+    The commercial NoC's common form -- router area is amortised over a
+    tile of `concentration: [cx, cy]` nodes (k = cx x cy). Routers sit at
+    tile centers; a flow crosses its PRIVATE access link (emitted only
+    when the node is not co-located with its router center), rides the
+    dimension-order route over the ROUTER grid -- the physical length of
+    one router-grid step is the tile pitch (cx or cy slot units) -- and
+    descends the destination's access link. `[1, 1]` degenerates to mesh
+    exactly (pinned). The trade this weave prices: fewer routers, but k
+    nodes FUNNEL into each -- the concentration factor the readout
+    measures.
+    """
+
+    NAME = "cmesh"
+    PARAMS = {**Mesh.PARAMS,
+              "concentration": (False, "[cx, cy] router tile shape; "
+                                       "[1, 1] degenerates to mesh")}
+
+    def _setup(self):
+        super()._setup()
+        c = self.params.get("concentration", [1, 1])
+        self.cx, self.cy = int(c[0]), int(c[1])
+        if self.cx < 1 or self.cy < 1:
+            raise ValueError("cmesh: concentration entries must be >= 1")
+
+    def _router(self, coord: Slot) -> Tuple[int, int]:
+        return (int(coord[0]) // self.cx, int(coord[1]) // self.cy)
+
+    def _router_center(self, r: Tuple[int, int]) -> Slot:
+        return (r[0] * self.cx + (self.cx - 1) / 2.0,
+                r[1] * self.cy + (self.cy - 1) / 2.0)
+
+    def _endpoint(self, node: int):
+        """(router, access_distance). The HUB is ROUTER-RESIDENT (the GLB
+        injects at its router directly, the mesh-consistent semantics), so
+        it has no access link and no port share."""
+        c = self.coord(node)
+        r = self._router(c)
+        if node == HUB:
+            return r, 0.0
+        return r, _manh(c, self._router_center(r))
+
+    def hops(self, a: int, b: int) -> float:
+        if a == b:
+            return 0.0
+        ra, da = self._endpoint(a)
+        rb, db = self._endpoint(b)
+        grid = (abs(ra[0] - rb[0]) * self.cx + abs(ra[1] - rb[1]) * self.cy)
+        return da + grid + db
+
+    def router_hops(self, a: int, b: int) -> float:
+        """Router-grid CROSSINGS (C63-e addendum: item 3 left this
+        un-overridden -- a backbone step crosses ONE router over a tile
+        pitch of wire, so count != length; caught at hier_wide's contract
+        time, the packet guard now lists cmesh too). Access wires cross
+        no router."""
+        if a == b:
+            return 0.0
+        ra, _ = self._endpoint(a)
+        rb, _ = self._endpoint(b)
+        return float(abs(ra[0] - rb[0]) + abs(ra[1] - rb[1]))
+
+    def _attach(self, node: int, router, dist: float,
+                side: str) -> List[Tuple[str, str]]:
+        """A node's way onto its router: the PRIVATE access wire (when the
+        node is off the router center) plus -- the concentration cost's
+        actual carrier (C63-c amendment, filed BEFORE any readout ran) --
+        the SHARED router LOCAL PORT: k tile nodes share one router's
+        injection/ejection bandwidth, so the port resource is per tile and
+        direction-tagged. Emitted for k > 1 (at k = 1 the tile is one node
+        and mesh degeneration stays exact). The HUB attaches to no port."""
+        out = []
+        if node != HUB and dist > 0.0:
+            out.append((f"{self.NAME}:acc{node}", side))
+        if node != HUB and self.cx * self.cy > 1:
+            out.append((f"{self.NAME}:rport{router}", side))
+        return out
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        if a == b:
+            return []
+        ra, da = self._endpoint(a)
+        rb, db = self._endpoint(b)
+        out = self._attach(a, ra, da, "tx")
+        cur = ra
+        while cur != rb:
+            step_axis = 0 if (self.routing == "xy" and cur[0] != rb[0]) \
+                or (self.routing == "yx" and cur[1] == rb[1]) else 1
+            nxt = list(cur)
+            nxt[step_axis] += 1 if rb[step_axis] > cur[step_axis] else -1
+            nxt = tuple(nxt)
+            lo, hi = sorted((cur, nxt))
+            out.append((f"{self.NAME}:seg{lo}-{hi}", "+" if cur == lo else "-"))
+            cur = nxt
+        out += self._attach(b, rb, db, "rx")
+        return out
+
+    def path(self, a: int, b: int) -> List[str]:
+        return [r for r, _ in self.path_directed(a, b)]
+
+    def resources(self) -> List[str]:
+        seen = []
+        for i in range(len(self.slots)):
+            for r in self.path(HUB, i):
+                if r not in seen:
+                    seen.append(r)
+        return seen
+
+
+# --------------------------------------------------------------------------- #
+class HierWide(CMesh):
+    """FlooNoC-class hierarchical wide-link network (C63-e, O19 batch).
+
+    CMesh topology below, a WIDE MULTI-CHANNEL BACKBONE above: FlooNoC's
+    identity is multiple PHYSICAL channels rather than virtual ones, so
+    each backbone segment carries `channels: W` parallel physical wires
+    and a flow rides lane = (source node % W; HUB-sourced flows lane 0)
+    -- deterministic and declared. The local tier is the cmesh attach
+    (private access wire + the shared gateway port -- the concentration
+    funnel a wide backbone cannot rescue, which is exactly what the
+    fidelity readout measures). Degeneration chain: W = 1 == cmesh
+    exactly; W = 1 and tile [1, 1] == mesh exactly. Wire price: cmesh's
+    plus backbone x W (declared). The FlooNoC anchor bandwidth is PER
+    PHYSICAL CHANNEL (declared caliber).
+    """
+
+    NAME = "hier_wide"
+    PARAMS = {**CMesh.PARAMS,
+              "channels": (False, "W physical channels per backbone "
+                                  "segment (default 2); lane = source "
+                                  "node %% W, HUB lane 0")}
+
+    def _setup(self):
+        super()._setup()
+        self.channels = int(self.params.get("channels", 2))
+        if self.channels < 1:
+            raise ValueError("hier_wide: channels must be >= 1")
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        out = super().path_directed(a, b)
+        if self.channels == 1:
+            return out
+        lane = 0 if a == HUB else int(a) % self.channels
+        return [((r.replace(":seg", f":seg.c{lane}") if ":seg" in r else r),
+                 t) for r, t in out]
+
+
+# --------------------------------------------------------------------------- #
+class Express(Mesh):
+    """Mesh plus express links -- long shortcuts over the grid (C63-d).
+
+    The uniform, station-free family (LOCKED in the pre-registration: no
+    station-alignment degree of freedom): every row and column line
+    carries an express link from every position c to c + s. An express
+    link is s slot pitches of WIRE, so the physical distance of any route
+    equals the plain Manhattan distance -- express never saves wire
+    length; it saves ROUTER CROSSINGS (router_hops counts an express
+    traversal as one; the C60 count/length split's third appearance --
+    packet constants must read router_hops, the fabric guard enforces it)
+    and LOCAL-SEGMENT CONTENTION (long flows ride the express channels
+    and leave the unit segments to local traffic). The declared wire
+    price: one extra length-s link per position per covered line --
+    roughly doubling a line's wire on small grids; the price curve is
+    the readout. `skip` >= the axis extent degenerates to mesh exactly.
+    """
+
+    NAME = "express"
+    PARAMS = {**Mesh.PARAMS,
+              "skip": (False, "express jump length s in slots (default 2); "
+                              "s >= the axis extent means no links (mesh)")}
+
+    def _setup(self):
+        super()._setup()
+        self.skip = int(self.params.get("skip", 2))
+        if self.skip < 2:
+            raise ValueError("express: skip must be >= 2")
+
+    def hops(self, a: int, b: int) -> float:
+        return _manh(self.coord(a), self.coord(b))     # wire length unchanged
+
+    def router_hops(self, a: int, b: int) -> float:
+        n = 0.0
+        for _p, _q, _x in self._segments(a, b):
+            n += 1.0
+        return n
+
+    def _segments(self, a: int, b: int):
+        """(p, q, is_express) triples along the dimension-order greedy route."""
+        if a == b:
+            return
+        cur = [int(round(self.coord(a)[0])), int(round(self.coord(a)[1]))]
+        tgt = (int(round(self.coord(b)[0])), int(round(self.coord(b)[1])))
+        order = (0, 1) if self.routing == "xy" else (1, 0)
+        for axis in order:
+            while cur[axis] != tgt[axis]:
+                d = tgt[axis] - cur[axis]
+                step = self.skip if abs(d) >= self.skip else 1
+                step = step if d > 0 else -step
+                p = tuple(cur)
+                cur[axis] += step
+                yield p, tuple(cur), abs(step) >= self.skip
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        out = []
+        for p, q, xp in self._segments(a, b):
+            lo, hi = sorted((p, q))
+            kind = "xp" if xp else "seg"
+            out.append((f"{self.NAME}:{kind}{lo}-{hi}", "+" if p == lo else "-"))
+        return out
+
+    def path(self, a: int, b: int) -> List[str]:
+        return [r for r, _ in self.path_directed(a, b)]
+
+
+# --------------------------------------------------------------------------- #
+class Switch(Interconnect):
+    """Non-blocking switch up to port bandwidth -- the weave that is
+    placement-irrelevant BY CONSTRUCTION (C63-b, the O19 batch item 2).
+
+    Real-world identity: package-level NVSwitch-class switches, fully
+    custom die-to-die crossbar fabrics. (Repo naming rule: this class is
+    `switch`, never "crossbar" -- a crossbar is always the ReRAM array.)
+
+    Semantics: any port pair communicates at full port bandwidth with no
+    shared internal resource, so WHERE a node sits cannot matter -- the
+    ceiling reference against which every placement-sensitive weave is
+    measured, and the fabric that buys off placement sensitivity outright.
+    THE PRICE IS DECLARED HERE AND ENTERS NO ACCOUNT: internal wiring
+    grows as N^2 (every port pair a path); this platform prices ports and
+    declared end-to-end constants only -- the N^2 area/wiring cost is the
+    identity's stated trade, for the "switch vs mesh" decision to weigh.
+
+    Port bandwidth is the ONLY first-order parameter (the level's link
+    bandwidth field). There is NO internal hop concept: hops(a, b) is the
+    declared end-to-end constant (param `hops`, default 1.0; 0 for a = b),
+    and energy_hops / router_hops inherit it -- energy is priced per port
+    traversal at that constant. A flow a -> b occupies a's port (TX) and
+    b's port (RX); the duplex split keys the two directions, so occupancy
+    is per-port volume -- non-blocking up to port bandwidth, verbatim.
+    """
+
+    NAME = "switch"
+    PARAMS = {"hops": (False, "declared end-to-end constant per transfer "
+                              "(latency/energy caliber; default 1.0)")}
+
+    def _setup(self):
+        self._hops = float(self.params.get("hops", 1.0))
+
+    def hops(self, a: int, b: int) -> float:
+        return 0.0 if a == b else self._hops
+
+    def _port(self, node: int) -> str:
+        return f"{self.NAME}:port{'HUB' if node == HUB else node}"
+
+    def path(self, a: int, b: int) -> List[str]:
+        if a == b:
+            return []
+        return [self._port(a), self._port(b)]
+
+    def path_directed(self, a: int, b: int) -> List[Tuple[str, str]]:
+        if a == b:
+            return []
+        return [(self._port(a), "tx"), (self._port(b), "rx")]
+
+    def resources(self) -> List[str]:
+        return [self._port(HUB)] + [self._port(i)
+                                    for i in range(len(self.slots))]
+
+
+# --------------------------------------------------------------------------- #
 _FLIP = {"dn": "up", "up": "dn", "+": "-", "-": "+", "": ""}
 
 
@@ -653,7 +967,11 @@ register(HTree)
 register(Bus)
 register(Torus)
 register(Ring)
+register(Switch)
+register(CMesh)
+register(Express)
+register(HierWide)
 
 #: schemes whose folded build splits router count from physical length --
 #: fabric validation refuses packet parameters on these levels (C60 clause 1)
-FOLDED_SCHEMES = ("torus", "ring")
+FOLDED_SCHEMES = ("torus", "ring", "express", "cmesh", "hier_wide")

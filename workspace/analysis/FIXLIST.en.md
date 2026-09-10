@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 354 pass + 0 expected-fail (slow adds group 38), which is
+(`python3 tests/run_tests.py`; currently 371 pass + 0 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -1363,12 +1363,12 @@ current owner and its open items. Bold items move current conclusions.
 | per-op mapping | over-capacity residency policy | three explicit mechanisms + closed-form tiler (C12) | input-row split untested (O15); dynamic ops (O14) |
 | per-op placement | weight blocks -> macro/core/crossbar | Placement object + sequential fill; rankings measured, and in joules since C58-c (one per-leaf constant, orders exact) | search (S3); DR-1 swaps the derived prices |
 | per-op placement | shared-buffer attach point | scheme parameter; the hub lever is GATED by grid width (C28: nil on the fill-exact 2x4, 1.67x on the 3x3 variant); the soft heaviest-block lever survives every grid (1.5-2x) | search (S3); the anchored soft-lever table = plan step 2 |
-| on-die wiring | interconnect organisation | scheme registry: star/mesh/tree/bus per level; full-duplex per-direction wires, bus shared (C17); bus/h-tree energy wire models (C59); folded torus + ring with the count/length accessor split (C60) | O19 queue remainder (express links, duplex split, FlooNoC-class, routing-algorithm asymmetries) |
+| on-die wiring | interconnect organisation | scheme registry: TEN schemes (star/mesh/h_tree/bus + torus/ring C60 + switch/cmesh/hier_wide/express C63) with reply/o1turn knobs; full-duplex per-direction wires (C17), bus shared; energy wire models (C59); count/length accessor split with the packet guard over five schemes (C60/C63) | O19 CLOSED -- nothing queued; real layouts swap the declared constants |
 | on-die wiring | transfer paradigm | paradigm -> tier mapping in the registry (C26: DMA/shared-SRAM -> the T1 hub axis, compile-time scheduled -> star, NoC -> mesh); `schedule_slack` input (C29); the T1 hub axis itself in analytic closed form (C34) | -- |
 | cross-die mapping | dies per op and split dimension | tiling planner (power-of-two aware, residency enforced) | cross-die addition path unexercised (O15); utilisation loss quantified, not optimised |
 | cross-die mapping | layer/op -> die granularity | feasible 48-die config, two dies/layer (C13); co-resident per-op mapping (C14); the 2,048-token attention context ceiling computed and runtime-guarded (C38) | half-partition is an assumption (register) |
 | cross-die placement | die-group seating on the package | the block's die-sets seated disjointly, three styles (C23) | whole-model seating (**O16**); search (S4) |
-| cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17); producer-to-consumer routing, the tensor once (C23); ring/torus ordering-spread readout at the die level (C60: weave lever 3.4x on the ordering-penalty axis) | O19 queue remainder applies |
+| cross-die wiring | package interconnect organisation | same registry one level up, GRS-anchored, full-duplex (C17); producer-to-consumer routing, the tensor once (C23); ring/torus ordering-spread readout at the die level (C60: weave lever 3.4x); switch = the computable placement-irrelevant D2D option (C63) | O19 CLOSED; DR-3/real package data swap constants |
 | traffic accounting | multicast/reduction structure and units | v1 structured traffic in VALUE units (C25: reads / bit-slice, bit and cell-column factors; reassembly guard); down/up components kept, partial sums at 16 bits on wires (C17); the hyperedge membership convention confirmed at the loop-nest level (C38) | partial-sum width in the ENERGY overlay (transport <2% of energy) |
 | traffic accounting | cross-die traffic classes | hidden-state hand-offs + intra-op slices + the offload streams to the attach point (C21); elementwise operators move through the glb only (C19, stated) | host I/O streams |
 | contention | bandwidth & queueing model | two tiers; overlap published as a max/sum bracket (C16), off by default; the max end stated as the bound it is (C29: exact for star / bus, a lower bound for routed grids; `schedule_slack` >= 1 for schedules that cannot reach it); the T1 hub axis analytic in value units, Timeloop's counter-unit throttling kept as validation-only (C34); the PACKET bracket on NoC-paradigm links (C46: [pipelined bound, round-serialized end], explicit link fields, off on every production config) | BookSim residual measurement = plan step 4 (NoC paradigm only) |
@@ -1380,7 +1380,7 @@ current owner and its open items. Bold items move current conclusions.
 | calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 354 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 371 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -1404,7 +1404,7 @@ P1 device axis), state the model's semantics (P1), then run the search (P3).
 | ~~O15~~ RESOLVED (A2/C61) | was: the input-row split never exercised end to end | measured: a load-relocation valve between levels (on-die relaxes up to 4x, the bill moves to the psum-dominated die edge; two-level statement is the hard rule); underfull direction refuted except C-heavy shapes; ffn1 identity sentinel pinned (group 46) | coverage |
 | O1 | ~~core/crossbar links carry no energy~~ CLOSED (C58: derived prices, overlay column 1.11% of ffn1; rankings in joules with orders exact; the last xfail promoted) | DR-1 replaces the derived prices outright (a constant swap) | DR-1 input |
 | O8 | ~~bus energy charged by distance-to-driver~~ CLOSED (C59: per-scheme energy wire models -- bus = whole serpentine line, h-tree = registered physical table; the artifact tie retired, span 1.007x -> 1.057x) | real layout lengths swap the example constants | model quality |
-| O19 | ~~four interconnect schemes only~~ torus + ring LANDED (C60, folded models, count/length split; hub lever zeroed by topology, weave lever 3.4x on ordering penalty, the ring flip booked) | queue remainder: express links, duplex split, FlooNoC-class, routing-algorithm params | extensibility |
+| ~~O19~~ CLOSED (C60 + C63 batch) | was: four interconnect schemes only | ten schemes: + torus/ring (C60), switch, cmesh, hier_wide, express + reply/o1turn knobs (C63); every addition with degeneration short tests; five count/length-split schemes under the packet guard; the batch's findings: switch = the computable placement-irrelevance ceiling, cmesh k* crossover, express = an absolute valve not a sensitivity antidote, hier_wide = poured readings right numerically wrong structurally, reply knob provably inert in the busiest-wire account | extensibility |
 | ~~O16~~ MEASURED under the static-spread hypothesis (A4/C62-b) | was: whole-model deployment never simulated jointly | one measured flat seating (544 dies, 17/layer x 32): whole vs block x 32 = +1.27% latency at GRS (+12% at 0.1 GB/s), +1.83% energy -- geometry-dominated increment, the ~4% D2D share cited with its geometry attached; hybrid residency = decision-layer future work; the seating is the S4 test payload | scale extension (outside the v5 paper) |
 | ~~O20~~ | tier-L seated one block at a time | subsumed by O16, now measured (A4/C62-b): the published block rows ARE the lower bound, and the whole-machine surcharge is quantified (+1.27% latency at GRS) | honesty debt (captioned, now quantified) |
 | ~~O14~~ CLOSED at the declaration tier (A3/C62-a) | was: over-capacity K/V has no policy | O21 gate gained the opt-in window mode (truncate + the verbatim semantics note: equivalent sliding-window attention, accuracy outside scope); validity domain re-stated (S<=2048 full attention / any S windowed, declared); eviction + tiered residency archived as un-built design space awaiting product intent -- no machinery, no pricing, no scans | scale extension (outside the v5 paper) |
@@ -2115,10 +2115,17 @@ extension-by-construction: a new scheme only answers three questions (how
 far between two points, which wires a flow occupies, what wires exist).
 Worth queueing, roughly in order of payoff: torus (wrap-around mesh,
 removes the edge-long paths that make the corner placements expensive),
-ring, express links (skip connections over the mesh), direction-split
-full-duplex links (today up- and down-traffic share each wire -- a
-conservative 2x), hierarchical wide-link networks of the FlooNoC class, and
-routing-algorithm parameters (adaptive vs fixed order). Each lands as one
+ring, express links (skip connections over the mesh), ~~direction-split
+full-duplex links~~ (RETIRED C63-a: this sentence predated O22 and was
+never synced -- the direction-split account LANDED at O22/O23
+(2026-08-21, v2->v3), every published multiplier was re-pinned on it
+then, the resolved-items table has carried "~~O22 shared-direction
+wires~~ RESOLVED (C17)" all along, and duplex=False survives only as
+the explicit pre-O22 comparison knob in tests; the O19 batch plan's
+duplex item was misled by this line and is CLOSED-AS-ALREADY-DONE with
+an EMPTY moving-pins list), hierarchical wide-link networks of the
+FlooNoC class, and routing-algorithm parameters (adaptive vs fixed
+order). Each lands as one
 class in `interconnect.py` plus its hand-derived identity tests; every
 existing analysis then sweeps it for free.
 
@@ -2249,6 +2256,271 @@ Conclusion-level ledger: every frozen claim untouched (production
 on-die insensitivity, the 12-19x band -- mesh-caliber, identity
 unchanged, soft lever 1.4-2x); all changes in the design-implication
 layer, the expected shape of A7's stocking-for-search.
+
+O19 BATCH (2026-09-09, C63; hard deadline 9/16 -- the writing month
+does not yield). TWO QUALITATIVE RULINGS, filed before execution:
+(1) THE WEAVE NEVER ENTERS THE SEARCH'S VARIABLE SET. Fabrics are the
+hardware side -- they move boundary lines and serve design-
+exploration users; the search's variables are soft placement only.
+At most the search RE-RUNS under different weave conditions -- that
+is condition enumeration (semantically S6's adjudication territory),
+not a search dimension. This sentence is the principle the search
+milestone's space definition cites. (2) ADDING REAL WEAVES =
+INSTRUMENT-SIDE completion. Each real weave buys the same three
+things: another redemption of the paradigm-configurable claim, a new
+line on the phase diagram, one more control arm for the die-level
+ordering/seating readouts. It does NOT testify for the paper's claims
+(no evidence chain stands on a new weave); it is
+what-the-platform-covers material.
+ITEM 1 (duplex) -- RE-VERDICT AFTER THE MANDATED INVENTORY:
+CLOSED-AS-ALREADY-DONE, moving-pins list EMPTY. The direction-split
+account landed at O22/O23 and every published multiplier was
+re-pinned on it then; the resolved-items table said so all along.
+Residue fixed this round: the stale O19 queue sentence (retired above
+in place), the stale Mesh docstring ("segments are undirected"), and
+one confirmation pin (the DUPLEX contract per scheme + the split
+actually keying occupancy resources). Zero account movement; the
+premise correction is itself the item's result.
+ITEM 2 (switch weave) PRE-REGISTRATION (filed before code,
+2026-09-09): CONTRACT -- class `Switch` (the repo naming rule stands:
+"crossbar" is always the ReRAM array); real-world identity =
+package-level NVSwitch-class switches / fully custom die-to-die
+crossbars; semantics = NON-BLOCKING UP TO PORT BANDWIDTH, i.e. the
+weave that is placement-irrelevant BY CONSTRUCTION. Port bandwidth is
+the ONLY first-order parameter (the level's existing link bandwidth
+field); NO internal hop concept -- hops(a, b) is a declared
+end-to-end constant (param, default 1.0; 0 for a = b), and
+energy_hops/router_hops inherit it (C59/C60 identities hold
+trivially); a flow a->b occupies a's port TX and b's port RX (the
+duplex split keys them), so occupancy = per-port volumes; THE N^2
+WIRING COST IS DECLARED IN THE IDENTITY DOCSTRING AND ENTERS NO
+ACCOUNT. SHORT TESTS: placement-irrelevance IS the topology test
+(any seating permutation -> identical occupancy readouts); the
+star-degeneration identity (for hub-rooted flows, switch occupancy
+== star occupancy: star is the idealized unlimited-bandwidth switch,
+its own docstring says so). EXPECTATIONS, pre-written: every
+die-level ordering/seating readout collapses to EXACTLY 1.00 spread
+under switch (constructive, both calibers -- count and physical);
+on the phase diagram it is a horizontal ceiling line; the busiest
+"wire" is the busiest PORT. The company sentence this buys: the
+"switch vs mesh" decision becomes computable -- the price of buying
+off placement sensitivity outright is N^2 wiring, and both sides of
+that trade now have numbers. Readout + figure: the die-level three
+orderings x {mesh, ring, torus, switch} comparison (switch a flat
+line), repo PNG with a committed generator.
+ITEM 2 DONE 2026-09-09 (C63-b). Both pre-registered expectations
+landed EXACTLY: the switch's ordering spread is 1.00 in both calibers
+(the three control arms read their pinned 6.55x / 12.26x / 3.57x
+beside it) and the busiest port carries identical crossings under
+every ordering -- placement-irrelevance measured, not asserted.
+Figure: analysis/switch_ordering.png (committed generator). ONE
+PRE-REGISTRATION REFINEMENT, caught at test-writing time, before any
+published sentence: the star-degeneration identity holds for
+NODE-TO-NODE flows (die hand-offs, the weave's habitat -- load
+multisets and bottleneck equal, pinned); for HUB-ROOTED flows the
+switch honestly FUNNELS through its single hub port (8 x 100 -> 800
+vs star's private 100 -- star is the N-port idealization, its own
+docstring says so); both faces pinned (group 48). The N^2 wiring
+price is declared in the class identity and enters no account.
+ITEM 3 (CMesh) PRE-REGISTRATION (filed before code, 2026-09-09):
+CONTRACT -- class `CMesh(Mesh)`, the concentrated mesh (commercial
+NoCs' common form: k nodes share one router). Param `concentration:
+[cx, cy]` = the router tile shape (k = cx x cy); routers sit at tile
+centers; a flow goes node -> its router (a PRIVATE access link,
+emitted only when the node is not co-located with its router center)
+-> dimension-order route over the ROUTER grid (physical distance
+between adjacent routers = the tile pitch, slot units) -> router ->
+node. [1, 1] DEGENERATES TO MESH EXACTLY -- the short test: hops
+equal for every pair including HUB, occupancy bottleneck and shared-
+segment load multiset equal. EXPECTATIONS, pre-written, direction
+unique: the CONCENTRATION FACTOR (busiest shared-segment load on the
+uniform hub-rooted flows, the pinned busiest-wire table's machinery)
+rises MONOTONICALLY with k -- more nodes funnel per router; the
+boundary band sits above mesh's for every k > 1. Readout + figure:
+busiest-wire load and mean hops vs k in {1, 2, 4, 8} on the 2x4
+macro grid (8 slots: k=8 is the single-router funnel extreme), repo
+PNG with a committed generator.
+ITEM 3 DONE 2026-09-09 (C63-c). ONE PRE-REGISTRATION AMENDMENT,
+filed at implementation time BEFORE any readout ran: our occupancy is
+a WIRE account, but CMesh's concentration cost physically lives at
+the ROUTER LOCAL PORT (k tile nodes share one router's injection/
+ejection bandwidth) -- a wire-only model would let the funnel vanish
+at high k (all-private access links) and the monotonicity expectation
+would have flipped for the wrong reason. Amended contract: a shared
+per-tile port resource carries the funnel (emitted for k > 1; the
+HUB is router-resident, mesh-consistent, and attaches to no port).
+RESULTS, all expectations landed: k=1 degenerates to mesh EXACTLY
+(hops equal on every pair incl. HUB, busiest 4.0 = the pinned grid
+funnel, zero extra resources); port load = k EXACTLY (2/4/8,
+monotone by construction); the overall bottleneck reads 4.0 / 4.0 /
+4.0 / 8.0 over k = 1/2/4/8 -- ON THIS GRID CONCENTRATION IS FREE UP
+TO k* = 4 (the router funnel stays under the grid funnel; tie at 4)
+AND BINDING BEYOND (k = 8, the single-router extreme, doubles the
+bottleneck and the binding resource is the port). The design
+sentence this buys: "how many nodes per router is free" is now a
+computed crossover, not a rule of thumb. Figure:
+analysis/cmesh_concentration.png (committed generator); pins group
+48 (+3).
+OPTIONAL ITEM (express links) PRE-REGISTRATION (trigger met --
+items 2-3 closed fast; filed before code, 2026-09-09). THE TWO FREE
+PARAMETERS, LOCKED: (1) the FAMILY is uniform and station-free --
+every row and column line carries an express link from every position
+c to c + s (no "station alignment" hidden degree of freedom; the
+honestly higher wire price is declared); (2) SKIP s is the only
+parameter; s >= the axis extent means zero links and EXACT mesh
+degeneration (short test). CALIBERS: an express link is s slot
+pitches of wire, so PHYSICAL hops == the Manhattan distance, equal to
+mesh pair-by-pair (asserted -- express saves router crossings and
+local-segment contention, never wire length); router_hops counts one
+per express traversal -- the THIRD appearance of the C60 count/length
+split, and the packet guard's folded-scheme list gains "express".
+WIRE PRICE (the curve's x axis, closed form, declared): mesh line
+wire normalised to 1; express adds (addable links x s) per covered
+line; torus = x2 on folded axes; switch = the N^2 class.
+EXPECTATIONS, two-handed: the corner/centre lever (the pinned 5/3 on
+the 3x3) compresses toward 1 but NOT to 1 (a partial antidote);
+count means strictly drop wherever an axis distance >= s; physical
+means identical to mesh. PRE-WRITTEN RISK: on the 3x3 the express
+wire price lands exactly at torus's 2.0x -- if torus dominates
+express at equal price there (1.00 vs partial), "on small grids the
+fold dominates the shortcut" IS the finding, booked as such; the
+shortcut's habitat is expected at larger extents (the 6x8 die host,
+s in {2, 3, 4}). POSITIONING: the price curve of hub-insensitivity
+-- scatter of (wire price, corner/centre lever) over {mesh,
+express(s), torus, switch} on both hosts, extending A7's verdict
+from two antidotes to a spectrum.
+OPTIONAL ITEM DONE 2026-09-09 (C63-d). Readouts, both hands booked
+(figure: analysis/express_price_curve.png). 3x3 host: the pre-written
+risk landed as an EXACT TIE, not dominance -- express s=2 and torus
+both zero the lever (1.000, busiest 3/3) at the same 2.0x wire price:
+on the small host the shortcut and the fold are the same medicine at
+the same price. 6x8 host, THE UNREGISTERED FINDING: express s=2 makes
+the hub LEVER WORSE (2.000 vs mesh's 1.667) while improving BOTH
+absolutes (centre 24 -> 16, corner 40 -> 32) -- a sensitivity RATIO
+can degrade under relief that helps the centre more; the lever is
+non-monotone in s (2.0 / 1.5 / 1.0 over s = 2/3/4); and TORUS
+DOMINATES every express variant on this host (lever 1.000 at 2.0x
+wire, at or below every express price). The pre-registered
+"compresses toward 1 but not to 1" was wrong in BOTH directions
+(exact 1.000 on the 3x3; worse on the 6x8) -- booked. The honest
+spectrum sentence, replacing the planned one: express is NOT a
+reliable sensitivity antidote -- it is an ABSOLUTE-decompression
+valve (the only weave whose centre-hub busiest drops below mesh:
+16 < 24), while the FOLD is the dominant sensitivity antidote at 2x
+wire and the switch pays the N^2 class for the same lever plus
+node-to-node flatness. Group 48 +3 pins (contract/degeneration, the
+packet-guard extension, the curve findings).
+QUEUED-CONDITIONAL ITEM A (FlooNoC-class hierarchical wide links)
+PRE-REGISTRATION (trigger met; filed before code, 2026-09-09).
+ADDENDUM CAUGHT AT CONTRACT TIME: CMesh's backbone step crosses one
+router over a tile pitch of wire -- count != length -- but item 3
+left router_hops un-overridden (returning physical) and the packet
+guard did not list cmesh; FIXED with this item (CMesh.router_hops =
+router-grid crossings + the guard gains cmesh and hier_wide).
+CONTRACT, locked: class `hier_wide` = CMesh topology + a WIDE
+MULTI-CHANNEL BACKBONE -- FlooNoC's identity is multiple PHYSICAL
+channels (not virtual): each backbone segment carries `channels: W`
+parallel physical channels; a flow rides lane = (source node % W,
+HUB-sourced = lane 0) -- deterministic, declared. Local tier = the
+cmesh attach (private access wire + the shared gateway port, the
+k-funnel carrier). DEGENERATION CHAIN, both pinned: W = 1 == cmesh
+exactly; W = 1 AND tile [1,1] == mesh exactly. WIRE PRICE declared:
+cmesh's + backbone x W. ANCHOR CALIBER declared: the FlooNoC
+80.6 GB/s (post-layout) is PER PHYSICAL CHANNEL; W channels = W x
+anchor backbone capacity. Declared-example instance: tile [2,2],
+W in {1, 2, 4} -- no product basis, same provenance class as every
+declared geometry.
+EXPECTATIONS, two-handed: (a) backbone channel relief -- the busiest
+backbone channel's load splits ~evenly by the lane rule (exact for
+uniform sources); (b) THE FIDELITY QUESTION the item exists for: at
+the FlooNoC anchor bandwidth on the ffn1 macro flows, the
+native-structure serialization vs the mesh-poured baseline -- hand
+one: the wide backbone relieves (native <= poured); hand two: the
+LOCAL tier's gateway funnel (k = 4) binds instead and native READS
+WORSE -- in which case the fidelity upgrade's value is precisely
+revealing that a wide backbone cannot rescue a concentrated local
+tier, and the "anchor number poured into a mesh" reading was
+optimistic on structure. Either hand upgrades the digital control
+tier from a poured number to a placeable structure.
+ITEM A DONE 2026-09-09 (C63-e). THE THIRD OUTCOME, neither
+pre-written hand (figure: analysis/hier_wide_fidelity.png): every
+hier_wide variant TIES the poured-mesh reading numerically (4.000x
+vs the star floor, ffn1 flows at the 80.6 GB/s-per-channel anchor)
+-- but the BINDING RESOURCE MIGRATES: mesh binds on a grid segment,
+hier_wide binds on the LOCAL GATEWAY PORT (the k = 4 funnel) at
+every W, and widening the backbone W = 1 -> 4 changes NOTHING (its
+width cannot be consumed on this host). The tie itself is this
+host's funnel coincidence (grid 4 == gateway 4). The fidelity
+sentence, which IS the item's deliverable: the poured-mesh reading
+of the FlooNoC anchor was RIGHT NUMERICALLY AND WRONG STRUCTURALLY
+-- the digital control tier now names where its constraint sits (the
+concentrated local tier, not the wide backbone), which no poured
+number could say. Degeneration chain pinned (W=1 == cmesh modulo
+prefix; +[1,1] == mesh); lane rule pinned (src %% W, HUB lane 0);
+the CMESH ADDENDUM landed (router_hops = router-grid crossings; the
+packet guard lists cmesh and hier_wide -- five count/length-split
+schemes now). Group 48 +3 pins.
+QUEUED-CONDITIONAL ITEM B (routing-algorithm params)
+PRE-REGISTRATION (filed before code, 2026-09-09; the occupancy-side
+completeness debt -- the XY-vs-YX reply asymmetry has been on record
+in the base-class docstring since O22). CONTRACT: two Mesh params,
+both DEFAULT-NEUTRAL (the defaults reproduce today's paths verbatim
+-- zero pins move): (1) `reply: "retrace"` (default; node->hub
+retraces the hub->node route, the pre-O19 behavior) | `"yx"` (replies
+ride the OPPOSITE dimension order, the common real-NoC form -- up
+load lands on segments the down route never uses); (2) `routing`
+gains `"o1turn"` -- the balanced dimension-order model, DECLARED as
+the parity rule (flows from even-indexed sources route XY, odd YX;
+deterministic; the 50/50-split oracle would need fractional paths the
+interface does not carry -- the parity form is the honest static
+stand-in and is labeled so). EXPECTATIONS, two-handed: under the
+full-duplex account the down side is untouched by the reply choice;
+YX replies move the UP load onto disjoint segments, so (a) when the
+up side binds (psum-weighted up, x2), the busiest wire DROPS; (b)
+when the down side binds (up at 0.5), the overall number does NOT
+move -- the debt only pays where partial sums dominate. Readout on
+both weights, both hosts (2x4, 3x3), o1turn rows alongside; figure.
+ITEM B DONE 2026-09-09 (C63-f) -- and the debt closed more
+decisively than planned, by THREE stacked findings (figure:
+analysis/routing_params.png): (1) THE PATH IDENTITY, caught by the
+pin's own first draft: for hub flows, retrace-of-XY IS the YX path
+(a single-bend dimension-order route walked backwards runs y-then-x)
+-- the reply knob is PATH-IDENTICAL on its entire hub-flow domain,
+pinned as equality. (2) THE SINK-FUNNEL INVARIANT: even where paths
+could differ, a sink-convergent pattern's busiest wire is fixed by
+conservation at the sink's incident segments -- every reply variant
+ties on every tested pattern and weight. The on-record XY/YX reply
+asymmetry therefore CANNOT move any busiest-wire number in this
+account; where routing algorithms could matter is the queueing tier,
+explicitly outside the O26 bound. (3) The o1turn PARITY stand-in
+(the declared model; the fractional 50/50 oracle does not fit the
+one-path-per-flow interface) NEVER beats plain XY on any tested
+pattern and often doubles the busiest wire (all-pairs 12 vs 8 and
+9 vs 6; mirror 4 vs 2 and 2 vs 1) -- it ships as a condition-
+enumeration arm carrying this warning, never as an optimization.
+Both knobs are default-byte-neutral (the full-suite gate ran green
+before any readout; a Torus._route signature mismatch surfaced by
+the gate was fixed in the same edit). The pre-written hand "YX
+replies relieve where the up side binds" is REFUTED and the
+refutation pinned. Group 48 +2 pins.
+BATCH CLOSED 2026-09-09: items 1-3, the optional, and both
+queued-conditional items all executed inside the 9/16 deadline --
+NOTHING remains queued on O19. The registry stands at ten schemes
+(star, mesh, h_tree, bus, torus, ring, switch, cmesh, hier_wide,
+express + the routing/reply knobs), every one carrying topology and
+degeneration short tests, five of them under the count/length packet
+guard. OPTIONAL express links only if 2-3 close fast (pre-register
+hop distance + placement rows first; positioning: the price curve of
+hub-insensitivity, extending A7's torus verdict from two antidotes to
+a spectrum). QUEUED-CONDITIONAL (not deferred; trigger = items 2-3 +
+optional done AND before 9/16): FlooNoC-class hierarchical wide links
+(upgrades the digital control tier from "an external anchor number
+poured into a mesh" to a placeable, sweepable real structure) and
+routing-algorithm params (YX replies / adaptive -- occupancy-side
+completeness debt; the XY/YX asymmetry is on record). Discipline:
+post-v6 files, pure addition, per-weave topology + degeneration
+short tests, expectations pre-written, flips booked; frozen_v6 and
+both tex untouched; SUMMARY zh/en one line per item at closeout.
 
 ### O20. The 2.7B layers are seated one block at a time
 

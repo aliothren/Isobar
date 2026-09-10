@@ -1518,3 +1518,153 @@ scripts/analyze_full_model_seating.py -> a4_full_model.{json,md};
 tests/test_full_model_seating.py (group 47, 6 tests). O16 MEASURED
 under the hypothesis; O20's captioned debt quantified. Fast suite:
 354 / 0 xfail.
+
+## C63-a (2026-09-09) -- O19 batch opened; item 1 (duplex) closed-as-already-done
+
+The batch's two qualitative rulings filed (the weave never enters the
+search's variable set -- condition enumeration, not a dimension; new
+weaves are instrument-side completion, not paper evidence). Item 1
+executed as its own mandated inventory demanded (the moving-pins list
+delivered BEFORE code): the list came back EMPTY -- the direction-
+split full-duplex account has been live since O22/O23 (2026-08-21),
+every published multiplier was re-pinned on it that round, the
+resolved-items table has said "O22 RESOLVED (C17)" all along, and
+duplex=False survives only as the explicit pre-O22 comparison knob in
+tests. The batch plan's item rested on a stale sentence in the O19
+archive that was never synced. Residue fixed: that sentence retired
+in place, the stale Mesh docstring ("segments are undirected")
+corrected, and one confirmation pin added (group 44: the DUPLEX
+contract per scheme, the split keying live occupancy resources, the
+merge knob demonstrably piling both directions on one wire). Zero
+account movement; the premise correction is the item's result. Items
+2 (switch) and 3 (CMesh) queued; express links optional; FlooNoC-
+class + routing params queued-conditional with the 9/16 deadline.
+Fast suite: 355 / 0 xfail.
+
+## C63-b (2026-09-09) -- O19 batch item 2: the switch weave
+
+The registry gains `Switch` (repo naming rule: never "crossbar" --
+that is the ReRAM array): non-blocking up to port bandwidth, the
+weave that is placement-irrelevant BY CONSTRUCTION. Port bandwidth is
+the only first-order parameter; hops is a declared end-to-end
+constant (param, default 1.0) inherited by energy_hops/router_hops
+(C59/C60 identities trivial); a flow occupies its endpoints' TX/RX
+ports under the duplex split; THE N^2 WIRING PRICE IS DECLARED IN THE
+IDENTITY AND ENTERS NO ACCOUNT. Both pre-registered expectations
+landed exactly: ordering spread 1.00 in both calibers (control arms
+6.55x/12.26x/3.57x beside it) and identical busiest-port crossings
+under every ordering -- placement-irrelevance measured. One
+pre-registration refinement, caught at test-writing time before any
+published sentence: the star-degeneration identity holds for
+NODE-TO-NODE flows (pinned equal multisets + bottleneck); hub-rooted
+flows FUNNEL through the switch's single hub port (800 vs star's
+private 100 -- star is the N-port idealization); both faces pinned.
+The company sentence: the "switch vs mesh" decision is computable --
+N^2 wiring buys off placement sensitivity outright. New:
+interconnect.Switch; scripts/analyze_switch_weave.py ->
+switch_weave.{json,md} + switch_ordering.png; tests/test_o19_batch.py
+(group 48, 5 tests). Fast suite: 360 / 0 xfail.
+
+## C63-c (2026-09-09) -- O19 batch item 3: CMesh
+
+The registry gains `CMesh(Mesh)` -- the concentrated mesh, k nodes
+per router (param concentration [cx, cy]; routers at tile centers;
+router-grid steps cost the tile pitch; [1,1] degenerates to mesh
+EXACTLY, pinned on every pair including the HUB with zero extra
+resources). One pre-registration amendment, filed at implementation
+time before any readout: the concentration cost's physical carrier is
+the ROUTER LOCAL PORT (k tile nodes share one router's injection/
+ejection bandwidth), not a wire -- a wire-only account would have let
+the funnel vanish at high k; the amended contract adds the shared
+per-tile port resource (k > 1 only; the HUB is router-resident and
+port-free). All amended expectations landed: port load = k exactly
+(monotone by construction), and the overall bottleneck reads
+4.0/4.0/4.0/8.0 over k = 1/2/4/8 on the uniform hub-rooted flows --
+concentration on the 2x4 grid is FREE up to the computed crossover
+k* = 4 and binding beyond (at k = 8 the port is the bottleneck
+resource). The design sentence: "how many nodes per router is free"
+is a computed crossover, not a rule of thumb. New: interconnect.CMesh;
+scripts/analyze_cmesh.py -> cmesh_weave.{json,md} +
+cmesh_concentration.png; group 48 +3 tests. Fast suite: 363 / 0 xfail.
+
+## C63-d (2026-09-09) -- O19 optional item: express links; the batch's main body complete
+
+The registry gains `Express(Mesh)` under the LOCKED family (uniform,
+station-free: every line position carries a link to c + s; no station-
+alignment degree of freedom; skip >= extent degenerates to mesh
+exactly, pinned). Calibers: physical hops == Manhattan == mesh
+pair-by-pair (asserted -- express never saves wire, it saves router
+crossings and local-segment contention); router_hops counts one per
+express traversal -- the count/length split's third appearance, and
+the fabric packet guard now lists express beside torus/ring. The
+price-curve readout (corner/centre hub lever vs declared wire price,
+two hosts) replaced the planned spectrum sentence with better ones,
+both hands booked: on the 3x3 the pre-written risk landed as an EXACT
+TIE (express s=2 == torus: lever 1.000 at 2.0x wire); on the 6x8 the
+UNREGISTERED FINDING -- express s=2 makes the lever WORSE (2.000 vs
+mesh 1.667) while improving both absolutes (24->16, 40->32), the
+lever is non-monotone in s (2.0/1.5/1.0), and torus dominates every
+express variant. The pre-registered "compresses toward 1 but not to
+1" was wrong in both directions -- booked. The honest sentence:
+express is an ABSOLUTE-decompression valve (the only weave whose
+centre-hub busiest drops below mesh), not a sensitivity antidote; the
+fold is the dominant antidote at 2x; the switch pays N^2 for the same
+lever plus node-to-node flatness. New: interconnect.Express;
+scripts/analyze_express.py -> express_weave.{json,md} +
+express_price_curve.png; group 48 +3 tests. Fast suite: 366 / 0
+xfail. The O19 batch's main body (items 1-3 + the optional) is
+complete well inside the 9/16 deadline; the two queued-conditional
+items' trigger is now met -- awaiting the user's call.
+
+## C63-e (2026-09-09) -- O19 conditional item A: hier_wide (FlooNoC-class)
+
+The registry gains `HierWide(CMesh)`: the cmesh local tier (access
+wire + shared gateway port) under a WIDE MULTI-CHANNEL BACKBONE --
+FlooNoC's identity is multiple physical channels, so each backbone
+segment carries W parallel channels and a flow rides lane = source
+node % W (HUB lane 0; deterministic, declared). Degeneration chain
+pinned: W=1 == cmesh exactly (modulo the name prefix), +[1,1] ==
+mesh. ADDENDUM caught at contract time: item 3 had left CMesh's
+router_hops un-overridden (its backbone step is one router over a
+tile pitch of wire) -- fixed, and the packet guard now lists cmesh
+and hier_wide (five count/length-split schemes). THE FIDELITY
+READOUT delivered a third outcome neither pre-written hand named:
+at the FlooNoC anchor (80.6 GB/s per channel, declared caliber) every
+hier_wide variant TIES the poured-mesh 4.000x numerically, but the
+binding resource MIGRATES to the local gateway port at every W --
+the backbone's width cannot be consumed on this host (W = 1/2/4
+identical; the tie is the host's funnel coincidence, grid 4 ==
+gateway 4). The deliverable sentence: the poured-mesh reading was
+right numerically and wrong structurally -- the digital control tier
+now names where its constraint sits. New: interconnect.HierWide +
+CMesh.router_hops; scripts/analyze_hier_wide.py ->
+hier_wide.{json,md} + hier_wide_fidelity.png; group 48 +3 tests.
+Fast suite: 369 / 0 xfail.
+
+## C63-f (2026-09-09) -- O19 conditional item B: routing knobs; THE BATCH AND O19 CLOSED
+
+Mesh gains two default-byte-neutral params (the full-suite gate ran
+green before any readout; a Torus._route signature mismatch the gate
+surfaced was fixed in the same edit): `reply: retrace (default) | yx`
+and `routing: ... | o1turn` (the declared PARITY stand-in -- the
+fractional 50/50 oracle does not fit the one-path-per-flow
+interface). The readout closed the occupancy-completeness debt more
+decisively than planned, three findings stacked: (1) the PATH
+IDENTITY, caught by a pin's first draft -- for hub flows
+retrace-of-XY IS the YX path (single-bend dimension order walked
+backwards), so the reply knob is path-identical on its whole
+hub-flow domain, pinned as equality; (2) the SINK-FUNNEL INVARIANT
+-- sink-convergent patterns' busiest wires are conservation-fixed;
+every reply variant ties on every pattern and weight, so the
+on-record XY/YX asymmetry cannot move any busiest-wire number in
+this account (routing algorithms' habitat is the queueing tier,
+outside the O26 bound); the pre-written "YX relieves where the up
+side binds" hand is REFUTED and pinned; (3) o1turn-parity NEVER
+beats plain XY on any tested pattern (all-pairs 12 vs 8, 9 vs 6;
+mirror 4 vs 2, 2 vs 1) -- shipped as a condition-enumeration arm
+with that warning. New: Mesh reply/o1turn + order plumbing
+(Torus._route included); scripts/analyze_routing_params.py ->
+routing_params.{json,md} + routing_params.png; group 48 +2 tests.
+Fast suite: 371 / 0 xfail. THE O19 BATCH IS CLOSED inside the 9/16
+deadline -- items 1-3, the optional, both conditionals; O19 itself
+CLOSED: ten schemes in the registry, nothing queued.

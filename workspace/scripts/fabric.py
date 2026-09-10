@@ -302,9 +302,10 @@ class Fabric:
                 # read hops -- refuse the combination until the packet path
                 # consumes router_hops() explicitly.
                 if (lk.packet_payload_bytes is not None
-                        and lk.topology in ("torus", "ring")):
+                        and lk.topology in ("torus", "ring", "express",
+                                            "cmesh", "hier_wide")):
                     raise ValueError(
-                        f"{lv.name}: packet parameters on folded scheme "
+                        f"{lv.name}: packet parameters on count-length-split scheme "
                         f"'{lk.topology}' -- hops() returns folded PHYSICAL "
                         f"length there, not the router count; wire the packet "
                         f"path to router_hops() before enabling this")

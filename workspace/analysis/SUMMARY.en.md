@@ -786,7 +786,47 @@ direct comparison against the 48-die pipeline readouts is forbidden.
 The temporal-rewrite alternative is bounded out in one closed-form
 line (544 dies reprogramming 16.78 M cells per pass). The seating map
 plus a 16-package × 2-layer seam example ship as the die-level search
-test payload. Data: `a4_full_model.{json,md}`; pins group 47. Three findings, each replacing
+test payload. Data: `a4_full_model.{json,md}`; pins group 47.
+
+**O19 batch (C63):** the duplex item closed-as-already-done (the
+direction-split account has been live since O22; stale sentences
+retired, the contract pinned). The **`switch` weave** joined the
+registry (non-blocking to port bandwidth, placement-irrelevant by
+construction — ordering spread exactly 1.00 vs mesh 6.55× / ring
+12.26× / torus 3.57×, busiest port identical under every ordering;
+the N² wiring price declared in the identity, in no account; the
+"switch vs mesh" decision is now computable): `switch_weave.{json,md}`
++ `switch_ordering.png`, pins group 48. **`cmesh`** followed (k nodes
+per router, [1,1] degenerates to mesh exactly; the concentration cost
+carried by the shared router local port — an amendment filed before
+readouts): on the 2×4 grid concentration is FREE up to k\*=4 and
+binding beyond (bottleneck 4.0/4.0/4.0/8.0 over k=1/2/4/8) — "how many
+nodes per router is free" is a computed crossover now:
+`cmesh_weave.{json,md}` + `cmesh_concentration.png`. **`express`**
+closed the batch (uniform station-free family, skip s; physical hops ==
+Manhattan — shortcuts save router crossings and contention, never wire):
+the price-curve readout replaced the planned spectrum sentence — on 3×3
+express s=2 TIES torus exactly (lever 1.000 at 2.0× wire); on 6×8 the
+lever gets WORSE at s=2 (2.000 vs 1.667) even as both absolutes improve,
+and torus dominates every express point — express is an
+absolute-decompression valve (centre busiest 16 < mesh 24), not a
+sensitivity antidote: `express_weave.{json,md}` +
+`express_price_curve.png`. **`hier_wide`** (FlooNoC-class: cmesh local
+tier + a multi-channel wide backbone, lane = src % W) delivered the
+fidelity upgrade's sentence: at the FlooNoC anchor every variant ties
+the poured-mesh 4.000× numerically while the binding resource migrates
+to the local gateway port at every W — the anchor's wideness cannot be
+consumed on this host, so the poured reading was right numerically and
+wrong structurally: `hier_wide.{json,md}` + `hier_wide_fidelity.png`. The batch closed with the **routing knobs**
+(`reply: yx`, `routing: o1turn` — default-byte-neutral): three stacked
+findings retired the on-record XY/YX asymmetry — for hub flows
+retrace-of-XY IS the YX path (path-identical, pinned), sink-convergent
+patterns are conservation-fixed on the busiest wire, and the o1turn
+parity stand-in never beats plain XY on any tested pattern — routing
+algorithms cannot move any busiest-wire number in this account; their
+habitat is the queueing tier, outside the O26 bound:
+`routing_params.{json,md}` + `routing_params.png`. **O19 is closed: ten
+schemes, nothing queued.** Three findings, each replacing
 a guess: (1) above the flip the busiest wire IS the input trunk — down =
 S×d words per macro edge exactly, ratio = d / 114,688 (= 16,384
 words/cycle × 7 slices): "knee ∝ d" with slope exactly 1, the closed form

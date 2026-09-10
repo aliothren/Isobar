@@ -131,3 +131,33 @@ def test_crossbar_level_bus_charges_full_local_line():
     assert xb and all(f["distance"] == 7.0 for f in xb)   # pitch 1 x (N-1)
     core = [f for f in flows if f["level"] == "macro<->core"]
     assert {f["distance"] for f in core} != {7.0}         # star level untouched
+
+
+def test_duplex_contract_and_split_is_live():
+    """C63-a (the O19 batch item 1, closed-as-already-done): the direction
+    split has been the LIVE account since O22 -- pinned here so the stale
+    'up and down share each wire, a conservative 2x' sentence can never
+    mislead a plan again. Contract: point-to-point schemes are full-duplex
+    by default, shared media are not; and the split actually keys the
+    occupancy resources (duplex=False merges them -- the pre-O22
+    comparison knob, tests only)."""
+    import scripts.crossbar_comm as cc
+    from scripts import anchors
+    assert ic.Star.DUPLEX and ic.Mesh.DUPLEX and ic.HTree.DUPLEX
+    assert ic.Torus.DUPLEX and ic.Ring.DUPLEX
+    assert not ic.Bus.DUPLEX                    # one shared medium
+    flows = [{"level": "glb<->macro", "level_name": "macro", "node": m,
+              "src": "glb", "dst": f"macro{m}", "volume": 100.0,
+              "down": 100.0, "up": 50.0, "distance": 0.0} for m in range(8)]
+    fab = dataclasses.replace(F24, levels=[
+        dataclasses.replace(lv, link=dataclasses.replace(
+            lv.link, bandwidth_words_per_cycle=16384.0))
+        if lv.name == "macro" else lv for lv in F24.levels]).validate()
+    pl = placement.sequential_fill(fab)
+    occ = cc.link_occupancy(flows, fab, anchors.CYCLE_S, pl)
+    tags = {e["direction"] for e in occ["per_link"]}
+    assert "up" in tags and "dn" in tags        # split keys the resources
+    merged = cc.link_occupancy(flows, fab, anchors.CYCLE_S, pl, duplex=False)
+    assert {e["direction"] for e in merged["per_link"]} == {""}
+    assert (merged["bottleneck"]["volume"]      # merging piles both on one wire
+            > occ["bottleneck"]["volume"])
