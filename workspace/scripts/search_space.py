@@ -89,6 +89,26 @@ def chain_inventory(cfg, S: int, max_dies: int):
                                     max_dies=max_dies)]
 
 
+# ---- inventories: the die-set granularity is DECLARED BY THE WORKLOAD
+# (day-2 interface amendment, recorded in FIXLIST: the frozen tiling T of
+# the condition layer owns the seating granularity -- the 2.7B class
+# seats per-op sets [block_chain], the 355M class seats per-UNIT under
+# the C13 two-dies-per-layer co-residency rule; legal() consumes the
+# inventory, never re-derives it).
+def inventory_from_block_chain(cfg, S: int, max_dies: int):
+    """{'op@L{i}': n_dies} for L blocks under the per-op standing rule."""
+    inv = chain_inventory(cfg, S, max_dies)
+    return {f"{name}@L{li}": n
+            for li in range(cfg.n_layers) for name, n in inv}
+
+
+def inventory_units(n_units: int):
+    """{'unit{u}': 1} -- the 355M C13 granularity (two units per layer:
+    the attention half and the FFN half, one die each, co-residency
+    inside the unit is part of the frozen tiling)."""
+    return {f"unit{u}": 1 for u in range(n_units)}
+
+
 def feasible_die_counts(op, max_dies: int):
     """The ORACLE's group-size axis (amendment 1): the tiler-feasible
     size set for one op -- {n : plan_spatial with min_dies=n lands
@@ -105,17 +125,17 @@ def feasible_die_counts(op, max_dies: int):
     return out
 
 
-def legal(pi: Pi, fabric, cfg, S: int) -> Tuple[bool, str]:
+def legal(pi: Pi, fabric, inventory: Dict[str, int]) -> Tuple[bool, str]:
     """The formalisation of Placement.verify + the tiler fold-in.
-    Returns (ok, reason)."""
+    `inventory` is the workload-declared die-set granularity ({name:
+    tiler n_dies}); legal() never re-derives it. Returns (ok, reason)."""
     L, P = pi.n_blocks, fabric.level("die").per_parent
     # gamma
     if (not pi.cuts or list(pi.cuts) != sorted(set(pi.cuts))
             or pi.cuts[-1] != L or pi.cuts[0] < 1):
         return False, "gamma: cuts must be ascending, in [1, L], ending at L"
-    # alpha: coverage at the standing rule's tiler sizes
-    inv = chain_inventory(cfg, S, max_dies=P)
-    want = {f"{name}@L{li}": n for li in range(L) for name, n in inv}
+    # alpha: coverage at the workload's declared tiler sizes
+    want = dict(inventory)
     if set(pi.seat) != set(want):
         missing = sorted(set(want) - set(pi.seat))[:3]
         extra = sorted(set(pi.seat) - set(want))[:3]

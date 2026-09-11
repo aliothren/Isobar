@@ -833,9 +833,13 @@ spec is repo-resident at [SEARCH_SPEC.en.md](SEARCH_SPEC.en.md) (space /
 objective / referee family / solver split / path, with the accepted
 amendments marked in place); S5/O6 are retired with the collaborator's
 withdrawal (the 47% figure permanently unpublishable; 11% flat stays).
-S1 day 1 shipped: the Π search space with tiler-folded legality (the
-O10-type counterexample is a pinned rejection) and the A4 payload as the
-legal standard case — group 49. Three findings, each replacing
+S1 is CLOSED and the interface FROZEN (C64-b): `score(Π, W, μ,
+caliber, d2d_gbps, device_scale)` on the Π space with tiler-folded
+legality (the O10-type counterexample is a pinned rejection), the
+triple identity anchors all green (A4 whole-machine column, the 355M b1
+rows, the frozen per-op accounts — 1e-9), the incremental session with
+incremental ≡ full pinned, and the `die_weave` condition knob (S6's E3
+entry) added before the freeze — group 49, 14 tests. Three findings, each replacing
 a guess: (1) above the flip the busiest wire IS the input trunk — down =
 S×d words per macro edge exactly, ratio = d / 114,688 (= 16,384
 words/cycle × 7 slices): "knee ∝ d" with slope exactly 1, the closed form
@@ -869,6 +873,72 @@ falling until d ≈ 5,800" story came from the v5 co-residency accounting
 and is replaced by the measurement (the 7B / 70B extrapolation was
 withdrawn earlier). Figure `scaling_law_vds.png`, data
 `scaling_probes.json` / `scaling_law_summary.json`, pinned in group 28.
+
+**S2 is CLOSED (C64-c): the seven-baseline registry + ladder table v0
+official.** Seven generators, one signature `generate(name, W, seed)`,
+all legal, seeded-deterministic, registry closed: random / sequential /
+snake / least_manhattan (SIAM's rule) / clustered (the Gemini rectangle
+definition implemented **at its word**: equal divisor-rectangle tiling
+walked in snake order) / nmap_greedy (NMAP's original three-phase
+structure) / heaviest_first (Graham/LPT lineage). The faithfulness gate
+A–D is green and had teeth: A3 caught the heuristic blob growth leaving
+4/32 stages disconnected — rewritten as the literal rectangle tiling;
+the two verbatim excerpts are on file
+([baseline_traces.md](baseline_traces.md)), and NMAP's own pseudocode
+ruled its refinement a **fixed single O(U²) pairwise sweep** (per-row
+best-commit) with dynamic max-comm-with-mapped constructive selection —
+the run-to-convergence variant we had "repaired" in was itself the
+fidelity bug, reverted to the original, the pin rewritten as an
+independent seat-for-seat replay of the pseudocode; on the
+one-die-per-unit 355M class clustered degenerates to snake, pinned
+seat-for-seat. **Check C is upgraded from reasoning-closed to
+measured-closed**: supplying the Gemini premise synthetically
+(many-to-many fan-out, every stage an equal volume to stages +2/+4/+8)
+makes clustered's busiest wire the WORST of all seven (30.00M words vs
+snake 28.00M, sequential 22.24M, dispersed-end random 18.29M), with the
+bottleneck witness exactly the mid-grid seam between rectangle columns,
+five wires uniformly saturated — literally "clustering cannot disperse
+this transfer demand"; on the pure-chain control clustered stays BEST
+(6.18M): the pathology tracks its premise, measured in both directions
+(`check_c_crosstraffic.png`). **Ladder table v0 is official**
+(`ladder_v0.{json,png}`; the seven named Π serialized alongside = S3's
+anti-stranding seed pool): safe-cell T ladder nmap_greedy =
+least_manhattan < clustered < snake < sequential < heaviest_first <
+random; energy column clustered 2.3379 J best, random 2.5251 J worst.
+Two pre-registered expectations flipped, each a finding: per-boundary
+words are placement-INVARIANT by construction (every producer die ships
+its piece to every consumer die wherever they sit), so seating moves T
+only through the µs-scale propagation term (73 µs across the ladder;
+T_pipe bit-identical) and the weak-D2D / fast-device cells amplify
+seating-invariant terms — **the energy column, not latency, is the 2.7B
+caliber's placement-sensitive column** (8.0% spread vs 0.007%), while
+the time-side placement play lives in the 355M wire-time caliber
+(random 4.0× vs snake). The post-review E-column reconciliation settled
+the one number and filed both sentences with their scopes (spec §6
+[AMENDED 9]): "8.0%" quantifies the FULL seven-seat spread, dispersed
+end included; "latency-optimal seating costs the system below
+one-thousandth in energy" quantifies the T-best→E-best gap
+(nmap_greedy +0.060%, least_manhattan +0.011% vs clustered) — the
+blanket "within-percent boredom" sentence is retired. The S3
+consequence is now SPEC, not a note: §6 carries the
+instance→objective mapping (2.7B seating instance → E; 355M ordering
+instance → wire time; cuts/condition levels keep T with E as
+tie-break); the 355M uniform chain is declared a SOLVED DEGENERATE
+CORNER (§10 [AMENDED 10]: six named baselines tie at 1.00 avg hops =
+the chain-adjacency lower bound, so that ordering problem is closed by
+heuristics and the 4.0× spread is entirely the gap to random), and
+S3's ordering instance is declared to run under the cross-traffic
+class load (disjoint from the within-die instance's A3 co-residency
+condition). The condition-bound flip (the SAME clustered seating: best
+6.2M on the pure chain ↔ worst 30.0M under fan-out) is registered as
+S6 evidence material and opens the writing-materials library
+([MATERIALS.md](MATERIALS.md), §7 [AMENDED 11]). The ladder figure is
+revised per review: left panel in ppm offset notation ("excess over
+cell best"), middle panel title states the invariance, all three
+panels share the 2.7B T-ladder order; the figure-group README
+([ladder_v0.md](ladder_v0.md)) carries the two-lever juxtaposition
+rule (package-seat propagation lever, µs-scale, vs die-mesh
+busiest-wire occupancy lever, multiple-fold).
 
 **What the busiest wire means (O26 done, C29).** For a given routing, any
 schedule — a compile-time one included — needs at least volume ÷ bandwidth on

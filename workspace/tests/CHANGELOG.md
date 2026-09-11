@@ -1699,3 +1699,66 @@ JSON round-trip, and pi_from_a4_payload() wiring the 544-seat +
 counterexample refused (ffn1 at capacity's 4 vs the tiler's 5), all
 pathology cases refused, the feasible set measured sparse. Fast
 suite: 377 / 0 xfail. S1 days 2-3 -> C64-b.
+
+## C64-b (2026-09-10) -- S1 closed: the evaluator interface, frozen
+
+Day 2: search_eval.score(Pi, W, mu, caliber, d2d_gbps) -> Score(t_opt,
+t_pess, e, Delta, per-phase decomposition), fully closed-form on
+frozen accounts. One interface amendment (recorded in FIXLIST AND the
+spec): the die-set granularity is DECLARED BY THE WORKLOAD (the
+condition layer's frozen tiling owns it) -- legal(pi, fabric,
+inventory) with two constructors (2.7B per-op / 355M per-unit C13).
+THE TRIPLE IDENTITY ANCHORS all green: score(A4-Pi) == the
+a4_full_model whole-machine column at every bandwidth anchor and its
+energy to 1e-9 (decomposition fields included); the 355M backend
+reproduces the stored b1 rows (avg hops / busiest / surplus /
+wire-ms, all three orderings, 1e-9); the per-op rows ARE the frozen
+account verbatim. Pipe-caliber structure, decode + weighted-mu exact
+linearity, Delta == 1.0 on packet-free weaves pinned.
+
+Day 3 (the reviewer's three follow-ups first): the spec amended in
+place for the day-2 change plus the freeze discipline (post-freeze
+changes only via formal spec amendment); Delta-from-day-2 recorded
+and Delta = 1.0 written as a construction-default assumption; the E3
+weave question answered -- caliber does not carry it, the new
+die_weave=(topology, params) constructor parameter on both workload
+backends is the condition knob, added before the freeze. Mechanism:
+ScoreSession (incremental evaluation; a seat move recomputes only the
+affected boundaries via a verbatim single-boundary flow builder) with
+INCREMENTAL == FULL pinned to 1e-12 over random swap sequences;
+device_scale (O17: compute-only division, fixed terms stay, energy
+unmoved -- pinned); the die_weave knob pinned on 355M ring (the C60
+ordering-role swap survives in the physical caliber, 2.0/3.49 = the
+folded x2 of the pinned counts). THE S1 SIGNATURE IS FROZEN. New:
+scripts/search_eval.py (+ search_space inventory refactor);
+tests/test_search_eval.py; group 49 = 14 tests. Fast suite: 385 / 0
+xfail.
+
+C64-c (S2, days 4-5 + closeout). Day 4: the seven-baseline registry
+(scripts/search_baselines.py; random / sequential / snake /
+least_manhattan / clustered / nmap_greedy / heaviest_first), one
+generate(name, W, seed) signature, all legal on both workload
+classes, seeded-deterministic, registry closed (an eighth name
+refused); the DEGENERATION pin -- sequential reproduces the A4
+payload map seat for seat. Day 5: the baseline-faithfulness gate
+A-D. A3 had teeth: blob growth left 4/32 stages disconnected ->
+clustered rewritten as the literal rectangle tiling (connectivity by
+construction, pinned both classes). Check D (verbatim excerpts +
+hand replay) reverted nmap to the ORIGINAL semantics: dynamic
+max-comm-with-mapped construction + ONE fixed O(U^2) pairwise sweep
+with per-row best-commit (run-to-convergence was our fidelity bug);
+the A1 pin is now an independent seat-for-seat replay of the
+pseudocode (test_faith_A1_nmap_original_single_sweep_replay).
+Check C upgraded to measured both ways
+(scripts/check_c_crosstraffic.py): premise absent -> clustered best
+on the busiest wire (6.18M); premise supplied (fan-out +2/+4/+8) ->
+clustered worst (30.00M), the rectangle-column seam saturating
+uniformly. New pins: least_manhattan / heaviest_first stepwise
+replays, evaluator-parameter blindness, 355M clustered == snake
+degeneration. Ladder v0 official (scripts/ladder_v0.py): E1/E2/E5
+land, E3/E4 FLIP as findings F-L1/F-L2 -- per-boundary words are
+seat-invariant by construction, so seating moves 2.7B T only by ppm
+(propagation) while the energy column spreads 8.0%; the
+instance-to-objective mapping and the 355M solved-degenerate-corner
+declaration went into the spec ([AMENDED 9-11]). Fast suite: 394 /
+0 xfail.

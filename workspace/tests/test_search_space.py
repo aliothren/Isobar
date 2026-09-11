@@ -17,6 +17,7 @@ F576 = fabric.from_yaml(os.path.join(WS, "models", "fabric",
                                      "mlx300_multidie576.yaml"))
 CFG = lw.GptConfig(d_model=2560, n_heads=32, d_ff=10240, n_layers=32,
                    name="gpt-2.7B-class")
+INV = ss.inventory_from_block_chain(CFG, 512, max_dies=576)
 
 
 def _std():
@@ -26,7 +27,7 @@ def _std():
 
 def test_a4_payload_is_the_legal_standard_case():
     pi = _std()
-    ok, why = ss.legal(pi, F576, CFG, S=512)
+    ok, why = ss.legal(pi, F576, INV)
     assert ok, why
     assert pi.n_blocks == 32 and pi.cuts == tuple(range(2, 33, 2))
     assert len(pi.segments()) == 16
@@ -42,7 +43,7 @@ def test_json_round_trip():
 def test_gamma_illegal_cases():
     pi = _std()
     for cuts in ((), (2, 2, 32), (2, 31), (0, 32)):
-        ok, why = ss.legal(dataclasses.replace(pi, cuts=cuts), F576, CFG, 512)
+        ok, why = ss.legal(dataclasses.replace(pi, cuts=cuts), F576, INV)
         assert not ok and why.startswith("gamma")
 
 
@@ -53,31 +54,31 @@ def test_alpha_o10_counterexample_and_overlap():
     pi = _std()
     seat = dict(pi.seat)
     seat["ffn1@L0"] = seat["ffn1@L0"][:4]                 # capacity-sized
-    ok, why = ss.legal(dataclasses.replace(pi, seat=seat), F576, CFG, 512)
+    ok, why = ss.legal(dataclasses.replace(pi, seat=seat), F576, INV)
     assert not ok and "TILER" in why and "O10" in why
     seat = dict(pi.seat)
     seat["ffn2@L1"] = pi.seat["ffn1@L0"][:5]              # overlap
-    ok, why = ss.legal(dataclasses.replace(pi, seat=seat), F576, CFG, 512)
+    ok, why = ss.legal(dataclasses.replace(pi, seat=seat), F576, INV)
     assert not ok and "overlap" in why
 
 
 def test_small_dimensions_and_beta_structure():
     pi = _std()
     ok, _ = ss.legal(dataclasses.replace(pi, hub="node:12", attach=100),
-                     F576, CFG, 512)
+                     F576, INV)
     assert ok
-    ok, why = ss.legal(dataclasses.replace(pi, hub="node:576"), F576, CFG, 512)
+    ok, why = ss.legal(dataclasses.replace(pi, hub="node:576"), F576, INV)
     assert not ok and "hub" in why
-    ok, why = ss.legal(dataclasses.replace(pi, attach=600), F576, CFG, 512)
+    ok, why = ss.legal(dataclasses.replace(pi, attach=600), F576, INV)
     assert not ok and "attach" in why
     ok, _ = ss.legal(dataclasses.replace(pi, beta={0: (1, 0, 2)}),
-                     F576, CFG, 512)
+                     F576, INV)
     assert ok                                              # structural pass
     ok, why = ss.legal(dataclasses.replace(pi, beta={0: (1, 1)}),
-                       F576, CFG, 512)
+                       F576, INV)
     assert not ok and "permutation" in why
     ok, why = ss.legal(dataclasses.replace(pi, beta={555: (0,)}),
-                       F576, CFG, 512)
+                       F576, INV)
     assert not ok and "not seated" in why
 
 

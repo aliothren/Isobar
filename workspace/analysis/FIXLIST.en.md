@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 377 pass + 0 expected-fail (slow adds group 38), which is
+(`python3 tests/run_tests.py`; currently 394 pass + 0 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -1380,7 +1380,7 @@ current owner and its open items. Bold items move current conclusions.
 | calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 377 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 393 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -2667,9 +2667,289 @@ parsing to the LEGAL standard Pi (32 blocks, 16 stages). Gates all
 green (group 49, 6 pins): the O10-type counterexample REJECTED
 (2.7B ffn1 at capacity's 4 -> refused, tiler demands 5), gamma/
 overlap/hub/attach/beta pathologies each refused, the feasible set
-measured sparse (ffn1: 4 absent, 5 present). Days 2-3 (score() +
-triple identity anchors; incremental hooks + pin) pending -> C64-b
-at the S1 closeout; then S2=C64-c, S3=C64-d, S4=C64-e, S6=C64-f.
+measured sparse (ffn1: 4 absent, 5 present). S1 DAY 2 DONE 2026-09-10: scripts/search_eval.py -- score(Pi, W,
+mu, caliber, d2d_gbps) -> Score(t_opt, t_pess, e, delta, per-phase
+decomposition), fully closed-form on frozen accounts (zero mapper).
+ONE INTERFACE AMENDMENT recorded: the die-set granularity is DECLARED
+BY THE WORKLOAD (the condition layer's frozen tiling owns it) --
+legal(pi, fabric, inventory) refactored accordingly, with two
+constructors (per-op block_chain for the 2.7B class; unit-granularity
+C13 two-dies-per-layer for the 355M class -- co-residency inside a
+unit is part of T, not of the search). THE TRIPLE IDENTITY ANCHORS
+ALL GREEN (group 49): (1) score(A4-Pi) == a4_full_model's
+whole-machine column at every bandwidth anchor AND its energy, to
+1e-9, decomposition fields included; (2) the 355M backend reproduces
+the stored b1 ordering rows -- avg hops / busiest / surplus / wire-ms
+for all three orderings, to 1e-9 (via die_to_die_activation +
+link_occupancy, the UCFG unit-chain convention verbatim); (3) the
+per-op rows ARE the frozen account (verbatim equality, both phases),
+and layer serial/energy equal A4's stored values. Also pinned: the
+pipe caliber's structure (16 stages, interval = max stage, single is
+gamma-blind), decode + weighted-mu assembly (exact linearity), and
+Delta == 1.0 on packet-free weaves by construction (the toll
+implemented generically for packet-declared links). S1 DAY 3 DONE 2026-09-10 -- S1 CLOSED (C64-b). The reviewer's three
+follow-ups landed FIRST: (1) the spec document itself is amended for
+the day-2 inventory change (code and spec move together; the freeze
+discipline is now written into the spec's execution note: post-freeze
+interface changes go ONLY through formal spec amendment + FIXLIST,
+never casual edits); (2) Delta is recorded as produced from day 2
+onward, and Delta = 1.0 on packet-free weaves is written into the
+spec as a DEFAULT ASSUMPTION BY CONSTRUCTION, not a verified
+conclusion; (3) the weave question answered: caliber does NOT carry
+it -- the weave is a condition and enters via the workload
+constructor's new `die_weave=(topology, params)` parameter (both
+backends), added BEFORE the freeze as S6's E3 entry point; score()
+stays weave-free. Day-3 mechanism: ScoreSession -- the incremental
+hook (a seat move recomputes only the moved set's in-boundary and its
+successor's; the single-boundary flow builder replicates the
+block_die_flows convention verbatim) with the INCREMENTAL == FULL
+identity pinned over random swap sequences to 1e-12; `device_scale`
+(O17 semantics: divides the COMPUTE term alone, fixed terms stay,
+energy never moves -- pinned); the die_weave knob pinned on the 355M
+ring case (the C60 ordering-role swap survives in the physical
+caliber: sequential 2.0 / snake 3.49 = the folded x2 of the pinned
+counts). THE S1 SIGNATURE IS FROZEN: score(pi, W, mu, caliber,
+d2d_gbps, device_scale) + Workload{2p7B,355M}(fabric, [d2d_bw_wc],
+die_weave) + ScoreSession.update(new_seats) + legal(pi, fabric,
+inventory). Group 49 totals 14 tests.
+POST-CLOSEOUT FOLLOW-UPS (review, landed 2026-09-11 via the freeze
+discipline -- spec amendment + this record, no signature change):
+(1) SCHEDULE_SLACK'S SEAT clarified in the spec: an O26 platform
+input riding the workload's FABRIC (the weave's entry route),
+consumed where its semantics apply -- the occupancy-bound paths
+(link_occupancy reads it; the 355M backend inherits it); the 2.7B
+serial hand-off term is a direct transfer time, not an occupancy
+bound, so slack rightly does not multiply it; S6 arms share the
+condition layer and none tunes it. Not dropped; seated -- and no new
+score() argument was ever needed. (2) THE RING-CONDITION INCREMENTAL
+PIN added: incremental == full re-pinned under die_weave=("ring",{})
+-- day 3's only bug was a wrap edge case and the ring weave is built
+entirely on wrap; SA hammers the incremental path and S6 runs
+non-default weaves, so the two now meet in one pinned run (1e-12,
+caliber unchanged). THE IDENTITY-PIN SET (triple anchors +
+incremental==full, default AND ring) IS PERMANENT in group 49 --
+it does not retire with S1. S2 DAY 4 DONE 2026-09-11: scripts/search_baselines.py -- the seven
+named generators under ONE signature (generate(name, W, seed) -> Pi;
+every output passes legal(); gamma ships as singleton cuts -- the
+chain partition belongs to the S4 DP, declared). Sources per the
+spec's literature coordinates (SIAM's least-Manhattan collected
+verbatim; NMAP's constructive + pairwise-swap refinement running on
+NMAP's OWN comm-x-distance cost -- arm isolation: that cost never
+leaks into E0; clustered self-implemented as compact per-stage
+regions, the Gemini intent; heaviest_first per Graham/LPT). Pins
+(group 49 +2): all seven legal on BOTH workload classes (2.7B
+per-op AND 355M per-unit), seeded determinism, random varies by
+seed, the registry CLOSED (an eighth name is refused), and the
+DEGENERATION pin -- `sequential` reproduces the A4 payload map
+exactly (the mapper's default-seat by-product). S2 DAY 5 ITEM 0 DONE 2026-09-11 -- THE BASELINE FAITHFULNESS CHECK
+(the review's pre-ladder gate; fixes under the freeze discipline,
+recorded as implementation repairs BEFORE any ladder number):
+A1 nmap convergence: the 2-pass cap could stop short -- replaced by
+run-to-convergence (high safety cap + loud failure); the permanent
+pin re-runs one full swap pass after generate() and demands zero
+improvements (both workload classes). A2 least_manhattan: stepwise
+greedy REPLAYED independently, every pick aligned (permanent pin).
+A3 clustered: THE CHECK BIT -- 4 of 32 stages DISCONNECTED under the
+original blob growth (one shattered to a single slot), and the first
+repair (component-aware growth) then failed loudly at stage 31
+because diamond growth fragments the tail; the implementation was
+REPLACED by literal RECTANGLE TILING (the Gemini definition at its
+word: 3-wide x 6-tall rectangles, 8 columns x 4 rows = 32 for the
+2.7B class [CORRECTED by check D's hand recomputation -- the record
+first said 6x3/4x8, orientation reversed; the code and the hand
+arithmetic agree on 3x6, a waste-1 tie taken first-found]; snake
+order over rectangles; within-rectangle row-major; connectivity,
+perfect tiling and determinism BY CONSTRUCTION; the 355M class
+degenerates to 1x1 rectangles = the snake walk, noted). Permanent connectivity pin on
+both classes. A4 heaviest_first: strict descending-weight order +
+per-step least-stretch picks replayed independently (permanent pin;
+on the uniform-weight unit chain the order degenerates to chain
+order, noted in the traces). B evaluator-parameter blindness pinned
+(bandwidth exercised at two values on the 355M constructor; caliber/
+mu/device_scale structurally unseen; geometry is the allowed
+dependency). C REVERSE FAITHFULNESS (one-off, filed): on the 2.7B
+chain the literature congestion pathology does NOT appear --
+clustered reads BETTER on the busiest wire (10.49M vs sequential/
+snake's 26.21M); per the rule the implementation was inspected FIRST:
+the mechanism is structurally explained (sequential/snake lay the
+chain as one corridor, so the busiest wire carries a whole intra-
+layer ffn1->ffn2 multicast, 5.24M x 5; rectangle regions hand the
+same multicast across a WIDE border, 5.24M x 2) and the pathology's
+premise -- competing many-to-many cross-traffic -- is absent from a
+pure pipeline chain: the non-appearance is a property of the traffic
+pattern, not an implementation artifact. D PREP delivered:
+analysis/baseline_traces.md (per-step candidates/choices for the
+hand replay on the 48-unit host; the rectangle-tiling parameters
+fully recomputable; source recomputability notes -- SIAM/NMAP/
+Gemini: no directly recomputable original example, rule replay
+covers; noted honestly). CHECK D, THE HAND-COMPUTABLE PORTION EXECUTED (agent, 2026-09-11;
+independent derivations from the rule texts + grid geometry, THEN
+compared against code): (1) the clustered rectangle parameters fully
+recomputed by hand -- divisor enumeration lands on the waste-1 pair,
+stage-0's 17 slots derived slot-by-slot (drop idx 122) and EQUAL to
+the code's; the derivation CAUGHT the record's orientation reversal
+(fixed above); stage 1 starting at slot 3 confirms the 8x4 rectangle
+grid. (2) heaviest_first's first two placements hand-derived with
+the tie-break arithmetic (centre anchor (2.5, 3.5) -> four distance-1
+ties -> index break -> slots 20 then 14) -- equal. (3) nmap's
+comm-descending head hand-reasoned (uniform chain weights: middles
+2w before endpoints 1w; unit0/unit47 last) -- equal. (4) snake's
+first ten slots and sequential's identity order hand-derived --
+equal. The genuinely NON-recomputable residue stays as noted in
+baseline_traces.md (SIAM/NMAP/Gemini publish no directly
+recomputable example; rule replay covers). THE REMAINING HUMAN
+PORTION of check D is reduced to reading the cited rule statements
+against the code/traces; until the user accepts D, the ladder may
+run but every number is PROVISIONAL, C64-c does NOT close, and the
+seed pool is NOT delivered to S3. CLOSEOUT ITEM 1 DONE 2026-09-11 -- CITATION EXCERPTS + THE NMAP
+REVERT THEY FORCED: the two verbatim source excerpts are pasted into
+baseline_traces.md with correspondence notes (Gemini Sec. VII: "a
+layer is assigned to consecutive and rectangle-like core group" =
+the rectangle-tiling definition, and the SAME sentence supplies the
+congestion premise closeout item 2 must measure; NMAP Sec. 5:
+initialize() + mappingwithsinglepath() pseudocode). The pseudocode
+settles the pre-registered branch AGAINST the standing code, twice:
+(a) TERMINATION -- the original refinement is a FIXED single O(U^2)
+pairwise sweep with per-row best-commit, NOT run-to-convergence; the
+A1 repair above had installed run-to-convergence, which is hereby
+REVERTED per the original (this supersedes the A1 wording above);
+(b) SELECTION -- initialize() picks the next core DYNAMICALLY (max
+communication with the already-mapped set) and seats it minimising
+comm x distance to ALL mapped cores, not a static descending order.
+Both restored in `_gen_nmap_greedy` (now split `_nmap_construct` +
+`_nmap_refine_sweep`; the convergence AssertionError cap is gone --
+the sweep IS the termination). Declared adaptations stay declared:
+chain-comm x centroid-Manhattan caliber, equal-size die-set swaps.
+The A1 pin is REWRITTEN per the directive: an independent replay of
+the original's exact sweep structure (coded in the test from the
+pseudocode, per-row best-commit) starting from `_nmap_construct`'s
+output must land on generate()'s seating seat-for-seat, both
+workload classes (test_faith_A1_nmap_original_single_sweep_replay).
+SEARCH_SPEC section 9's nmap row amended ([AMENDED 7]); the
+clustered-row section 9 sync remains closeout item 3. Suite 393
+green after the revert. USER PASSED THE EXCERPTS 2026-09-11 = CHECK D ACCEPTED (per the
+directive: the eyeball closes it); the faithfulness gate A-D is
+fully green and ladder numbers may become OFFICIAL. CLOSEOUT ITEM 2 DONE -- C REINFORCEMENT, MEASURED (upgrade from
+reasoning-closed): scripts/check_c_crosstraffic.py supplies the
+Gemini premise synthetically on the 2.7B host (every stage fans out
+an equal V to stages +2/+4/+8, 82 competing stage pairs; flows by
+the frozen R-split boundary convention verbatim, routing by
+link_occupancy unchanged; uniform-chain control rides, no hand).
+PRE-REGISTERED both hands, then read: E+ LANDS -- with the premise
+supplied clustered's busiest wire is the WORST OF ALL SEVEN
+seatings (30.00M words vs snake 28.00M, sequential 22.24M, random
+18.29M) while the uniform-chain control keeps clustered BEST
+(6.18M vs snake 15.06M): the pathology's presence tracks its
+premise exactly, both directions measured. MECHANISM (from the
+bottleneck witness): clustered's top-5 wires are seg(11,y)-(12,y),
+y=0..4 -- the mid-grid seam between rectangle columns, saturated
+UNIFORMLY at 30.00M each: XY routing keeps horizontal runs inside
+the 6-row rectangle band, so ALL eastward inter-rectangle demand
+of a band funnels into its 6 seam wires -- literally "clustering
+cores for each layer together cannot disperse this transfer
+demand". Corollary reading: under the premise the ordering INVERTS
+to more-dispersed-is-better (random/heaviest_first best), which is
+Gemini's own remedy direction. Figure:
+analysis/check_c_crosstraffic.png. CHECK C IS NOW MEASURED-CLOSED
+BOTH WAYS: premise absent -> no pathology (pure chain, clustered
+protected by wide borders); premise supplied -> pathology appears
+on cue. CLOSEOUT ITEM 3 DONE -- SPEC SECTION 9 SYNC: clustered row
+rewritten to the literal rectangle tiling ([AMENDED 8], A3
+fragmentation story + 355M degeneration clause + traces pointer);
+nmap row was [AMENDED 7] under item 1. CLOSEOUT ITEM 4 DONE -- the
+355M degeneration PIN: generate("clustered") == generate("snake")
+seat for seat on the 1-die-per-unit class
+(test_clustered_355m_degenerates_to_snake; suite 394 green). CLOSEOUT ITEM 5 -- LADDER TABLE V0, EXPECTATIONS PRE-REGISTERED
+BEFORE THE RUN (two-handed; flips are findings): the declared
+table = 7 baselines x {2.7B class: T_single at three cells -- safe
+(GRS 12.5 GB/s, scale 1), weak-D2D (0.4 GB/s, from the standing
+anchor set), fast-device (12.5, device_scale 10 per the O17
+test) -- plus T_pipe(safe), E, d2d_words; 355M class: the anchor-2
+caliber avg_hops / busiest_x / wire_ms / surplus at the stored
+example bw}; mu = prefill one-hot, singleton cuts as shipped.
+E1 random is the worst T of the seven at the safe cell (every
+named <= random). E2 nmap_greedy lands in the best two named on
+safe-cell T (the greedy-tier claim). E3 the E column's relative
+spread (max-min)/min <= 2% (A4's geometry-dominated prior, 1.83%
+whole-vs-block). E4 the T spread (max/min) WIDENS from the safe
+cell to the weak-D2D cell AND to the fast-device cell (the
+phase-diagram play; this is why the search runs only in active
+cells). E5 355M: clustered == snake row identity (pinned); random
+worst on wire_ms. RESULTS (scripts/ladder_v0.py; table + figure + seed pool
+analysis/ladder_v0.{json,png}; readings OFFICIAL, D accepted):
+2.7B safe-cell T_single ladder: nmap_greedy 1034.792 ms =
+least_manhattan < clustered 1034.793 < snake 1034.796 <
+sequential 1034.808 < heaviest_first 1034.831 < random 1034.865;
+E column: clustered 2.3379 J best, random 2.5251 J worst; 355M:
+snake/least_manhattan/clustered/heaviest_first 1.00 avg hops /
+2.97 wire-ms, nmap 1.04, sequential 1.74 (the standing b1 row),
+random 4.45 hops / 11.87 wire-ms. E1 LANDS (random worst, every
+named better). E2 LANDS (nmap_greedy tops the safe-cell T
+ladder). E5 LANDS (clustered == snake row bit-identical; random
+worst by 4.0x wire time). E3 FLIPS -- booked as FINDING F-L1: the
+energy spread across the seven seatings is 8.008%, four times the
+2% prior; at the safe cell ENERGY, not latency, is the
+placement-sensitive column of the 2.7B caliber (T spread 0.007%).
+E4 FLIPS -- booked as FINDING F-L2, with the mechanism VERIFIED
+in the frozen caliber rather than patched: the per-boundary flow
+SET (words) is placement-INVARIANT by construction (every
+producer die ships its piece to every consumer die regardless of
+where they sit), so the d2d serial term words/bw -- the term the
+weak-D2D cell amplifies -- is seating-invariant, and T_pipe
+(32.3499 ms, max stage) is bit-identical across all seven;
+placement enters T only through the ~us propagation term
+(73 us total spread) and enters ENERGY through the distance
+surplus. CONSEQUENCE FOR S3 (filed now, before any search runs):
+on the 2.7B class the SEATING level is effectively an
+energy-column optimization under a near-flat T (lexicographic
+T-then-E semantics stay as declared), while the TIME-side
+placement play lives in the 355M wire-time caliber (4.0x spread)
+and in the cuts/segment level -- the active-cell discipline for
+S3's two instances must point the 2.7B instance at E + the 355M
+instance at wire time, NOT at 2.7B T_single, or the search
+optimizes a flat column. C64-c CLOSES: ladder v0 official, both
+classes + figure; the section-6 anti-stranding SEED POOL (all
+seven named Pi per class, serialized) DELIVERED to S3 in
+analysis/ladder_v0.json. Registry, faithfulness A-D, excerpts,
+C-reinforcement, spec section 9 sync, degeneration pin: all
+green. Suite 394. POST-CLOSE NOTES ROUND EXECUTED 2026-09-11 (5 items, before S3
+opens): (1) E-COLUMN RECONCILIATION, the one-number ruling: the
+T-ladder leaders' E gap to the E-best seat (clustered 2.3379 J)
+is nmap_greedy +0.001405 J = +0.0601% and least_manhattan
++0.000255 J = +0.0109% of system energy -- BOTH within the 0.1%
+gate, so the within-0.1% branch applies: the two standing
+sentences are filed EACH WITH ITS SCOPE (spec section 6 [AMENDED
+9]): "8.0%" = the FULL seven-seat spread, dispersed end included;
+"latency-optimal seating costs below one-thousandth in energy" =
+the T-best-to-E-best gap; the blanket "within-percent boredom"
+sentence is retired. (2) F-L2's S3 consequence is now SPEC, not
+just a note: section 6 [AMENDED 9] adds the instance-to-objective
+mapping (2.7B seating -> E; 355M ordering -> wire time; cuts and
+condition levels keep T with E as tie-break) and scopes the old
+tie-break clause to T-objective instances. (3) 355M DEGENERATE
+CORNER declared in spec section 10 [AMENDED 10]: six named
+baselines tie at 1.00 avg hops = the chain-adjacency lower bound,
+the uniform-chain ordering problem is closed by heuristics; the
+S3 ordering instance is DECLARED to run under the cross-traffic
+class load (the check-C fan-out family) -- chosen over the A3
+co-residency alternative to keep the two instances' conditions
+disjoint; the uniform-chain version is filed as a solved
+degenerate corner, never a search demo. (4) The condition-bound
+flip (same clustered seating: best 6.2M pure chain <-> worst
+30.0M fan-out) is REGISTERED as S6 evidence material (spec
+section 7 [AMENDED 11]) and opens the writing-materials library
+analysis/MATERIALS.md -- not left in the check record. (5) Ladder
+figure revised per review: left panel now plots T/best-1 in ppm
+("excess over cell best", +1 offset notation), middle panel title
+states the invariance ("D2D words: seat-invariant, set by
+construction"), all three panels share the 2.7B T-ladder order;
+figure-group README analysis/ladder_v0.md added with the
+two-lever caption (ladder left/middle = the package-seat
+propagation lever, us-scale; check-C figure = the die-mesh
+busiest-wire occupancy lever, multiple-fold -- juxtapositions
+must say so). NEXT: day 6 = S3/C64-d (SA body + ergodicity
+page + the two single-level instances with regret vs this
+ladder).
 
 Cell discipline: search experiments run only where the phase diagram has
 play -- the fast device tier, the shared-medium tier, offload-decode, weak

@@ -38,6 +38,9 @@ workspace/analysis/*
 !workspace/analysis/SEARCH_SPEC.en.md
 !workspace/analysis/PROGRESS.md
 !workspace/analysis/ANCHORS.md
+!workspace/analysis/MATERIALS.md
+!workspace/analysis/baseline_traces.md
+!workspace/analysis/ladder_v0.md
 !workspace/analysis/*.png
 !workspace/analysis/op_breakdown/
 workspace/analysis/op_breakdown/*

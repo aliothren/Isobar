@@ -107,7 +107,17 @@ entry into the search-methodology contest; no chasing multiplier records.
   condition enumeration.
 - Workload W: a chain of L homogeneous blocks, decomposed by the frozen
   tiling T (mapper output, column-split regime) into the weight-block set
-  B_W and per-op traffic generation rules. Row split is an explicit
+  B_W and per-op traffic generation rules. **[AMENDED, S1 day 2]** the
+  DIE-SET GRANULARITY is part of T and is DECLARED BY THE WORKLOAD
+  (legal() consumes the declared inventory, never re-derives it): the
+  2.7B class seats per-op sets (block_chain), the 355M class seats
+  per-UNIT under the C13 two-dies-per-layer co-residency rule.
+  **[AMENDED, S1 day 3]** the weave is likewise a condition and enters
+  through the workload constructor's `die_weave=(topology, params)`
+  parameter (default: the fabric config's own) -- score() itself is
+  weave-free; this is S6's E3 entry point and the condition-enumeration
+  knob, added BEFORE the interface freeze so E3 never touches frozen
+  code. Row split is an explicit
   regime switch (A2); any use must be stated at both levels; not a v1
   variable.
 - Phase set Φ = {prefill(S), decode}; service caliber c ∈ {single,
@@ -168,6 +178,20 @@ robustness gate. **[AMENDED — execution face]** every results table from
 S3 on carries the Δ column, Δ(Π) = T^pess/T^opt; where candidates' Δ
 differ significantly the conclusion states whether the ranking survives
 the protocol-tier worst assumptions. Not deferred to writing time.
+**[AMENDED, S1 day 2-3]** Δ is produced from S1 day 2 onward (every
+Score carries t_pess and Δ); on packet-free weaves — every production
+fabric — the toll is zero and **Δ = 1.0 is a DEFAULT ASSUMPTION BY
+CONSTRUCTION, not a verified conclusion**: the pessimistic end only
+separates from the optimistic one on packet-declared weaves.
+**[AMENDED, S1 closeout — schedule_slack's seat]** `schedule_slack`
+(O26) is a PLATFORM INPUT of the condition layer and was never a
+score() argument: it rides the FABRIC the workload holds (the same
+entry route as the weave) and is consumed exactly where its O26
+semantics apply — the occupancy-bound paths (`link_occupancy` reads
+it from W's fabric; the 355M backend inherits it). The 2.7B serial
+hand-off term is a direct transfer time, NOT an occupancy bound, so
+slack rightly does not multiply it. No arm of S6 tunes slack (arms
+share the condition layer). Not dropped; seated.
 
 ## 6. Objective and phase modes
 
@@ -177,8 +201,29 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
   measured 1.74× is the deciding channel). Energy does not enter the main
   objective — the two-tier measured flat axis grants the license. **Every
   results table reports both columns** (a latency column with an energy
-  column beside it); the expected within-percent boredom of the energy
-  column IS the live demonstration that latency optimization is free.
+  column beside it). **[AMENDED 9 — instance→objective mapping + the
+  tie-break clause's scope; from ladder v0's measured column split
+  (C64-c findings F-L1/F-L2)]** The tie-break clause above HOLDS ONLY
+  for instances whose main objective is T. Measured basis: on the 2.7B
+  caliber the per-boundary words are placement-invariant by
+  construction, so SEATING moves T only through the µs propagation term
+  (73 µs across the seven baselines; T_pipe bit-identical) while the
+  energy column spreads 8.0%. Mapping, per instance:
+    * 2.7B seating instance — **main objective = E** (T reported
+      alongside as the flat column);
+    * 355M ordering instance — **main objective = wire time** (the
+      link-occupancy caliber; 4.0× measured spread);
+    * the cuts/segment level and condition enumeration — main objective
+      stays T, energy stays the lexicographic tie-break.
+  Scope of the two standing sentences, filed after the E-column
+  reconciliation (both T-column leaders within 0.1% of the E-best
+  seat): "8.0%" quantifies the FULL seven-seat spread, dispersed end
+  included; "latency-optimal seating costs the system below
+  one-thousandth in energy" quantifies the T-best→E-best gap
+  (nmap_greedy +0.060%, least_manhattan +0.011% of system energy vs
+  clustered). The old blanket "within-percent boredom of the energy
+  column demonstrates latency optimization is free" is RETIRED in favor
+  of these two scoped statements.
 - Three phase modes, μ declared: one-hot (single phase) / weighted mix /
   constrained (min T_decode s.t. T_prefill ≤ budget). **v1 default:
   constrained** (serving reality; v1 default, swappable). The phase is a
@@ -210,6 +255,17 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
   (expected: all four arms tie ≈1.00). Per-cell expectations pre-written.
 - Arm isolation: the four evaluators share no tunable constants; every
   E1–E3 number has a citation or a declaration.
+- **[AMENDED 11 — evidence material registered (C64-c)]** The
+  condition-bound flip instance, measured: the SAME clustered seating
+  swings from best of all seven (6.2M busiest-wire words, pure-chain
+  traffic) to worst (30.0M, +2/+4/+8 fan-out) as the traffic pattern
+  changes (`scripts/check_c_crosstraffic.py`,
+  `analysis/check_c_crosstraffic.png`) — the measured exhibit that an
+  objective's validity domain is CONDITION-BOUND, i.e. E1-style
+  distance/compactness proxies rank correctly under one traffic pattern
+  and invert under another. Registered here as S6 evidence material and
+  in the writing-materials library (`analysis/MATERIALS.md`), not only
+  in the check record.
 
 ## 8. Solver split and the operator table
 
@@ -252,8 +308,8 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
 | sequential | index-order fill | the mapper's default-seat by-product |
 | snake | serpentine fill | standing |
 | least_manhattan | consecutive-level least-Manhattan sequential placement | SIAM |
-| clustered | rectangular clustering **[AMENDED 6: self-implemented from the literature definition — the collaborator has withdrawn]** | Gemini (definition) |
-| nmap_greedy(+swap) | blocks in descending traffic, each to the least-incremental-cost seat; pairwise-swap refinement | NMAP, DATE 2004 |
+| clustered | **[AMENDED 8 — C64-c checks A3+D]** literal rectangle tiling, the Gemini definition ("a layer is assigned to consecutive and rectangle-like core group") taken at its word: the grid is tiled into equal divisor-pair rectangles (smallest waste, one per stage), stages walk the rectangle grid in snake order, within a rectangle row-major first-`need` slots — connectivity, perfect tiling and determinism BY CONSTRUCTION. The earlier BFS blob growth (from [AMENDED 6]: self-implemented, the collaborator withdrew) FRAGMENTED under check A3 (4/32 stages disconnected) and is replaced. Degeneration, pinned: on the 355M 1-die-per-unit class the 1×1 rectangles reduce clustered to the snake walk. Excerpt + parameters: `analysis/baseline_traces.md` | Gemini (definition) |
+| nmap_greedy(+swap) | **[AMENDED 7 — C64-c check D]** original three-phase structure verbatim: max-comm set seated first (mesh centre), then the set communicating most with the MAPPED ones (dynamic selection) to the least comm×distance seat; refinement = ONE fixed O(U²) pairwise-swap sweep with per-row best-commit (`mappingwithsinglepath()`), **not** run-to-convergence — the original's termination is the sweep itself. Declared adaptations: cost caliber = chain comm × centroid Manhattan distance; only equal-size die-sets swap. Excerpts: `analysis/baseline_traces.md` | NMAP, DATE 2004 |
 | heaviest_first | heaviest flow to the currently idlest line | Graham/LPT lineage |
 
 Ladder semantics: random proves the space non-trivial; named heuristics =
@@ -282,6 +338,21 @@ count. The registry closes here — no additions.
   instances — the within-die level (A3 co-residency condition; the space
   is proven non-degenerate there) and the die-level ordering level —
   each with regret readings against the ladder table (Δ column rides).
+- **[AMENDED 10 — the 355M uniform chain is a SOLVED DEGENERATE CORNER;
+  the ordering instance's condition declared before S3 opens]** Ladder
+  v0 proved it: on the uniform pipeline chain six of the seven named
+  baselines tie at 1.00 avg hops, and 1.00 IS the lower bound for
+  chain-adjacent hand-offs — that workload's ordering problem is closed
+  by heuristics, and the 4.0× wire-time spread is entirely the gap to
+  random. The die-level ordering instance therefore runs under the
+  DECLARED CROSS-TRAFFIC CLASS LOAD (the check-C reinforcement fan-out
+  family: every stage an equal volume to stages +2/+4/+8; wire-time
+  objective per [AMENDED 9]; the space is measured open there —
+  busiest-wire 18.3M–30.0M across the seven seatings), chosen over the
+  A3 co-residency alternative because A3 already hosts the within-die
+  instance and the two instances' conditions stay disjoint. The
+  uniform-chain version is FILED as the solved-degenerate-corner
+  record and is never a search demonstration target.
 - Expectations pre-written: search never below any named baseline;
   substantive margin in active cells (magnitude prior: the soft-lever
   table); the safe cell all-ties. Flips are findings.
@@ -324,4 +395,9 @@ level (N-level schema extension; trigger conditions in FIXLIST O16).
 Execution note: start at S1. Implementation-layer objections to the S1
 signature (fields, serialization, incremental hook shape) are raised
 before code; §5–§8 semantics are not in objection scope. Each step's
-closeout stops for review.
+closeout stops for review. **[AMENDED, S1 day 3 — the freeze
+discipline]** the S1 interface signature is FROZEN at the S1 closeout;
+from then on, ANY interface or semantic change goes through a formal
+amendment of THIS document (marked in place) plus the FIXLIST record —
+never a casual code-side edit. The day-2 inventory amendment is the
+precedent: code and spec must move together.
