@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 371 pass + 0 expected-fail (slow adds group 38), which is
+(`python3 tests/run_tests.py`; currently 377 pass + 0 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -1380,7 +1380,7 @@ current owner and its open items. Bold items move current conclusions.
 | calibration | physical geometry | slot_pitch_um in the configs; first consumer landed -- `ns_per_mm` x pitch resolved to ns/hop at load (C38) | energy scale from pitch may follow |
 | workload | model scales/shapes | 355M / 4-die probe / full 2.7B with real distributions | scaling-law probes d in {1024, 2560, 4096, 8192} and S in {128..2048} (O17); ~320-die joint deployment (O16) |
 | workload | phases & conditions | prefill/decode x attention on-chip/offloaded, end to end with the external unit as an interface (C21); non-matmul operators on the digital unit (C19) | host I/O streams |
-| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 371 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
+| verification | validation machinery | counter reconciliation, closed forms, blind-test coherence, 377 tests + goldens (48-die chain pins C15, accounting pins C17, ledger conservation C18, digital-unit pins C19, unit pins C25, device-axis groups 27-30); the change re-audit rule covers the registers AND this factor map (see the process rule below) | external-behaviour validation = plan steps 1 and 4; the two stale slow-suite goldens = plan step 3 |
 
 The per-op placement, on-die wiring and cross-die placement / wiring rows
 are the search space of S3/S4; the mapping and traffic-accounting rows are
@@ -1408,7 +1408,7 @@ P1 device axis), state the model's semantics (P1), then run the search (P3).
 | ~~O16~~ MEASURED under the static-spread hypothesis (A4/C62-b) | was: whole-model deployment never simulated jointly | one measured flat seating (544 dies, 17/layer x 32): whole vs block x 32 = +1.27% latency at GRS (+12% at 0.1 GB/s), +1.83% energy -- geometry-dominated increment, the ~4% D2D share cited with its geometry attached; hybrid residency = decision-layer future work; the seating is the S4 test payload | scale extension (outside the v5 paper) |
 | ~~O20~~ | tier-L seated one block at a time | subsumed by O16, now measured (A4/C62-b): the published block rows ARE the lower bound, and the whole-machine surcharge is quantified (+1.27% latency at GRS) | honesty debt (captioned, now quantified) |
 | ~~O14~~ CLOSED at the declaration tier (A3/C62-a) | was: over-capacity K/V has no policy | O21 gate gained the opt-in window mode (truncate + the verbatim semantics note: equivalent sliding-window attention, accuracy outside scope); validity domain re-stated (S<=2048 full attention / any S windowed, declared); eviction + tiered residency archived as un-built design space awaiting product intent -- no machinery, no pricing, no scans | scale extension (outside the v5 paper) |
-| O6 | `distance_router` doesn't exist; solver constant underivable | reconnects the collaborator's solver (S5); lifts the 47% citation ban | search prereq (on hold) |
+| ~~O6~~ RETIRED with S5 (C64-a) | was: distance_router missing, solver constant underivable | the collaborator has withdrawn; nothing consumes W_MACRO_DIST any more; the 47% ban becomes PERMANENT (11% flat stays usable) | -- |
 
 ### O27. Energy is dynamic-only; static power and peak concurrency are absent
 
@@ -2611,8 +2611,65 @@ per-op data, so search iterations cost microseconds, not mapper minutes.
 | S2 | **Heuristic baselines**: snake / clustered / centre-hub / sequential as first-class configs, plus a **constructive greedy** (flows in descending volume, each placed where the incremental peak-wire load is smallest) | `search_eval.py` registry | the bar a search must beat; the shared baseline of S3, S4 and S6 |
 | S3 | **On-die search (355M)**: simulated annealing + exhaustive-where-small over hub position x scheme params x macro permutation; objective T_single per anchor column, E as constraint | new `scripts/search_ondie.py`; SA ~10^4 evals, seconds | does search beat the best heuristic, and in which cells; Pareto front (E vs T) |
 | S4 | **Package search (355M 48-die + 2.7B die-sets)**: SA over unit->die assignment and die-set seating; objective T_pipe + surplus energy | new `scripts/search_package.py` | search vs snake / clustered gap; a tie is a finding too (publish it honestly) |
-| S5 | **Solver reconciliation** (needs O6): `W_MACRO_DIST` from fabric geometry, the collaborator's solver on the same objective, Spearman against `score()` | `die_solver.py` (his), `search_eval.py`, a Spearman harness | the two search efforts become comparable; lifts the 47% citation ban |
+| ~~S5~~ RETIRED (C64-a, 2026-09-10) | was: solver reconciliation with the collaborator (needed O6) | the collaborator has withdrawn; S5 is retired, O6 retires with it, and the 47% figure is PERMANENTLY UNPUBLISHABLE (the 11% flat figure remains usable per the standing citation rule) | -- |
 | S6 | **Proxy-optimization study**: same SA, space, budget and seeds; only the evaluator changes -- E0 full `score` / E1 volume x distance / E2 prefill-only / E3 the wrong paradigm tier; every solution re-scored by E0 under every condition | `search_ondie.py` + a harness | the 4 x N cross matrix: where a simplified evaluator returns the wrong layout, plus one "safe cell" control row (slow device x wide link: every evaluator expected to tie) |
+
+SEARCH V1 PRE-REGISTRATION (C64-a, 2026-09-10; the semantic
+authority is the repo-resident spec analysis/SEARCH_SPEC.en.md --
+the revised SYNC_search_v1 with every accepted amendment integrated
+in place and marked [AMENDED]; below are those amendments plus the
+run disciplines, filed BEFORE the first line of search code):
+(1) TILER FEASIBILITY EVERYWHERE (the O10 lesson, the O17c 4.3x
+flip-point miss its precedent): |D_k|'s lower bound AND its
+fill-exact value come from plan_spatial, never ceil(vol/cap);
+legal(Pi) folds tiler feasibility in beside Placement.verify; the
+ORACLE TABLE's group-size axis is the TILER-FEASIBLE SIZE SET
+(possibly sparse), not the integers above a bound -- DP states
+unchanged, the enumeration domain follows this definition.
+(2) DP EDGE-WEIGHT DIRECTION STATEMENT: the interval DP prices
+hand-off fees at ADJACENT-SEATING REFERENCE HOPS (alpha refines
+under fixed gamma); this makes the DP systematically OPTIMISTIC on
+hand-off fees, but hand-offs are the measured cheapest edge class
+(the 0.10 GB/s-threshold family), so the bias's effect on cut-point
+choice is EXPECTED NEGLIGIBLE -- its actual magnitude falls out of
+day 8's joint-vs-decomposed small instance for free and is filed
+back against this statement.
+(3) CONSTRAINT MODE = REJECTION (no penalty terms -- J semantics
+stay pure, no free coefficient), WITH THE ANTI-STRANDING GUARDRAIL:
+every multi-start seed set MUST contain at least one FEASIBLE named-
+baseline solution (ladder table v0 is the candidate pool); if ALL
+baselines are infeasible in a cell, "the constraint is unsatisfiable
+there" is a RESULT on file -- never rescued by a penalty. FT
+bookkeeping: segment-borne member terms ride their segment, global
+terms once (the A4 serial semantics extended).
+(4) THE DELTA COLUMN RIDES EVERY RESULTS TABLE FROM S3 ON: Delta =
+T_pess / T_opt (T_pess produced alongside T_opt from S1 day 2);
+where candidates' Deltas differ significantly the conclusion states
+whether the ranking survives the protocol-tier worst assumptions --
+the section-5 bracket policy's execution face, not deferred to
+writing.
+(5) RANDOMNESS: seed sets pre-registered per experiment; every
+reading reports the multi-start DISTRIBUTION (median + range),
+never a single best.
+(6) COLLABORATOR WITHDRAWAL, three synced deletions: no interface
+hand-off at S1 day 3; S2's `clustered` baseline is SELF-IMPLEMENTED
+from the literature definition (Gemini's rectangular clustering);
+S5 retired, O6 retired, the 47% permanently unpublishable (rows
+updated above).
+
+S1 DAY 1 DONE 2026-09-10: scripts/search_space.py -- the Pi triple
+(gamma cut vector + segment/stage views; alpha seat map with
+hub/attach; beta structural v1), legal() = the Placement.verify
+formalisation WITH the tiler fold-in (rejection message cites O10),
+feasible_die_counts() = the oracle's group-size axis (amendment 1's
+entity), JSON round-trip, and the A4 544-seat + 16x2-seam payload
+parsing to the LEGAL standard Pi (32 blocks, 16 stages). Gates all
+green (group 49, 6 pins): the O10-type counterexample REJECTED
+(2.7B ffn1 at capacity's 4 -> refused, tiler demands 5), gamma/
+overlap/hub/attach/beta pathologies each refused, the feasible set
+measured sparse (ffn1: 4 absent, 5 present). Days 2-3 (score() +
+triple identity anchors; incremental hooks + pin) pending -> C64-b
+at the S1 closeout; then S2=C64-c, S3=C64-d, S4=C64-e, S6=C64-f.
 
 Cell discipline: search experiments run only where the phase diagram has
 play -- the fast device tier, the shared-medium tier, offload-decode, weak
@@ -2620,8 +2677,8 @@ D2D x spanning -- and the safe cell as the control. Running the search in the
 (NeuRRAM x digital-link) cell reproduces 1.00x and proves nothing.
 
 Dependencies: S1 on the v5 fixtures and O25's anchor columns; S3/S4 on P1's
-cells; S6 on S3; S5 on O6 and the collaboration discussion (ON HOLD since
-2026-08-21).
+cells; S6 on S3. S5/O6: RETIRED 2026-09-10 (C64-a) -- the collaborator
+withdrew; the 47% figure is permanently unpublishable, 11% flat stays.
 
 ## Process rule (added after the 24-to-48-die miss)
 

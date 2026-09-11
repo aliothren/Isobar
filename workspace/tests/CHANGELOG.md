@@ -1668,3 +1668,34 @@ routing_params.{json,md} + routing_params.png; group 48 +2 tests.
 Fast suite: 371 / 0 xfail. THE O19 BATCH IS CLOSED inside the 9/16
 deadline -- items 1-3, the optional, both conditionals; O19 itself
 CLOSED: ten schemes in the registry, nothing queued.
+
+## C64-a (2026-09-10) -- the search milestone opens: spec landed, pre-registration, S1 day 1
+
+The founding spec is now repo-resident: analysis/SEARCH_SPEC.en.md --
+the revised SYNC_search_v1 with every accepted implementation-layer
+amendment integrated in place and marked [AMENDED]: (1) tiler
+feasibility everywhere (the O10 lesson; oracle group-size axis = the
+tiler-feasible set, possibly sparse); (2) the DP edge-weight direction
+statement (adjacent-reference pricing is systematically optimistic on
+hand-offs, expected negligible -- day 8 measures the magnitude for
+free); (3) constrained mode = rejection with the anti-stranding
+guardrail (every multi-start contains a feasible named baseline; an
+all-infeasible cell is a RESULT, never a penalty rescue) + the FT
+bookkeeping seat; (4) the Delta = T_pess/T_opt column on every results
+table from S3 on; (5) seed sets pre-registered, distributions not
+single-bests; (6) the collaborator's withdrawal: no interface
+hand-off, clustered self-implemented from the literature, S5 RETIRED,
+O6 retired with it, the 47% figure PERMANENTLY unpublishable (11%
+flat stays). FIXLIST rows and dependency lines updated; .gitignore
+whitelists the spec.
+
+S1 day 1: scripts/search_space.py -- Pi = (gamma cuts + segment/stage
+views, alpha seat map + hub/attach, beta structural), legal() = the
+Placement.verify formalisation with the tiler fold-in (the rejection
+message cites O10), feasible_die_counts() (amendment 1's entity),
+JSON round-trip, and pi_from_a4_payload() wiring the 544-seat +
+16x2-seam payload as the legal standard case. Gates green
+(tests/test_search_space.py, group 49, 6 pins): the O10-type
+counterexample refused (ffn1 at capacity's 4 vs the tiler's 5), all
+pathology cases refused, the feasible set measured sparse. Fast
+suite: 377 / 0 xfail. S1 days 2-3 -> C64-b.

@@ -35,6 +35,7 @@ workspace/analysis/*
 !workspace/analysis/SUMMARY.en.md
 !workspace/analysis/SUMMARY.Extn.md
 !workspace/analysis/FIXLIST.en.md
+!workspace/analysis/SEARCH_SPEC.en.md
 !workspace/analysis/PROGRESS.md
 !workspace/analysis/ANCHORS.md
 !workspace/analysis/*.png

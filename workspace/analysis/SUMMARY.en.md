@@ -826,7 +826,16 @@ parity stand-in never beats plain XY on any tested pattern — routing
 algorithms cannot move any busiest-wire number in this account; their
 habitat is the queueing tier, outside the O26 bound:
 `routing_params.{json,md}` + `routing_params.png`. **O19 is closed: ten
-schemes, nothing queued.** Three findings, each replacing
+schemes, nothing queued.**
+
+**The search milestone (worklist step 7) is OPEN (C64):** the founding
+spec is repo-resident at [SEARCH_SPEC.en.md](SEARCH_SPEC.en.md) (space /
+objective / referee family / solver split / path, with the accepted
+amendments marked in place); S5/O6 are retired with the collaborator's
+withdrawal (the 47% figure permanently unpublishable; 11% flat stays).
+S1 day 1 shipped: the Π search space with tiler-folded legality (the
+O10-type counterexample is a pinned rejection) and the A4 payload as the
+legal standard case — group 49. Three findings, each replacing
 a guess: (1) above the flip the busiest wire IS the input trunk — down =
 S×d words per macro edge exactly, ratio = d / 114,688 (= 16,384
 words/cycle × 7 slices): "knee ∝ d" with slope exactly 1, the closed form
