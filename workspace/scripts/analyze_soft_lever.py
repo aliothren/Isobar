@@ -43,7 +43,9 @@ WS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SRC = os.path.join(WS, "analysis", "contention_system.json")
 REF_WC = 16384.0
 HEAVY = 4.0
-ANCHOR_GBPS = [0.4, 2.0, 8.0, 8.75]      # analog band ends + mid + Simba NoC
+ANCHOR_GBPS = [0.1, 0.2, 0.4, 2.0, 8.0, 8.75]   # + the 0.1/0.2 deep-weak
+                                         # anchors (A3): the lever's
+                                         # saturation plateau
 SCHEMES = [("star", {}, "star (private links)"),
            ("mesh", {"routing": "xy", "hub": "center"}, "mesh, glb centre"),
            ("mesh", {"routing": "xy", "hub": "corner"}, "mesh, glb corner"),

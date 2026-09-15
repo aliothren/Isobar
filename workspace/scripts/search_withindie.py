@@ -178,7 +178,9 @@ def main():
     print("identity anchor: recomputed A3 fold == stored a3_cells "
           "(both phases, all anchors)")
 
-    out = {"anchor_g": G_ACTIVE, "safe_g": G_SAFE, "runs": {}}
+    out = {"anchor_g": G_ACTIVE, "safe_g": G_SAFE, "runs": {},
+           "quantifier": "certified",
+           "evaluation_set": "exhaustive: 280 attn / 70 ffn joint seatings"}
     for die in DIES:
         for phase in ("prefill", "decode"):
             J = WithinDieJ(die, phase, G_ACTIVE)

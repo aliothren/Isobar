@@ -188,10 +188,34 @@ separates from the optimistic one on packet-declared weaves.
 score() argument: it rides the FABRIC the workload holds (the same
 entry route as the weave) and is consumed exactly where its O26
 semantics apply — the occupancy-bound paths (`link_occupancy` reads
-it from W's fabric; the 355M backend inherits it). The 2.7B serial
-hand-off term is a direct transfer time, NOT an occupancy bound, so
-slack rightly does not multiply it. No arm of S6 tunes slack (arms
-share the condition layer). Not dropped; seated.
+it from W's fabric; the 355M backend inherits it). No arm of S6 tunes
+slack (arms share the condition layer). Not dropped; seated.
+**[AMENDED 14 — the 2.7B hand-off term, corrected after the accounting
+review]** The sentence that stood here ("the 2.7B serial hand-off term
+is a direct transfer time, not an occupancy bound") is RETIRED, and the
+"non-gap" verdict that leaned on it is withdrawn. A 2.7B hand-off is
+MANY concurrent flows — every producer die ships its piece to every
+consumer die at once — sharing the declared die mesh (mesh, xy
+routing); batch-1 serialises layer after layer, NOT the flows inside
+one hand-off. The old term collapsed a whole hand-off into one stream
+over one link (total words / rate): a pessimistic, seat-invariant upper
+bound inconsistent with the fabric declaration and with the energy
+channel, which already routes every flow. The hand-off time term is now
+the hand-off's BUSIEST-LINK volume / link rate: every flow routed on the
+declared weave, volume accumulated per (link, direction) exactly as
+`link_occupancy`'s node-flow branch does (pinned identical), plus
+propagation; both calibers (single and pipe) use it. When a hand-off
+is a single flow (one die → one die) the definition reduces exactly to
+words / rate (pinned) — the 355M backend is that special case, so the
+two backends now share ONE hand-off semantics. Energy is untouched.
+The A4 identity anchor is re-established as a relation to the frozen
+record: stored latency − new latency == Σ over boundaries of (total −
+busiest) words / rate, exactly; frozen_v6 and a4_full_model.json stay
+as records. Follow-up seated, not done: the term is now
+occupancy-class, so `schedule_slack`'s O26 semantics apply to it too
+(default 1.0 — no number moves until a slack ≠ 1 is declared); whether
+the pipe caliber additionally models cross-segment concurrent contention
+is a separate question, deliberately open.
 
 ## 6. Objective and phase modes
 
@@ -224,6 +248,20 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
   clustered). The old blanket "within-percent boredom of the energy
   column demonstrates latency optimization is free" is RETIRED in favor
   of these two scoped statements.
+  **[AMENDED 15 — the mapping above SUPERSEDED by the corrected hand-off
+  accounting ([AMENDED 14]; D.3 item 2)]** The "seating moves T only by
+  ppm" basis of [AMENDED 9] was an artifact of the one-stream-per-hand-off
+  term. Under the busiest-link term the 2.7B T ladder OPENS: safe cell
+  (GRS) spread 6.8%, weak-D2D cell 1.95×, fast-device cell 1.26× across
+  the seven named seatings (busiest/total ratio 0.35 for the dispersed
+  `random` to 0.92 for the index fills); the energy column is unchanged
+  (8.0%) and ordered differently. The spec's original rule therefore
+  applies again to the 2.7B seating instance: **main objective = T,
+  energy the lexicographic tie-break**; the 355M ordering instance keeps
+  wire time. The two scoped sentences above stand as ENERGY-column
+  statements only; "latency-optimal seating costs below one-thousandth
+  in energy" is RETIRED (the T-best seating, random, is 8.0% above the
+  E-best in energy).
 - Three phase modes, μ declared: one-hot (single phase) / weighted mix /
   constrained (min T_decode s.t. T_prefill ≤ budget). **v1 default:
   constrained** (serving reality; v1 default, swappable). The phase is a
@@ -280,6 +318,40 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
   row moves with it.
 
 ## 8. Solver split and the operator table
+
+**[AMENDED 14 — backend note]** Both workload backends price a hand-off
+by the same rule: per-flow routing on the declared die weave,
+busiest-link volume / link rate, plus propagation (§5). The 355M
+backend (one die per unit, one flow per hand-off) is the single-flow
+special case in which the rule reduces to words / rate; the 2.7B
+backend (multi-die sets, many concurrent flows per hand-off) is the
+general case. No load class uses a different hand-off caliber.
+
+**[AMENDED 16 — the level-1 cost table is EVALUATOR-IDENTICAL; the
+cut-point fee is zero in the frozen model]** The D.2 ruling of the
+hand-off review (per-layer time = the evaluator's layer time at the
+current seating) surfaced a third mismatch when applied: the DP's
+"hand-off fee at cut points" had no evaluator counterpart. The frozen
+evaluator charges EVERY boundary — intra-layer and the layer's entry
+inter-layer hand-off — to the receiving layer's stage whether or not a
+cut sits there; the machine is one mesh with no priced package seam,
+so cutting itself costs nothing (the evaluator's single caliber is
+cut-blind: 1025.83 ms at any k; the DP's cut-only fee produced
+1013.99 ms at k = 1, the 31 within-segment inter-layer hand-offs
+dropped). The table is therefore: tau[layer] = layer compute + write +
+elementwise + the layer's intra-layer hand-offs + its entry hand-off,
+all at the busiest-link term at the seating; fee[cut] = 0. Pinned: DP
+single k = 1 + propagation == evaluator single, and the DP's pipe
+interval on its own plan == the evaluator's pipe interval on a Π
+carrying those cuts (1e-9, k = 2/8/32). Consequences filed, not
+excused: the "cuts only add fees, k = 1 is optimal under single"
+statement is RETIRED (single is cut-blind); the two-phase constrained
+exhibit has NO decode price for cutting in this model — the constraint
+only selects the smallest feasible depth — and a real prefill/decode
+trade-off requires a PRICED package seam, a modeling extension outside
+the frozen evaluator (seated as an open item). The [AMENDED 2]
+direction statement (reference-hop fee optimism) is moot: there is no
+fee to be optimistic about.
 
 - Level 1: exact interval DP. State F(k, j, d) = first j blocks in k
   segments using d dies; segment costs from a pre-budgeted oracle table

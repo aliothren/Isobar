@@ -49,7 +49,12 @@ def run_2p7b():
             r[f"t_single_{cell}_s"] = sc.t_opt_s
             if cell == "safe":
                 r["e_J"] = sc.e_J
-                r["d2d_words"] = sc.per_phase["prefill"]["decomp"]["d2d_words"]
+                d = sc.per_phase["prefill"]["decomp"]
+                r["d2d_words"] = d["d2d_words"]
+                # the accounting review's column: busiest-link words
+                # summed over boundaries / total words (D.4 line (a))
+                r["d2d_busiest_words"] = d["d2d_busiest_words"]
+                r["busiest_over_total"] = d["d2d_busiest_words"] / d["d2d_words"]
         r["t_pipe_safe_s"] = se.score(pi, W, caliber="pipe",
                                       d2d_gbps=12.5).t_opt_s
         rows[name] = r
@@ -85,14 +90,15 @@ def main():
     order = sorted(sb.NAMES, key=lambda n: r27[n]["t_single_safe_s"])
     print("LADDER TABLE V0 -- 2.7B class (sorted by safe-cell T_single)")
     print(f"{'baseline':16} {'T safe(ms)':>11} {'T weak(ms)':>11} "
-          f"{'T fast(ms)':>11} {'T pipe(ms)':>11} {'E(J)':>8} {'d2d(Mw)':>9}")
+          f"{'T fast(ms)':>11} {'T pipe(ms)':>11} {'E(J)':>8} {'d2d(Mw)':>9} "
+          f"{'busy/tot':>9}")
     for n in order:
         r = r27[n]
         print(f"{n:16} {r['t_single_safe_s']*1e3:11.3f} "
               f"{r['t_single_weak_d2d_s']*1e3:11.2f} "
               f"{r['t_single_fast_dev_s']*1e3:11.3f} "
               f"{r['t_pipe_safe_s']*1e3:11.4f} {r['e_J']:8.4f} "
-              f"{r['d2d_words']/1e6:9.1f}")
+              f"{r['d2d_words']/1e6:9.1f} {r['busiest_over_total']:9.4f}")
     es = [r27[n]["e_J"] for n in sb.NAMES]
     print(f"E spread (max-min)/min = {(max(es)-min(es))/min(es)*100:.3f}%")
     for cell, _, _ in CELLS:
@@ -109,6 +115,8 @@ def main():
 
     json.dump({"note": "ladder table v0 + the section-6 feasible-seed "
                        "pool (C64-c closeout item 5)",
+               "quantifier": "observed",
+               "evaluation_set": "the 7 named seatings",
                "cells": [{"name": c, "d2d_gbps": b, "device_scale": s}
                          for c, b, s in CELLS],
                "table_2p7b": r27, "table_355m": r355,
@@ -126,19 +134,22 @@ def main():
     for cell, _, _ in CELLS:
         ts = [r27[n][f"t_single_{cell}_s"] for n in order]
         best = min(ts)
-        axes[0].plot(x, [(t / best - 1.0) * 1e6 for t in ts], marker="o",
+        axes[0].plot(x, [(t / best - 1.0) * 100 for t in ts], marker="o",
                      label=cell)
     axes[0].set_xticks(x)
     axes[0].set_xticklabels(order, rotation=35, ha="right", fontsize=8)
-    axes[0].set_ylabel("T_single excess over cell best (ppm)")
-    axes[0].set_title("2.7B: the T ladder per cell\n(seating moves T by "
-                      "ppm -- the propagation term only)", fontsize=9)
+    axes[0].set_ylabel("T_single excess over cell best (%)")
+    axes[0].set_title("2.7B: the T ladder per cell\n(busiest-link hand-off "
+                      "term: seating moves T through link sharing)",
+                      fontsize=9)
     axes[0].legend(fontsize=8)
-    axes[1].bar(x, [r27[n]["d2d_words"] / 1e6 for n in order], color="#888")
+    axes[1].bar(x, [r27[n]["busiest_over_total"] for n in order],
+                color="#888")
     axes[1].set_xticks(x)
     axes[1].set_xticklabels(order, rotation=35, ha="right", fontsize=8)
-    axes[1].set_ylabel("D2D words (M)")
-    axes[1].set_title("D2D words: seat-invariant,\nset by construction",
+    axes[1].set_ylabel("busiest-link words / total words")
+    axes[1].set_title("how much of each hand-off stacks on one link\n"
+                      "(total words are seat-invariant; this ratio is not)",
                       fontsize=9)
     axes[2].bar(x, [r355[n]["wire_ms"] for n in order], color="#4a7")
     axes[2].set_xticks(x)

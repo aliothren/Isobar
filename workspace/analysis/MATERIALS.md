@@ -115,3 +115,50 @@ the spec BEFORE any search ran (gate R4; FIXLIST); it is kept here
 because a proxy being completely fooled by dispersion -- and two
 proxies contradicting each other -- is itself evidence material for
 section 5, better filed than hidden.
+
+## External adjudication: the hand-off term against a packet-level network
+
+The die-level hand-off term — busiest resource over the mesh links and
+the dies' own ports — was checked against BookSim on a 36-die package,
+the first outside verdict it has had. Our accounting equals the
+simulator's own channel bound exactly (integer equality, three
+geometries), and the simulator lands above our bound everywhere:
+**1.20× where a hand-off's flows stack on a wire, 2.38× where they
+stack on a die's port**. That second number named a real omission (the
+port, since priced) and is the reason dispersed seatings were being
+flattered. What survives externally: the RANKING our term induces
+(Spearman 0.886, top-1 agreement, selected-solution regret 1.0000,
+disagreements only inside the term's own ties) and, on a shrunk
+instance, the **S6 verdict order itself — E0 best, E1 worst, Spearman
+1.000**, with magnitudes compressed (E1 1.26× under the packet judge
+vs 1.85× under ours).
+
+Use: the search chapter's "is the evaluator trustworthy" paragraph.
+The honest shape is a bound that is tight where it matters for
+ranking and loose in a direction we named and then fixed — better
+material than a bound that was simply right.
+
+Generators: `scripts/b7_handoff_probe.py`, `scripts/b7_s6_rerank.py`.
+Data: `analysis/b7_handoff_probe.json`, `analysis/b7_s6_rerank.json`.
+
+## The deployment split costs exactly nothing — and the reason is the
+## same homogeneity that makes balanced cutting optimal
+
+On an enumerable instance (4 blocks × 2 dies on a 3×3 mesh, 181,440
+joint states — the joint optimum is *certified*), the shipped
+DP-then-SA split reaches the joint optimum EXACTLY: gap 1.000 at both
+cells over five seeds, DP top-3 refinement and two alternation rounds
+each gaining zero. The mechanism, checked rather than assumed: the
+DP's cut decision is INVARIANT to the seating, because the seating
+moves each block's time by hand-off amounts far below the compute term
+that dominates the partition. Verified in the regime where the
+partition genuinely groups blocks (a swept per-cut seam price drives
+the optimal depth to 2–3 stages) — the gap is still zero there.
+
+Use: the methods section's justification for solving γ and (α, β)
+separately, stated WITH its scope — the invariance is exactly what
+capacity heterogeneity or replication would break, so this licenses
+the split for the homogeneous stacks reported here and not in general.
+
+Generator: `scripts/b5_joint_exact.py`. Data:
+`analysis/b5_joint_exact.json`.

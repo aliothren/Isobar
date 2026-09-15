@@ -7,12 +7,14 @@ frozen accounts (zero mapper):
 
     t(segment [i, j), g) = (j - i) * tau(g) + entry_fee(i)
 
-V1 is DECLARED FLAT in g (tau(g) = the production-point
-layer_serial_s for every feasible g; the replication/heterogeneity
-speed model is out of v1 scope -- heterogeneity enters day 10+
-through the fees). Fees per [AMENDED 2]: the entry boundary priced at
-ADJACENT-SEATING REFERENCE HOPS = 1 -- systematically optimistic,
-direction declared, magnitude backfill due day 10.
+Flat in g (the replication speed model stays out of scope). COST TABLE
+per the D.2 ruling of the hand-off accounting review: tau[layer] = the
+evaluator's layer time under the given seating -- compute + write +
+elementwise PLUS the layer's intra-layer hand-offs at the busiest-link
+term -- and fee[layer] = the layer boundary's busiest-link hand-off at
+the same seating; both per layer, both seat-dependent (the former
+oracle's reference-hop fee on total words and its omission of the
+intra-layer term are superseded).
 
 Calibers: "pipe" is the primary deployment question and the DP is
 MINIMAX (min over cuts of the max stage time; stage = m * tau +
@@ -77,25 +79,67 @@ class Instance:
     budget: int
 
 
-def standing_instance() -> Tuple[Instance, Dict]:
-    """The A4/standing 2.7B payload at GRS, v1 flat-in-g oracle."""
+def standing_instance(pi=None, phase: str = "prefill",
+                      d2d_gbps: float = GRS_GBPS) -> Tuple[Instance, Dict]:
+    """The A4/standing 2.7B payload at GRS. D.2 RULING (the hand-off
+    accounting review): the per-layer time is the EVALUATOR'S layer time
+    under the given seating (default: the A4 payload seating) --
+    compute + write + elementwise PLUS that layer's four INTRA-layer
+    hand-offs at the busiest-link accounting -- and the entry fee is the
+    layer boundary's busiest-link hand-off at the same seating. Both are
+    seat-dependent and per layer. The former oracle omitted the
+    intra-layer term (88% of the D2D words) and priced the fee on total
+    words; it is superseded, its numbers kept in FIXLIST as SUPERSEDED.
+    Still flat in g (the replication speed model stays out of scope)."""
     W = se.Workload2p7B()
+    pi = pi or ss.pi_from_a4_payload()
     L = W.cfg.n_layers
-    layer_s = W.layer_serial_s("prefill")
-    # inter-layer boundary words, the evaluator's own convention (read
-    # once from the standing sequential payload; identical per layer)
-    from scripts import search_baselines as sb
-    pi = sb.generate("sequential", W)
-    bs = W.boundaries(pi, "prefill")
-    inter = [b for b in bs if b["inter_layer"]]
-    words = inter[0]["words"]
-    assert all(abs(b["words"] - words) < 1e-6 for b in inter)
-    fee_s = words / (GRS_GBPS * 1e9)         # reference hops = 1 ([AM 2])
+    layer_s = W.layer_serial_s(phase)
+    bs = W.boundaries(pi, phase)
+    wps = d2d_gbps * 1e9
+    intra = [0.0] * L
+    inter = [0.0] * L                            # no boundary into layer 0
+    for b in bs:
+        li = int(b["into"].rsplit("@L", 1)[1])
+        t = b["busiest_words"] / wps
+        if b["inter_layer"]:
+            inter[li] += t
+        else:
+            intra[li] += t
+    # EVALUATOR-IDENTICAL (the third mismatch surfaced by the D.2 table):
+    # the evaluator charges every boundary -- intra-layer AND the layer's
+    # ENTRY inter-layer hand-off -- to the receiving layer's stage whether
+    # or not a cut sits there; in the frozen model cutting itself costs
+    # nothing (one mesh, no priced package seam). So the entry hand-off
+    # is folded into the layer's time and the cut-dependent fee is ZERO.
+    # The former "fee at cut points only" table had no evaluator
+    # counterpart (it dropped within-segment inter-layer hand-offs and
+    # made the single caliber falsely cut-dependent).
     G = tuple(layer_feasible_sizes(W.cfg, W.S, 576))
-    taus = tuple(tuple(layer_s for _ in G) for _ in range(L))
-    fees = tuple(0.0 if b == 0 else fee_s for b in range(L))
-    return (Instance(taus=taus, fees=fees, G=G, budget=576),
-            {"layer_s": layer_s, "fee_s": fee_s, "words": words, "L": L})
+    taus = tuple(tuple(layer_s + intra[li] + inter[li] for _ in G)
+                 for li in range(L))
+    return (Instance(taus=taus, fees=tuple(0.0 for _ in range(L)), G=G,
+                     budget=576),
+            {"layer_s": layer_s, "intra_s": intra, "inter_s": inter,
+             "fee_s": [0.0] * L, "L": L, "phase": phase,
+             "d2d_gbps": d2d_gbps,
+             "d2d_total_s": sum(intra) + sum(inter),
+             "inter_total_s": sum(inter),
+             "cut_fee_total_s": 0.0})
+
+
+def uniform_reference_instance() -> Tuple[Instance, Dict]:
+    """The uniform-layer REFERENCE: every layer at the standing seating's
+    MEAN layer time and mean fee -- the instance on which the
+    balanced-cut degeneracy is the structural claim (gate D3)."""
+    inst, meta = standing_instance()
+    L = meta["L"]
+    tau = sum(t[0] for t in inst.taus) / L
+    fee = 0.0                                     # cutting is free (above)
+    taus = tuple(tuple(tau for _ in inst.G) for _ in range(L))
+    fees = tuple(0.0 for _ in range(L))
+    return (Instance(taus=taus, fees=fees, G=inst.G, budget=inst.budget),
+            {"tau": tau, "fee": fee, "L": L})
 
 
 # ---------------------------------------------------------------- the DP
@@ -188,29 +232,44 @@ def main():
     inst, meta = standing_instance()
     print(f"layer feasible size set G = {inst.G}")
     print(f"(16 absent = the O10 echo; 17 = the standing minimum)")
-    print(f"layer_s {meta['layer_s']*1e3:.4f} ms | boundary "
-          f"{meta['words']/1e6:.2f}M words -> fee {meta['fee_s']*1e3:.4f} ms"
-          f" at reference 1 hop, GRS {GRS_GBPS} GB/s")
+    intra, inter = meta["intra_s"], meta["inter_s"]
+    print(f"layer_s {meta['layer_s']*1e3:.4f} ms | intra-layer hand-offs "
+          f"per layer {min(intra)*1e3:.3f}..{max(intra)*1e3:.3f} ms | "
+          f"entry (inter-layer) hand-off per layer "
+          f"{min(inter[1:])*1e3:.4f}..{max(inter[1:])*1e3:.4f} ms "
+          f"(busiest-link, A4 seating, GRS)")
     v1, p1 = solve(inst, 1, "single")
-    print(f"single caliber: k=1 -> {v1*1e3:.3f} ms (cuts only add fees; "
-          f"k=2 -> {solve(inst, 2, 'single')[0]*1e3:.3f} ms)")
+    v2, _ = solve(inst, 2, "single")
+    print(f"single caliber: k=1 -> {v1*1e3:.3f} ms; k=2 -> {v2*1e3:.3f} ms "
+          f"(identical: cutting is free in the frozen model)")
+    # the D.2 reporting rule: shares with their denominators named
+    print(f"D2D TOTAL share (all 159 hand-offs / whole serial latency) = "
+          f"{meta['d2d_total_s']/v1:.2%}; INTER-LAYER hand-off share (the "
+          f"31 layer-boundary hand-offs, paid at every boundary cut or "
+          f"not / whole serial latency) = {meta['inter_total_s']/v1:.2%}; "
+          f"CUT-DEPENDENT fee = 0 (no priced package seam in the model)")
     print(f"{'k':>3} {'interval(ms)':>13} {'seg sizes':>24} "
-          f"{'g':>4} {'dies':>5} {'fee share':>10}")
+          f"{'g':>4} {'dies':>5} {'fee/stage':>10}")
     rows = {}
     for k in (1, 2, 4, 8, 16, 32):
         v, plan = solve(inst, k, "pipe")
         sizes = [j - i for i, j, _ in plan]
         gs = sorted(set(g for _, _, g in plan))
         dies = sum((j - i) * g for i, j, g in plan)
-        stage = max(sum(inst.taus[b][inst.G.index(g)] for b in range(i, j))
-                    + inst.fees[i] for i, j, g in plan)
-        fee_share = meta["fee_s"] / stage if k > 1 else 0.0
+        stages = [(sum(inst.taus[b][inst.G.index(g)] for b in range(i, j))
+                   + inst.fees[i], inst.fees[i]) for i, j, g in plan]
+        st, f = max(stages)
         rows[k] = {"interval_s": v, "sizes": sizes, "dies": dies}
         print(f"{k:3d} {v*1e3:13.4f} {str(sizes):>24} {str(gs):>4} "
-              f"{dies:5d} {fee_share:10.4%}")
+              f"{dies:5d} {f/st:10.4%}")
     ks = sorted(rows, key=lambda k: rows[k]["interval_s"])
     print(f"pipe-caliber optimum on the standing payload: k = {ks[0]} "
           f"(interval {rows[ks[0]]['interval_s']*1e3:.4f} ms)")
+    u, um = uniform_reference_instance()
+    vu, pu = solve(u, 8, "pipe")
+    print(f"uniform-layer reference (mean layer {um['tau']*1e3:.4f} ms, cut "
+          f"fee 0): k=8 sizes {[j - i for i, j, _ in pu]} interval "
+          f"{vu*1e3:.4f} ms")
 
 
 if __name__ == "__main__":

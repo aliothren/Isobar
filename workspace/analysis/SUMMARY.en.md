@@ -905,25 +905,19 @@ this transfer demand"; on the pure-chain control clustered stays BEST
 anti-stranding seed pool): safe-cell T ladder nmap_greedy =
 least_manhattan < clustered < snake < sequential < heaviest_first <
 random; energy column clustered 2.3379 J best, random 2.5251 J worst.
-Two pre-registered expectations flipped, each a finding: per-boundary
-words are placement-INVARIANT by construction (every producer die ships
-its piece to every consumer die wherever they sit), so seating moves T
-only through the µs-scale propagation term (73 µs across the ladder;
-T_pipe bit-identical) and the weak-D2D / fast-device cells amplify
-seating-invariant terms — **the energy column, not latency, is the 2.7B
-caliber's placement-sensitive column** (8.0% spread vs 0.007%), while
-the time-side placement play lives in the 355M wire-time caliber
-(random 4.0× vs snake). The post-review E-column reconciliation settled
-the one number and filed both sentences with their scopes (spec §6
-[AMENDED 9]): "8.0%" quantifies the FULL seven-seat spread, dispersed
-end included; "latency-optimal seating costs the system below
-one-thousandth in energy" quantifies the T-best→E-best gap
-(nmap_greedy +0.060%, least_manhattan +0.011% vs clustered) — the
-blanket "within-percent boredom" sentence is retired. The S3
-consequence is now SPEC, not a note: §6 carries the
-instance→objective mapping (2.7B seating instance → E; 355M ordering
-instance → wire time; cuts/condition levels keep T with E as
-tie-break); the 355M uniform chain is declared a SOLVED DEGENERATE
+Under the corrected hand-off accounting (the 09-15 revision below)
+the 2.7B ladder reads: total boundary words are seat-invariant by
+construction, but how much of a hand-off's flows STACK ON ONE LINK is
+not — the busiest-link/total ratio runs from 0.35 for the dispersed
+`random` fill to 0.92 for the index fills — so seating moves
+whole-model latency by **6.8% at the measured link tier (GRS), 1.95×
+at weak links (0.4 GB/s), 1.26× at the fast-device cell**, and the T
+ladder is ordered by that ratio (random 960.6 ms best … sequential
+1025.8 ms worst at GRS). The energy column moves 8.0% in a DIFFERENT
+order (clustered best, random worst): the latency-best and
+energy-best seatings differ, with teeth. Spec §6 carries the
+instance→objective mapping ([AMENDED 15]: 2.7B seating instance → T
+with E the tie-break; 355M ordering instance → wire time); the 355M uniform chain is declared a SOLVED DEGENERATE
 CORNER (§10 [AMENDED 10]: six named baselines tie at 1.00 avg hops =
 the chain-adjacency lower bound, so that ordering problem is closed by
 heuristics and the 4.0× spread is entirely the gap to random), and
@@ -941,10 +935,10 @@ rule (package-seat propagation lever, µs-scale, vs die-mesh
 busiest-wire occupancy lever, multiple-fold).
 
 **S3 is CLOSED (C64-d, days 6-8): the SA body + the two single-level
-instances.** (S3's own two instances shipped complete; the 2.7B
-seating instance — main objective E per [AMENDED 9] — was ruled into
-S4 day 10, where the linkage's SA-seating leg produces its first
-readings; spec [AMENDED 13].) Day 6 shipped the SA body (`search_sa.py`: the three
+instances.** (S3's own two instances shipped complete; the 2.7B seating
+instance was ruled into S4 day 10, where the linkage's SA-seating
+leg produces its readings; spec [AMENDED 13], objective T per
+[AMENDED 15].) Day 6 shipped the SA body (`search_sa.py`: the three
 operator families — exchange / migrate with the two-step form on
 saturated hosts / whole-set swap — Metropolis on a geometric schedule,
 rejection-semantics constraints with infeasible starts refused,
@@ -998,36 +992,43 @@ near-degeneracy went from assumption to **DP-verified fact** (balanced
 cuts at every k, minimal g = 17, 544 dies); pipe-caliber k* = 32
 (29.204 ms, fee tax 1.44%), single caliber k = 1 (cuts only add
 fees). Day 10, the linkage and exhibits (`search_linkage.py`, gates
-green first): **EX1, the two-phase constrained table** — at B = 120 ms
-the constrained optimum is k* = 8 (T_prefill 115.56 / T_decode 24.115
-ms) vs the unconstrained decode optimum k = 1: the constraint BITES;
-the full threshold staircase is filed (the first-bite edge at 921.11
-ms verified on both sides); honest note — the decode price of
-pipelining at GRS is feather-light (~0.7 µs per cut). **The
-[AMENDED 2] fee-optimism backfill**: cut-boundary hops up to 10, no
-cut decision changes at any k, bottleneck shift 2.2e-7…6.8e-6 —
-negligible under the pre-declared standard, the reference-hop fee
-model stands (backfilled into the spec). **The 2.7B seating
-instance's first readings ([AMENDED 13], main objective E)**: best
-E = 2.337921 J = the clustered rung EXACTLY (unimproved in 1200
-steps; snake likewise; random 2.525 → 2.489 without reaching the
-clustered basin) — regret 1.0000, the E-column named ceiling stands;
-deeper budgets belong to the S6 era. **EX2, weave enumeration — one
-land, one flip, one bonus finding**: ring LANDS — the three-rung E
-spread explodes (2.51/3.50/6.43 vs mesh 2.34/2.35/2.53) AND the
-ordering INVERTS (snake < clustered under ring): a genuine rank
-inversion on the E column across the weave condition, the
-condition-bound motif measured on a third axis (F-L4); torus FLIPS —
-every rung's E RISES and the spread widens slightly (F-L3: the E
-column reads the PHYSICAL caliber, where the torus fold is a TAX —
-folded wires twice as long; the count-caliber precedent does not
-carry, the C59 folded-×2 lesson resurfacing on energy). **EX3, an
-expectation-premise error recorded as such**: the pre-registration
-misread the A4 seam example as 2 packages × 16 layers; it is 16
-packages × 2 layers, and against the corrected baseline the
-seam-bound plan IS the free DP's balanced k = 16 plan — intervals
-bit-identical (57.98899840 ms both): the seam bound costs zero at its
-own segment count; the error lived in the expectation text alone.
+green first): **EX1, the two-phase constrained exhibit** (re-issued under the
+evaluator-identical cost table): at a 120 ms prefill budget the
+smallest feasible depth is k* = 11 (T_prefill 97.05 ms); the decode
+column is FLAT across depths (24.314 ms at every k) — in the frozen
+model cutting itself costs nothing (one mesh, no priced package
+seam), so the budget selects a depth but buys no decode trade-off; a
+genuine prefill/decode trade-off needs a priced seam, filed as the
+model's next extension. The feasibility staircase (budgets at which
+the smallest feasible depth steps: 1025.8 / 513.3 / 352.8 / 257.0 /
+… / 127.5 ms → k = 2 / 3 / 4 / 5 / … / 11) replaces the former
+k-indexed table. **The DP table at the deployed seating** (the D.2
+loop): rebuilt at the SA-found seating vs the A4 default, cut
+DECISIONS unchanged at every k (balanced cuts hold) while the
+bottleneck stage VALUE moves 7.3% (the hand-off total 104.7 → 32.9
+ms) — the DP must be run at the deployed seating; the value is not
+seat-invariant. **The 2.7B seating instance's readings ([AMENDED 15],
+objective T)**: at GRS the search ends at 954.14 ms, 0.7% below the
+best named seating (random 960.62; the dispersed fill is already
+near the latency optimum at the measured tier; busiest/total 0.29);
+at weak links (0.4 GB/s) it ends at 1908.5 ms, **11.4% below** the
+best named (2153.1) — the band is open where the hand-off share is
+large; all three starts converge within 0.1% (GRS) / 0.7% (weak).
+The latency-best seating carries E = 2.517 J, 7.7% above the
+energy-best: the two optima are different seatings. **EX2, weave enumeration** — on the ENERGY column (unchanged by
+the revision): ring reorders the ladder wholesale and explodes its
+spread (2.51/3.50/6.43 J vs mesh 2.34/2.35/2.53; a genuine rank
+inversion across the weave condition, F-L4), torus preserves the
+order and taxes it (F-L3: the E column reads physical length, folded
+wires price double). On the LATENCY column (now carried by the weave,
+since hand-offs are routed on it) the T-optimised seatings sit
+within ±1% of the mesh at GRS (torus 948.7 ms, mesh 954.1, ring
+962.3) while their energies diverge (2.63 / 2.52 / 6.29 J): at the
+measured link tier the weave decides energy, not latency. **EX3**:
+the seam-bound plan (16 packages × 2 layers) IS the free DP's
+balanced k = 16 plan under the seat-dependent table too — intervals
+bit-identical (64.6999 ms both); the seam bound costs zero at its own
+segment count.
 Suite 410 → 418 across S4.
 
 **S6 is CLOSED (C64-f, days 11-12) — and with it THE SEARCH MILESTONE
@@ -1072,6 +1073,87 @@ hash-pinned; the suite runs 385 → 424 across the milestone, zero
 expected-fail. (Operational note: the S6 main run's host-side task
 was killed at a session interruption; the container-side process
 survived and completed — no restart, no partial artifacts.)
+
+**The 2.7B die-level hand-off accounting, revised (09-15; spec
+[AMENDED 14/15/16]; suite 424 → 429).** A 2.7B hand-off is many
+concurrent flows — every producer die to every consumer die at once —
+sharing the declared die mesh; batch-1 serialises layers, not the
+flows inside a hand-off. The former term collapsed a whole hand-off
+into one stream over one link (total words / rate): a seat-invariant
+upper bound inconsistent with the mesh declaration and with the
+energy channel, which already routed every flow. The term is now the
+hand-off's busiest-link volume / link rate (every flow routed on the
+declared weave, words accumulated per link and direction — the 355M
+backend's own `link_occupancy` semantics, pinned identical; a
+one-die-to-one-die hand-off reduces exactly to words / rate, pinned).
+The A4 identity anchor is re-established as a relation: stored
+latency − new latency = Σ(total − busiest) words / rate, exactly.
+Applying the ruling to the deployment DP surfaced two more gaps and
+closed them: the cost table had omitted the intra-layer hand-offs
+(88% of the D2D words, ~3.1 ms per layer at GRS) and had charged
+inter-layer hand-offs only at cut points, while the evaluator charges
+every boundary to its receiving layer whether or not a cut sits there
+(cutting is free in the frozen model); the table is now
+evaluator-identical and pinned so (DP single + propagation ≡
+evaluator single; DP pipe interval ≡ evaluator pipe interval on the
+same cuts). Re-issued readings: the whole-machine column moves
+−0.9% (GRS) to −7.8% (0.1 GB/s) in prefill and ≤4.4% in decode on
+the default seating (busiest/total 0.921 — the default stacks nearly
+every flow of a hand-off on one link); the two shares, denominators
+named: D2D total hand-off share 10.2% of whole-model serial latency
+at GRS (41.5% / 78.0% / 93.4% at 2.0 / 0.4 / 0.1 GB/s), inter-layer
+hand-offs 1.15% at GRS (paid at every boundary), cut-dependent fee
+zero. The 9.33× / 1.11× fast-edge readings are 355M single-flow
+figures and do not move. The S2-era flips F-L1/F-L2 ("energy, not
+latency, is the placement-sensitive column"; "the T spread does not
+widen in weak cells") were artifacts of the old term and are
+SUPERSEDED by the ladder above; the day-10 EX1 decode-price staircase likewise.
+
+**The hand-off term, externally adjudicated — and corrected again
+(09-15).** The revision above was checked against a packet-level
+router network (BookSim) on a 36-die package, the first outside
+verdict this term has had. Two halves. (1) The TERM: our
+busiest-resource accounting equals the simulator's own channel bound
+exactly (integer equality, three geometries), and the simulator lands
+above our bound everywhere — 1.20× where a hand-off's flows stack on
+a wire, **2.38× where they stack on a die's own port**. That gap
+named an omission: the term counted links but not the die's
+injection / ejection ports, and the omission was biased toward
+DISPERSED seatings, which our own ladder calls best. The port is now
+priced (busiest over links ∪ ports, one of each per die at the link
+rate; a one-die-to-one-die hand-off degenerates to the old term, so
+the 355M readings are bit-identical, pinned). Re-run: the ladder's
+ORDER is unchanged, its spreads SHRINK (safe 1.068 → 1.063, weak
+1.947 → 1.822), and the search's reported seating gains fall about
+threefold (weak 11.4% → 3.5%) — the search had been winning on
+extreme dispersion the wire-only term did not charge for. The
+latency–energy front softens with it: at weak links paying 4.7% of
+latency now buys back 3.5 of the 7.9 energy points (before, 6.5%
+bought 1.4). (2) The VERDICT ORDER: the S6 arms re-ranked on a shrunk
+instance under the same simulator return **the same order — E0 best,
+E1 worst, Spearman 1.000** — so the paper's central claim has an
+outside witness, with its magnitudes compressed (E1 costs 1.26×
+under the packet judge vs 1.85× under ours) but its ranking intact.
+
+**What the deployment split costs: exactly nothing, and why
+(09-15).** The DP-then-SA split is a modelling convenience whose
+price had never been measured. On an instance small enough to
+enumerate (4 blocks × 2 dies on a 3×3 mesh, 181,440 joint states, so
+the joint optimum is *certified*), the sequential solve reaches the
+joint optimum EXACTLY — gap 1.000 at both cells over five seeds, with
+DP top-3 refinement and two rounds of alternation each gaining zero.
+The first reading of that was vacuous and is reported as such: with
+cutting free, maximum depth always wins, a maximal partition groups
+nothing, and a split that never constrains cannot cost. Under a swept
+per-cut seam price the optimal depth does become interior (2–3
+stages) and the partition genuinely groups — and the gap is still
+exactly zero, because on a uniform-compute stack the DP's cut
+decision is INVARIANT to the seating (checked at every fee: the same
+cuts, and the joint-optimal seating re-prices to the joint value
+under them). That invariance is the same homogeneity that makes
+balanced cutting optimal throughout this work, and it is precisely
+what capacity heterogeneity or replication would break — so the zero
+is a statement about the regime reported here, not a theorem.
 
 **What the busiest wire means (O26 done, C29).** For a given routing, any
 schedule — a compile-time one included — needs at least volume ÷ bandwidth on

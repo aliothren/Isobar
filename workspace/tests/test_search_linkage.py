@@ -14,19 +14,20 @@ from scripts import search_sa as sa
 
 
 def test_l1_constrained_solver_structure_and_bite():
-    """L1: the constrained optimum is the smallest feasible k (T_decode
-    is monotone increasing in k -- each cut adds a decode fee), the
-    B = 120 ms proposal BITES (k* = 8 != unconstrained k = 1), and the
-    first-bite edge at 921.11 ms behaves on both sides."""
+    """L1 (re-scoped to the exact D.2 solver): the solution is feasible
+    (every prefill stage <= B), decode never below the unconstrained
+    k = 1 sum, a looser budget never costs more decode, the 120 ms
+    proposal still BITES (k* > 1), and a budget below the largest
+    single-layer stage is infeasible."""
     c = sl.constrained(sl.B_PREFILL_S)
-    tds = [r["t_decode_s"] for r in sorted(c["table"],
-                                           key=lambda r: r["k"])]
-    assert all(b > a for a, b in zip(tds, tds[1:]))
-    feas_ks = [r["k"] for r in c["table"] if r["feasible"]]
-    assert c["opt"]["k"] == min(feas_ks) == 8
-    assert c["unconstrained_k"] == 1
-    assert sl.constrained(0.922)["opt"]["k"] == 1     # just above the edge
-    assert sl.constrained(0.921)["opt"]["k"] == 2     # just below
+    assert c["feasible"] and c["k"] > 1
+    assert c["t_prefill_s"] <= sl.B_PREFILL_S + 1e-12
+    assert c["t_decode_s"] >= c["t_decode_unconstrained_s"]
+    loose = sl.constrained(2.0)
+    assert loose["feasible"] and loose["k"] == 1
+    assert loose["t_decode_s"] <= c["t_decode_s"]
+    tight = sl.constrained(0.5 * c["meta"]["tau_p_range_s"][0])
+    assert not tight["feasible"]
 
 
 def test_l2_session_e_matches_full_score():
@@ -45,17 +46,14 @@ def test_l2_session_e_matches_full_score():
         assert abs(J(pi) - se.score(pi, W, d2d_gbps=sl.GRS).e_J) < 1e-12
 
 
-def test_l3_backfill_identity_at_reference_hops():
-    """L3: fees at hops = 1 differ from the reference only by the 20 ns
-    propagation term -- no cut decision changes, shift < 1e-6."""
-    inst, meta = sd.standing_instance()
-    ns = se.NS_PER_HOP_D2D * 1e-9
-    fees = tuple(0.0 if b == 0 else meta["fee_s"] + 1.0 * ns
-                 for b in range(meta["L"]))
-    inst1 = sd.Instance(taus=inst.taus, fees=fees, G=inst.G,
-                        budget=inst.budget)
-    for k in (2, 8, 32):
-        v_ref, p_ref = sd.solve(inst, k, "pipe")
-        v_act, p_act = sd.solve(inst1, k, "pipe")
-        assert [i for i, _, _ in p_ref] == [i for i, _, _ in p_act]
-        assert abs(v_act - v_ref) / v_ref < 1e-6
+def test_l3_dp_table_is_seat_dependent_and_deterministic():
+    """L3 (re-scoped): the D.2 cost table built twice at one seating is
+    identical, and built at a different seating differs -- the table
+    now carries the seating (intra-layer hand-offs included)."""
+    W = se.Workload2p7B()
+    a1, m1 = sd.standing_instance()
+    a2, m2 = sd.standing_instance()
+    assert a1 == a2 and m1["d2d_total_s"] == m2["d2d_total_s"]
+    b, mb = sd.standing_instance(sb.generate("random", W, seed=0))
+    assert b.taus != a1.taus
+    assert abs(mb["d2d_total_s"] - m1["d2d_total_s"]) > 1e-6

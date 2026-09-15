@@ -188,7 +188,10 @@ def run_leg(W, pairs, seeds, label):
 def main():
     W = host()
     seeds = {n: sb.generate(n, W, seed=0) for n in sb.NAMES}
-    out = {"V_words": V, "fanout": FANOUT, "schedule": {
+    out = {"V_words": V, "fanout": FANOUT,
+           "quantifier": "observed",
+           "evaluation_set": "7 named seeds x multi-start SA",
+           "schedule": {
                "t0": SCHED.t0, "alpha": SCHED.alpha, "steps": SCHED.steps,
                "base_seed": BASE_SEED},
            "delta_column": "1.00 by construction (packet-free mesh)"}

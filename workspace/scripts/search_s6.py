@@ -47,7 +47,9 @@ def run_arm(J, seeds, label):
 def main():
     W = cx.host()
     seeds = {n: sb.generate(n, W, seed=0) for n in sb.NAMES}
-    out = {"noise_band": NOISE_BAND, "mu_active": dict(sr.MU)}
+    out = {"noise_band": NOISE_BAND, "mu_active": dict(sr.MU),
+           "quantifier": "observed",
+           "evaluation_set": "7 named seeds x 5 arms, fixed budget"}
 
     print("ACTIVE CELL (the declared mix)")
     arms = {name: run_arm(sr.make_arm(name), seeds, name)

@@ -22,10 +22,27 @@ Every number is closed-form on frozen accounts -- zero mapper.
 WORKLOAD BACKENDS (the condition layer owns granularity, day-2
 amendment): Workload2p7B -- per-op die-sets (block_chain), accounts from
 the frozen mapper-measured scale_2p7b_per_op.json + the elementwise/
-digital terms, D2D via block_die_flows exactly as A4's script (wrap
-excluded; identity anchor #1). Workload355M -- unit-granularity chain
-(C13 two-dies-per-layer), D2D via die_to_die_activation +
-link_occupancy (identity anchor #2 against the stored b1 rows).
+digital terms, D2D flows via block_die_flows exactly as A4's script
+(wrap excluded). Workload355M -- unit-granularity chain (C13
+two-dies-per-layer), D2D via die_to_die_activation + link_occupancy
+(identity anchor #2 against the stored b1 rows).
+
+THE HAND-OFF TIME TERM (amended after the 2.7B accounting review): a
+2.7B hand-off is MANY concurrent flows -- every producer die ships its
+piece to every consumer die at once -- sharing the declared die mesh;
+batch-1 serialises layer after layer, NOT the flows inside one
+hand-off. The old term collapsed a whole hand-off into one stream over
+one link (total words / link rate: a pessimistic upper bound that was
+also seat-invariant). The term is now the hand-off's BUSIEST-LINK
+volume / link rate: every flow routed on the declared weave, words
+accumulated per (link, direction), the same node-flow semantics as the
+355M backend's link_occupancy (pinned identical), plus propagation.
+When a hand-off is a single flow (one die -> one die, the 355M case)
+the definition reduces exactly to words / rate (pinned). Energy is
+untouched (flat + distance surplus, per flow, as before). The A4
+whole-machine identity anchor is re-established as a RELATION to the
+frozen record: stored latency - new latency == the sum over boundaries
+of (total words - busiest words) / rate, exactly.
 """
 import json
 import os
@@ -130,6 +147,7 @@ class Workload2p7B:
             li = int(e["name"].rsplit("@L", 1)[1])
             out.append({
                 "into": e["name"], "words": words,
+                "busiest_words": busiest_link_words(fl, self.die_ic),
                 "segment": seg_of_block[li],
                 "inter_layer": e["name"].startswith(base[0]["name"]),
                 "max_hops": max(hops) if hops else 0.0,
@@ -200,6 +218,47 @@ def _one_boundary_flows(prev_e, e, prod_slots, cons_slots, fab):
     return flows
 
 
+def busiest_link_words(flows, icl, ports: bool = True) -> float:
+    """The hand-off's BUSIEST-RESOURCE volume over links AND node ports.
+
+    Every producer->consumer flow is routed on the declared die weave
+    (icl.path_directed) and its volume x width is accumulated per
+    (resource, direction) exactly as link_occupancy's node-to-node
+    branch does (pinned identical). PORTS (added after the B7 external
+    adjudication, finding F-B7): each die also has ONE INJECTION and
+    ONE EJECTION port at the link rate -- declared model, the same
+    assumption the BookSim bridge makes -- so a flow also loads its
+    source's injection port and its destination's ejection port. The
+    hand-off time is set by the busiest of ALL these resources.
+
+    Why it was added: counting links but not ports is loose exactly
+    where flows stack on an endpoint instead of a wire, which is the
+    DISPERSED geometry -- the very family our own ladder calls best.
+    B7 measured the bias (a dispersed hand-off's busiest link carried
+    816 flits while its busiest injection port carried 1088), so the
+    omission was biased in favour of our own conclusion. `ports=False`
+    reproduces the wire-only term for the B7 comparison rows.
+
+    Degeneration, pinned: when a hand-off is a single flow the port
+    and every link on its path carry the same volume, so the maximum
+    is unchanged -- the 355M backend and any one-die-to-one-die
+    hand-off read exactly as before."""
+    load = {}
+    split = icl.duplex
+    for f in flows:
+        vol = f["volume"] * float(f.get("width", 1.0))
+        if vol <= 0:
+            continue
+        a, b = f["nodes"]
+        for r, tag in icl.path_directed(a, b):
+            key = (r, tag if (split and tag) else "")
+            load[key] = load.get(key, 0.0) + vol
+        if ports:
+            load[("port", a, "inj")] = load.get(("port", a, "inj"), 0.0) + vol
+            load[("port", b, "ej")] = load.get(("port", b, "ej"), 0.0) + vol
+    return max(load.values()) if load else 0.0
+
+
 def _with_die_weave(fab, die_weave):
     """The condition-enumeration knob (spec section 3, S1 day-3 amendment):
     swap the DIE-level weave (topology, params) on a fabric. The weave is
@@ -239,7 +298,7 @@ def _assemble(pi, W, bs_by_phase, mu, caliber, d2d_gbps, device_scale):
         seg_layers = [hi - lo for lo, hi in pi.segments()]
         seg_bnd_s = [0.0] * n_seg
         for b in bs:
-            seg_bnd_s[b["segment"]] += b["words"] / wps
+            seg_bnd_s[b["segment"]] += b["busiest_words"] / wps
         d2d_s = sum(seg_bnd_s)
         t_single = W.n_layers() * layer_s + d2d_s + prop_s
         stage_s = [seg_layers[k] * layer_s + seg_bnd_s[k]
@@ -257,6 +316,8 @@ def _assemble(pi, W, bs_by_phase, mu, caliber, d2d_gbps, device_scale):
                        "stage_s": stage_s, "t_single_s": t_single,
                        "t_pipe_interval_s": t_pipe,
                        "d2d_words": sum(b["words"] for b in bs),
+                       "d2d_busiest_words": sum(b["busiest_words"]
+                                                for b in bs),
                        "d2d_flat_J": sum(b["words"] for b in bs)
                        * PJ_D2D * 1e-12,
                        "d2d_surplus_J": sum(b["surplus_J"] for b in bs)}}
@@ -336,6 +397,7 @@ class ScoreSession:
                 li = int(name.rsplit("@L", 1)[1])
                 by_name[name] = {
                     "into": name, "words": words, "segment": seg_of[li],
+                    "busiest_words": busiest_link_words(fl, self.W.die_ic),
                     "inter_layer": by_name[name]["inter_layer"],
                     "max_hops": max(hops) if hops else 0.0,
                     "surplus_J": lw.die_flow_surplus_energy(

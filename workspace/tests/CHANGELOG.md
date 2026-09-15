@@ -1795,3 +1795,95 @@ inside E0's own 2.067% seven-start band -- not claimed wrong;
 benign-load control leg (terminology fixed: not a "safe cell");
 F-S6a: the weave arm wrong even under the benign load. Fast
 suite: 385 -> 424, zero expected-fail.
+
+2.7B hand-off accounting revision (2026-09-15; spec [AMENDED
+14/15/16]; D.1-D.3 of AGENT_notes_r3r4_v4). The die-level hand-off
+time term is now the hand-off's BUSIEST-LINK volume / link rate
+(search_eval.busiest_link_words: every producer->consumer flow
+routed on the declared weave, words accumulated per (link,
+direction) -- link_occupancy's node-flow semantics, pinned
+identical), replacing the one-stream-per-hand-off words/rate term
+that collapsed a multi-flow hand-off onto one link. Anchor 1 is a
+RELATION to the frozen record (stored - new == sum(total -
+busiest)/rate, 1e-9); four hand-off pins (no-sharing V/2, sharing
+V, single-flow degeneration exact, accumulator == link_occupancy
+1e-12). The DP cost table (search_dp.standing_instance) is
+evaluator-IDENTICAL: per-layer time = compute + write + elementwise
++ intra-layer hand-offs + the layer's entry hand-off at the seating,
+cut fee zero (test_d3b pins DP single + propagation == evaluator
+single and DP pipe interval == evaluator pipe interval on the same
+cuts, k = 2/8/32); D3 re-scoped to the uniform-layer reference;
+linkage L1 re-scoped to the exact constrained solver (1-D DP,
+fewest-cuts tie-break), L3 to the seat-dependence of the table.
+Re-issued: ladder v0's 2.7B part (T spread 6.8% at GRS, 1.95x at
+0.4 GB/s; busiest/total column), the A4 whole-machine column
+(rerun_a4_column.py), the seating instance under objective T
+(0.7% below the best heuristic at GRS, 11.4% at 0.4 GB/s), EX1 (k*
+8 -> 11 at 120 ms, decode flat), EX2 (latency within +-1% across
+weaves), EX3 (seam == free k = 16). Fast suite: 424 -> 429.
+
+A group + band sweep (2026-09-15, AGENT_notes_r3r4_v4 sections A and
+the band reinforcement). New: scripts/band_energy.py (the
+latency-band energy minimum and its 1.8 / 3.6 / 7.2% sweep;
+rejection-mode SA with the known feasible point seeded once it is in
+band -- the first pass missed it, a search-quality failure the
+sweep's own guard caught), scripts/certified_regions.py (A1: the
+three-region classification per cell, 48 production cells with zero
+uncertain and a zero-width rail gap by construction, plus a
+packet-declared demonstration that opens a real middle band),
+analysis/METRICS.md (A4 + A2: the published-quantity registry with
+denominators, instance semantics and certified/observed
+quantifiers). Changed: analyze_soft_lever.py anchors extended with
+0.1 / 0.2 GB/s (A3), every result generator now stamps quantifier
+and evaluation_set. Test repair: the two soft-lever pins addressed
+anchors by position and mis-indexed on the extension -- re-addressed
+by value, all standing readings re-asserted, and the new anchors
+pinned with the F-A3 plateau statement. Fast suite: 429 -> 430.
+
+B7 (2026-09-15): the corrected hand-off term's external adjudication.
+booksim_bridge parameterised on the mesh k (default 6 unchanged);
+new scripts/b7_handoff_probe.py runs both halves on a 36-die package
+-- half A, our busiest-link term vs the bridge's flit bound (integer
+equality, the gate) vs BookSim completion across compact / dispersed
+/ stacked hand-off geometries; half B, six seatings of a small
+cross-traffic load ranked by both. Results: the term is never
+falsified as a lower bound (BookSim 1.20-2.38x above it), but
+finding F-B7 -- it omits the die's injection / ejection port, which
+is the binding resource on dispersed geometries (816-flit busiest
+wire vs 1088-flit busiest port); the ranking survives (Spearman
+0.886, top-1 agreement, selected regret 1.0000, disagreements only
+inside our ties). Model change seated, not made. Fast suite: 430.
+
+Port revision + B7's second half (2026-09-15). F-B7 ruled IN: the
+hand-off term is now the busiest resource over links AND node ports
+(one injection + one ejection per die at the link rate; ports=False
+keeps the wire-only term for the B7 comparison). Two pins added
+(single-flow degeneration; the port-binding dispersed case) and the
+two hand examples state both calibers; link_occupancy untouched and
+the 355M backend verified bit-identical. Reruns: ladder (order
+unchanged, T spreads shrink 1.068->1.063 safe / 1.947->1.822 weak),
+A4 column, DP (evaluator identity re-pinned), A1 regions
+(unchanged), seating instance (weak gain 11.4% -> 3.5%), band front
+(weak bends: 4.7% paid buys 3.5 points). Two bugs caught by the
+rerun and fixed at the root: search_linkage's hard-coded ladder
+rungs now read ladder_v0.json, and the band front is monotone by
+construction (each width seeded with the narrower one's minimum).
+New scripts/b7_s6_rerank.py: the S6 verdict order under BookSim on a
+shrunk instance -- order preserved exactly, Spearman 1.000, E0 best
+and E1 worst. Fast suite: 430 -> 432.
+
+B5 + B6 arm three (2026-09-15). New scripts/b5_joint_exact.py: a
+4-block x 2-die instance on a 3x3 mesh, 181,440 joint states
+enumerated, so the joint optimum is certified. The shipped
+sequential solve (DP cuts then SA seating) reaches it EXACTLY --
+gap 1.0000 mean and worst at both cells over five seeds, DP top-3
+and two alternation rounds gaining 0.0000. The first pass was
+vacuous (free cutting makes maximum depth always optimal, so the
+partition groups nothing) and said so; the added seam-fee sweep
+reaches interior depths (2-3 stages at fee 1.0-2.0x compute) where
+grouping exists, and the gap is still exactly zero because the DP's
+cut decision is invariant to the seating on a uniform-compute
+stack -- checked, not assumed. Branch A of the pre-registered
+three. B6 arm three needs no run: its question is what joint
+optimisation adds, and the certified answer is zero. Fast suite:
+432.

@@ -81,9 +81,12 @@ def packets_for(volume_bytes):
     return int(math.ceil(volume_bytes / PACKET_PAYLOAD_B))
 
 
-def _write_config(path, flow_path, extra=None):
+MESH_K = 6                 # the bridge's default grid (the Simba NoP)
+
+
+def _write_config(path, flow_path, extra=None, k=MESH_K):
     lines = [
-        "topology = mesh;", "k = 6;", "n = 2;",
+        "topology = mesh;", f"k = {k};", "n = 2;",
         "routing_function = dor;",
         f"traffic = file({flow_path});",
         "sim_type = batch;",
@@ -110,10 +113,12 @@ def _write_config(path, flow_path, extra=None):
 _DURATION = re.compile(r"Overall min batch duration = (\d+)")
 
 
-def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES):
-    """flows: [(src_node, dst_node, n_packets)] on the 6x6 mesh (node =
-    y*6+x, matching the repo's row-major die table). Returns completion
-    cycles (inject + drain) and seconds at the NoP channel cycle."""
+def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES,
+              k=MESH_K):
+    """flows: [(src_node, dst_node, n_packets)] on a k x k mesh (node =
+    y*k+x, matching the repo's row-major die table; k defaults to the
+    Simba NoP's 6). Returns completion cycles (inject + drain) and
+    seconds at the NoP channel cycle."""
     if not available():
         raise FileNotFoundError(
             f"{BOOKSIM} missing -- build per tools/booksim2/BUILD_NOTES.md")
@@ -132,11 +137,11 @@ def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES):
         ex.setdefault("mesh_channel_latency", latency_channel_cycles)
     if IN_CONTAINER:
         os.replace(hostflow, flow_path)
-        _write_config(cfg_path, flow_path, ex)
+        _write_config(cfg_path, flow_path, ex, k)
         out = subprocess.run([BOOKSIM, cfg_path],
                              capture_output=True, text=True)
     else:
-        _write_config(hostcfg, flow_path, ex)
+        _write_config(hostcfg, flow_path, ex, k)
         subprocess.run(["docker", "cp", hostflow, f"{CONTAINER}:{flow_path}"],
                        check=True, capture_output=True)
         subprocess.run(["docker", "cp", hostcfg, f"{CONTAINER}:{cfg_path}"],
@@ -153,12 +158,12 @@ def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES):
     return {"cycles": cycles, "seconds": cycles * CHANNEL_CYCLE_S}
 
 
-def run_per_packet_serial(flows):
+def run_per_packet_serial(flows, k=MESH_K):
     """The pessimistic identity: every packet alone in the network, times
     summed -- round-serialized by construction, no patch semantics."""
     total = 0
     for s, d, n in flows:
-        r = run_batch([(s, d, 1)])
+        r = run_batch([(s, d, 1)], k=k)
         total += n * r["cycles"]
     return {"cycles": total, "seconds": total * CHANNEL_CYCLE_S}
 
@@ -177,15 +182,15 @@ def lam(t_book_s, t_opt_s, t_pess_s, completion_s=None):
             "bracket_width_s": width}
 
 
-def flit_bounds(flows):
+def flit_bounds(flows, k=MESH_K):
     """The bridge-caliber reference bounds (cycles): busiest mesh channel
     (x-first XY, non-dedup unicasts) and the busiest injection channel --
     day-2 rails use max() of these consistently on both ends."""
     seg = {}
     inj = {}
     for s, d, n in flows:
-        sx, sy = s % 6, s // 6
-        dx, dy = d % 6, d // 6
+        sx, sy = s % k, s // k
+        dx, dy = d % k, d // k
         x, y = sx, sy
         path = []
         while x != dx:

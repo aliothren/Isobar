@@ -54,24 +54,49 @@ def test_d2_sparse_axis_honored_and_o10_echo():
         assert all(g in (2, 5) for _, _, g in plan)
 
 
-def test_d3_homogeneous_degeneracy_and_single_k1():
-    """D3: on the standing payload the DP lands on balanced cuts with
-    minimal g = 17 everywhere, and the single caliber prefers k = 1."""
-    inst, meta = sd.standing_instance()
+def test_d3_uniform_degeneracy_and_single_k1():
+    """D3 (re-scoped after the accounting review): on the UNIFORM-LAYER
+    reference instance the DP lands on balanced cuts with minimal
+    g = 17 everywhere -- the structural degeneracy claim; on the
+    standing seating (per-layer times now seat-dependent) only the
+    re-price and the single-caliber k = 1 preference are asserted."""
+    u, um = sd.uniform_reference_instance()
     for k in (2, 4, 8):
-        v, plan = sd.solve(inst, k, "pipe")
+        v, plan = sd.solve(u, k, "pipe")
         sizes = sorted(j - i for i, j, _ in plan)
-        m = meta["L"] // k
+        m = um["L"] // k
         assert sizes == sorted([m] * k) or max(sizes) - min(sizes) == 1
         assert all(g == 17 for _, _, g in plan)
-        balanced = max(m * meta["layer_s"]
-                       + (0.0 if i == 0 else meta["fee_s"])
-                       for i, m in zip(range(0, meta["L"], meta["L"] // k),
-                                       [meta["L"] // k] * k))
-        assert abs(v - balanced) < 1e-15
+        assert abs(v - (m * um["tau"] + um["fee"])) < 1e-12
+    inst, meta = sd.standing_instance()
     v1, _ = sd.solve(inst, 1, "single")
     v2, _ = sd.solve(inst, 2, "single")
-    assert v1 < v2                     # cuts only add fees under "single"
+    assert abs(v1 - v2) < 1e-12        # cutting is free: single is cut-blind
+    assert abs(v1 - (sum(t[0] for t in inst.taus))) < 1e-12
+
+
+def test_d3b_standing_costs_are_the_evaluator_s():
+    """The DP == EVALUATOR identity (the third mismatch's pin): at the
+    A4 seating, (a) the DP's single-caliber total + propagation equals
+    the evaluator's serial latency, and (b) for balanced plans at
+    k in {2, 8, 32} the DP's pipe interval equals the evaluator's pipe
+    interval on a Pi carrying those very cuts -- both to 1e-9."""
+    import dataclasses as dc
+    from scripts import search_eval as se
+    from scripts import search_space as ss
+    inst, meta = sd.standing_instance()
+    W = se.Workload2p7B()
+    pi = ss.pi_from_a4_payload()
+    sc = se.score(pi, W, caliber="single", d2d_gbps=sd.GRS_GBPS)
+    v1, _ = sd.solve(inst, 1, "single")
+    prop = sc.per_phase["prefill"]["decomp"]["propagation_s"]
+    assert abs(v1 + prop - sc.t_opt_s) < 1e-9 * sc.t_opt_s
+    for k in (2, 8, 32):
+        v, plan = sd.solve(inst, k, "pipe")
+        cuts = tuple(j for _, j, _ in plan)            # segment ends
+        pik = dc.replace(pi, cuts=cuts)
+        sp = se.score(pik, W, caliber="pipe", d2d_gbps=sd.GRS_GBPS)
+        assert abs(v - sp.t_opt_s) < 1e-9 * sp.t_opt_s
 
 
 def test_d4_determinism_and_budget_accounting():

@@ -43,25 +43,62 @@ def test_mechanism_ratio_is_pure_geometry():
             approx(lv["a2_mech_ratio"], 1.75, 1e-9)
 
 
+def _by_g(cells):
+    """Anchors are addressed BY VALUE, not by position: the anchor set is
+    extensible (0.1 / 0.2 added for the lever's saturation plateau) and
+    the standing pins must survive the extension."""
+    return {c["g_gbps"]: c for c in cells}
+
+
 def test_anchored_stack_cells():
     d = _load()
-    want = {"prefill": [1.6093, 1.0, 1.0, 1.0],
-            "decode": [1.0843, 1.0, 1.0, 1.0]}
+    want = {"prefill": {0.4: 1.6093, 2.0: 1.0, 8.0: 1.0, 8.75: 1.0},
+            "decode": {0.4: 1.0843, 2.0: 1.0, 8.0: 1.0, 8.75: 1.0}}
     share0 = {"prefill": 0.762, "decode": 0.967}
     for phase, vals in want.items():
         cells = d["phases"][phase]["cells"]
-        assert [c["g_gbps"] for c in cells] == [0.4, 2.0, 8.0, 8.75]
-        for c, w in zip(cells, vals):
-            approx(c["a2_stack_ratio"], w, 1e-3)
+        by = _by_g(cells)
+        assert {0.1, 0.2, 0.4, 2.0, 8.0, 8.75} <= set(by)
+        for g, w in vals.items():
+            approx(by[g]["a2_stack_ratio"], w, 1e-3)
+        for c in cells:
             assert c["a1_stack_ratio"] == 1.0          # exhaustive by symmetry
-        approx(cells[0]["fixed_share_best"], share0[phase], 2e-3)
-        for c in cells[1:]:
-            approx(c["fixed_share_best"], 1.0, 1e-9)   # above the knee
-        # pre-registered directions: monotone in g; decode < prefill at 0.4
-        rs = [c["a2_stack_ratio"] for c in cells]
+        approx(by[0.4]["fixed_share_best"], share0[phase], 2e-3)
+        for g in (2.0, 8.0, 8.75):
+            approx(by[g]["fixed_share_best"], 1.0, 1e-9)   # above the knee
+        # pre-registered directions: monotone in g
+        rs = [c["a2_stack_ratio"] for c in sorted(cells,
+                                                  key=lambda c: c["g_gbps"])]
         assert all(a >= b - 1e-12 for a, b in zip(rs, rs[1:]))
-    approx(d["phases"]["decode"]["cells"][0]["a2_stack_ratio"] /
-           d["phases"]["prefill"]["cells"][0]["a2_stack_ratio"], 0.674, 5e-3)
+    approx(_by_g(d["phases"]["decode"]["cells"])[0.4]["a2_stack_ratio"] /
+           _by_g(d["phases"]["prefill"]["cells"])[0.4]["a2_stack_ratio"],
+           0.674, 5e-3)
+
+
+def test_low_anchor_staircase_and_plateau():
+    """A3 (the 0.1 / 0.2 extension): the lever's three-stage staircase --
+    flat above the knee, opening through 0.4, saturating below. The A2
+    (uniform-mapping) lever approaches its own mechanism ratio 1.750
+    (1.7347 at 0.1, within 1%); the REALIZABLE A3 lever does NOT
+    approach its 3.00 / 2.67 (1.6979 at 0.1) -- finding F-A3: the
+    mechanism ratio is a CEILING, approached only in proportion to the
+    share of the stack the lever commands (the A3 lever leaves
+    attention, the elementwise terms and the other dies fixed)."""
+    d = _load()
+    a2 = _by_g(d["phases"]["prefill"]["cells"])
+    a3 = _by_g(d["phases"]["prefill"]["a3_cells"])
+    approx(a2[0.2]["a2_stack_ratio"], 1.7199, 1e-3)
+    approx(a2[0.1]["a2_stack_ratio"], 1.7347, 1e-3)
+    mech_a2 = a2[0.1]["a2_mech_ratio"]
+    approx(mech_a2, 1.750, 1e-3)
+    assert a2[0.1]["a2_stack_ratio"] / mech_a2 > 0.99      # plateau reached
+    approx(a3[0.2]["a3_stack_ratio"], 1.6220, 1e-3)
+    approx(a3[0.1]["a3_stack_ratio"], 1.6979, 1e-3)
+    # F-A3: still far below its own mechanism ratio at the deepest anchor
+    assert a3[0.1]["a3_stack_ratio"] / a3[0.1]["a3_mech_ratio_ffn"] < 0.7
+    dec = _by_g(d["phases"]["decode"]["a3_cells"])
+    approx(dec[0.1]["a3_stack_ratio"], 1.2294, 1e-3)
+    assert dec[0.1]["a3_stack_ratio"] < a3[0.1]["a3_stack_ratio"]
 
 
 def test_band_thresholds():
@@ -116,17 +153,19 @@ def test_a3_natural_coresidency_reopens_the_space():
         assert ph["a3"]["attn"]["n_seatings"] == 280
         assert ph["a3"]["ffn"]["n_seatings"] == 70
         cells = ph["a3_cells"]
-        approx(cells[0]["a3_stack_ratio"], stack0, 1e-3)
+        by = _by_g(cells)
+        approx(by[0.4]["a3_stack_ratio"], stack0, 1e-3)
         for c in cells:
             approx(c["a3_mech_ratio_attn"], 3.00, 1e-2)
             approx(c["a3_mech_ratio_ffn"], 2.6667, 1e-2)
             assert c["a3_mech_ratio_attn"] > c["a3_mech_ratio_ffn"]  # free slots
-        rs = [c["a3_stack_ratio"] for c in cells]
+        rs = [c["a3_stack_ratio"] for c in sorted(cells,
+                                                  key=lambda c: c["g_gbps"])]
         assert all(a >= b - 1e-12 for a, b in zip(rs, rs[1:]))       # monotone
-        for c in cells[1:]:
-            approx(c["a3_stack_ratio"], 1.0, 1e-9)                   # above knee
-    p0 = d["phases"]["prefill"]["a3_cells"][0]["a3_stack_ratio"]
-    a2 = d["phases"]["prefill"]["cells"][0]["a2_stack_ratio"]
+        for g in (2.0, 8.0, 8.75):
+            approx(by[g]["a3_stack_ratio"], 1.0, 1e-9)               # above knee
+    p0 = _by_g(d["phases"]["prefill"]["a3_cells"])[0.4]["a3_stack_ratio"]
+    a2 = _by_g(d["phases"]["prefill"]["cells"])[0.4]["a2_stack_ratio"]
     assert 1.05 < p0 < a2                       # pre-registered stack window
 
 
