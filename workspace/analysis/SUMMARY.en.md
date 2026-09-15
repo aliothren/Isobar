@@ -940,6 +940,139 @@ panels share the 2.7B T-ladder order; the figure-group README
 rule (package-seat propagation lever, µs-scale, vs die-mesh
 busiest-wire occupancy lever, multiple-fold).
 
+**S3 is CLOSED (C64-d, days 6-8): the SA body + the two single-level
+instances.** (S3's own two instances shipped complete; the 2.7B
+seating instance — main objective E per [AMENDED 9] — was ruled into
+S4 day 10, where the linkage's SA-seating leg produces its first
+readings; spec [AMENDED 13].) Day 6 shipped the SA body (`search_sa.py`: the three
+operator families — exchange / migrate with the two-step form on
+saturated hosts / whole-set swap — Metropolis on a geometric schedule,
+rejection-semantics constraints with infeasible starts refused,
+multi-start, bit-reproducible given the seed) and the one-page
+ergodicity argument ([ergodicity.md](ergodicity.md): the constructive
+path's monotone-mismatch argument ⇒ irreducibility, rejection
+self-loops ⇒ aperiodicity, the strictly-positive Metropolis
+acceptance at t > 0 written out; the connectedness template for
+constrained instances is in place, the S4 sparse cuts axis its first
+expected client) — nine engine gates green on the first run. Day 7,
+the ordering instance (the cross-traffic condition became SET at the
+release): busiest-wire objective; the line-load incremental structure
+(per-pair integer flow counts — exact, no drift) earned its pin where
+it is consumed, and the objective reproduced the filed ladder rung
+for rung before any search ran. Active leg: search best **16.294M
+words, 10.9% below the best named rung (random, 18.29M)** — past the
+pre-registered 10% bar; all seven starts converge into a 1.8%-wide
+band and every endpoint beats every named rung (the winning start was
+the COMPACT nmap_greedy seed: the SA walked out of the compact basin
+and past the dispersed floor). Control leg (uniform chain): 6.118M,
+1.0% below clustered — the compact corridor family confirmed
+near-optimal there. Day 8, the within-die instance (the A3
+co-residency space, exhaustively enumerable: 280 attn / 70 ffn
+seatings): identity anchor first (the recomputed fold ≡ the stored
+a3_cells: 1.4341/1.057 at 0.4 GB/s, mech 3.0/2.67), then SA regret
+vs the exhaustive optimum **exactly 1.000** on every die × phase;
+the open reading resolved to a finding — **the shipped contiguous
+mapping sits mid-band, +17.8% (attn) / +20.0% (ffn) above the
+optimum**, and the optimal seating INTERLEAVES the co-resident ops
+(ffn1 {0,1,3,5} / ffn2 {2,4,6,7}) — the MASKED form of the same
+mechanism, not a flip: there is no rank inversion here, the condition
+changes the MAGNITUDE (18–20% in the 0.4 active cell → zero in the
+safe cell; rank inversion stays exclusive to the die-level flip
+entry), the 18–20% is permanently quoted with "0.4 GB/s active cell ×
+A3 co-residency" attached, and whether within-die placement matters
+at all is itself a cell question — the phase-diagram semantics recur
+at the third level (filed in the materials library); the g = 2.0 safe cell is all-ties by
+exhaustion and SA stays put, realizing the pre-registered safe-cell
+expectation. The Δ column rides at 1.00 throughout (packet-free
+weaves, by construction). Suite 385 → 410 across S3.
+
+**S4 is CLOSED (C64-e, days 9-10): the exact interval DP + the DP+SA
+linkage + the three exhibits.** Day 9, the DP body (`search_dp.py`:
+F(k, j, d) minimax interval DP, closed-form oracle, hand-off fees at
+adjacent-seating reference hops per [AMENDED 2]; five gates including
+DP ≡ brute force on randomized heterogeneous instances): the
+LAYER-level feasible size set **G = {17…28} with 16 absent** (the O10
+counterexample surfacing at layer granularity; the fixed-function
+attention die a declared singleton axis); the homogeneous stack's
+near-degeneracy went from assumption to **DP-verified fact** (balanced
+cuts at every k, minimal g = 17, 544 dies); pipe-caliber k* = 32
+(29.204 ms, fee tax 1.44%), single caliber k = 1 (cuts only add
+fees). Day 10, the linkage and exhibits (`search_linkage.py`, gates
+green first): **EX1, the two-phase constrained table** — at B = 120 ms
+the constrained optimum is k* = 8 (T_prefill 115.56 / T_decode 24.115
+ms) vs the unconstrained decode optimum k = 1: the constraint BITES;
+the full threshold staircase is filed (the first-bite edge at 921.11
+ms verified on both sides); honest note — the decode price of
+pipelining at GRS is feather-light (~0.7 µs per cut). **The
+[AMENDED 2] fee-optimism backfill**: cut-boundary hops up to 10, no
+cut decision changes at any k, bottleneck shift 2.2e-7…6.8e-6 —
+negligible under the pre-declared standard, the reference-hop fee
+model stands (backfilled into the spec). **The 2.7B seating
+instance's first readings ([AMENDED 13], main objective E)**: best
+E = 2.337921 J = the clustered rung EXACTLY (unimproved in 1200
+steps; snake likewise; random 2.525 → 2.489 without reaching the
+clustered basin) — regret 1.0000, the E-column named ceiling stands;
+deeper budgets belong to the S6 era. **EX2, weave enumeration — one
+land, one flip, one bonus finding**: ring LANDS — the three-rung E
+spread explodes (2.51/3.50/6.43 vs mesh 2.34/2.35/2.53) AND the
+ordering INVERTS (snake < clustered under ring): a genuine rank
+inversion on the E column across the weave condition, the
+condition-bound motif measured on a third axis (F-L4); torus FLIPS —
+every rung's E RISES and the spread widens slightly (F-L3: the E
+column reads the PHYSICAL caliber, where the torus fold is a TAX —
+folded wires twice as long; the count-caliber precedent does not
+carry, the C59 folded-×2 lesson resurfacing on energy). **EX3, an
+expectation-premise error recorded as such**: the pre-registration
+misread the A4 seam example as 2 packages × 16 layers; it is 16
+packages × 2 layers, and against the corrected baseline the
+seam-bound plan IS the free DP's balanced k = 16 plan — intervals
+bit-identical (57.98899840 ms both): the seam bound costs zero at its
+own segment count; the error lived in the expectation text alone.
+Suite 410 → 418 across S4.
+
+**S6 is CLOSED (C64-f, days 11-12) — and with it THE SEARCH MILESTONE
+(worklist step 7) closes end to end.** The five-arm referee family
+(`search_referee.py` / `search_s6.py`; same Ω / algorithm / budget /
+seeds, gates first; E1's first draft deviated from the spec's literal
+Σ_e v_e·dist(e) and was caught by gate R4 before any run — the fooled
+centroid caliber and the bus "the wrong paradigm cannot even write
+the objective" degeneration are each filed as materials): the mix
+truth E0 self-optimizes to **11.382M** (10.0% below the best named
+mix rung); verdicts per the S3 noise band (1.8%) plus the
+weight-robustness clause — **E1, the distance proxy: regret 1.589,
+definitely wrong** (the core matrix cell: self-judge 1.00, truth
+1.59; its argmin lands at the clustered rung; 1.705 at 0.3/0.7);
+**E2 chain one-hot: 1.072, definitely wrong** (its own optimum
+6.118M reproduces the S3 control-leg optimum exactly — arm-internal
+consistency); **E3 wrong-weave: 1.098, definitely wrong**; **E2b
+fan-out one-hot: 1.0181 — NOT claimed wrong**: the post-review
+supplementary run measured E0's OWN seven-start band (the correct
+noise scale for a mix-target verdict) at **2.067%**
+(11.3824–11.6176M, reproducing the main run bit for bit), and
+1.81% falls inside it — the primary criterion decides directly,
+with 1.0035 at 0.3/0.7 as reinforcement (S3's 1.8% band was
+measured on the pure fan-out target; kept as context); the
+symmetric one-hot prediction ("near-right: its condition is half
+the truth") holds. The BENIGN-LOAD
+CONTROL LEG (chain one-hot; terminology fixed at review: not a
+"safe cell" — that term stays reserved for masked cells where every
+seating ties, the within-die g = 2.0 kind; here seatings still
+matter, the load is merely benign): E1 ties (1.010), E2b is the
+deceived arm there (1.135), and **E3 = 1.385 — expectation flip,
+finding F-S6a: the weave arm is wrong even under the benign load**
+(ring's chain optimum is ring-adjacency ≈ sequential, 1.38× on the
+mesh chain): paradigm-dependence strengthened while that arm's
+tie-control expectation flips. **Section
+5's three pieces are assembled and disjoint**: condition-bound (the
+load axis), paradigm-dependence (the weave axis + both E3 cells),
+and rank inversion proper (E1 vs E0, measured at ARGMIN level). The
+5×5 cross-scoring matrix reads as designed — diagonal 1.00, the E1
+row the core exhibit (`search_s6.png`). All five milestone datasets
+hash-pinned; the suite runs 385 → 424 across the milestone, zero
+expected-fail. (Operational note: the S6 main run's host-side task
+was killed at a session interruption; the container-side process
+survived and completed — no restart, no partial artifacts.)
+
 **What the busiest wire means (O26 done, C29).** For a given routing, any
 schedule — a compile-time one included — needs at least volume ÷ bandwidth on
 each wire, so the busiest wire's occupancy is the least serialisation any

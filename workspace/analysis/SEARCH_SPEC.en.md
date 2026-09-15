@@ -266,6 +266,18 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
   and invert under another. Registered here as S6 evidence material and
   in the writing-materials library (`analysis/MATERIALS.md`), not only
   in the check record.
+- **[AMENDED 12 — the instance the four arms run on, declared]** The
+  S6 experiment runs its four arms on the DIE-LEVEL ORDERING INSTANCE
+  under the declared cross-traffic class load (the S3 day-7 instance:
+  same Ω, algorithm, budget and seeds). Reasons: E1's validity-domain
+  exhibit lives exactly there ([AMENDED 11] — the distance/compactness
+  proxy inverts under the fan-out pattern), and the instance's
+  traffic-pattern mix gives E2's one-hot axis its natural meaning (the
+  one-pattern arm vs the declared pattern mix; exact μ mapping declared
+  at S6's own pre-registration). The safe-cell control rides the same
+  instance. This declaration inherits the day-7 condition confirmation:
+  if the ordering instance's condition is vetoed at its release, this
+  row moves with it.
 
 ## 8. Solver split and the operator table
 
@@ -280,8 +292,13 @@ Main objective: min_{Π∈Ω} J(Π) = Σ_{φ∈Φ} μ_φ · T^{(c)}(Π,φ).
   the DP systematically OPTIMISTIC on hand-off fees, but hand-offs are
   the measured cheapest edge class (the 0.10 GB/s-threshold family), so
   the bias's effect on cut choice is expected negligible — its actual
-  magnitude falls out of day 8's joint-vs-decomposed small instance for
-  free and is filed back here. Homogeneous block stacks are expected
+  magnitude falls out of the joint-vs-decomposed instance (rescheduled
+  to S4 day 10, FIXLIST) and is filed back here. **[BACKFILLED, S4 day
+  10]** measured at the linkage's SA-found seating (cut-boundary hops
+  up to 10): NO cut decision changes at any k in {2,4,8,16,32},
+  bottleneck shift 2.2e-7 … 6.8e-6 relative — NEGLIGIBLE under the
+  pre-declared standard (no cut change AND shift < 1%); the
+  reference-hop fee model stands. Homogeneous block stacks are expected
   near-degenerate — uniform cutting is the declared baseline (A4's flat
   spread is that point), expectation pre-written; the DP earns its keep
   under capacity heterogeneity or with replication on.
@@ -361,6 +378,15 @@ count. The registry closes here — no additions.
   runs the A4 payload; exhibits = the result class previously
   unobtainable — two-phase constrained trade-off solutions, best seating
   under weave condition enumeration, seam-bound variant recomputation.
+- **[AMENDED 13 — the 2.7B seating instance's home, user-ruled]** The
+  2.7B SEATING instance ([AMENDED 9]: main objective = E) produces its
+  first readings HERE, as the linkage's SA-seating leg on the A4
+  payload — not as a third S3 instance. S3's close-out is read
+  accordingly: its own two instances shipped complete; the seating
+  instance's readings are an S4 day-10 deliverable. The [AMENDED 2]
+  edge-weight optimism magnitude backfill is due the same day
+  (joint-vs-decomposed small instance; reschedule recorded in
+  FIXLIST).
 **S6 four-arm experiment** (needs S3; order vs S4 may follow the paper's
 needs — **ruling: keep the original order, S4 then S6**).
 - Ships: E1–E3 (§7 isolation discipline) + per-cell regret tables + the

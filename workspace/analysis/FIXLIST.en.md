@@ -3,7 +3,7 @@
 Status of the code-level defects and gaps. Completed items first (motivation /
 what was done / result), then what remains open — in priority order, with a
 worklist at the end. Guardrail tests live under `workspace/tests/`
-(`python3 tests/run_tests.py`; currently 394 pass + 0 expected-fail (slow adds group 38), which is
+(`python3 tests/run_tests.py`; currently 424 pass + 0 expected-fail (slow adds group 38), which is
 open item O1).
 
 ---
@@ -2947,9 +2947,790 @@ figure-group README analysis/ladder_v0.md added with the
 two-lever caption (ladder left/middle = the package-seat
 propagation lever, us-scale; check-C figure = the die-mesh
 busiest-wire occupancy lever, multiple-fold -- juxtapositions
-must say so). NEXT: day 6 = S3/C64-d (SA body + ergodicity
-page + the two single-level instances with regret vs this
-ladder).
+must say so). S3/C64-d DAY 6 PRE-REGISTRATION (declared BEFORE implementation
+runs; scope = the SA BODY + the ergodicity page + engine gates
+ONLY -- no instance runs, no official search numbers today; the
+two instances are days 7-8 and their expectations get their own
+pre-registration): the engine ships the spec section 8 pieces --
+three operator families (permutation = single-slot exchange
+between two sets; migration = slot to free slot, with the
+TWO-STEP evict+place form on capacity-saturated hosts, and the
+355M host IS saturated at 48 units / 48 slots so its migration
+family degenerates to the two-step form by construction, declared;
+swap = whole-set pairwise, equal sizes, the NMAP-style family),
+Metropolis acceptance with a parameterized geometric schedule
+(t0 = 0 is the greedy mode), REJECTION-mode feasibility (spec
+section 6 [AMENDED 3]: an infeasible proposal is rejected and
+counted, never penalized), multi-start over an explicit seed set,
+full determinism given the RNG seed, and the CONSTRUCTIVE-PATH
+routine the ergodicity page argues with. Engine GATES (correctness
+gates, not findings -- a failed gate is a bug fixed and recorded,
+not bookable): G1 every state visited by random operator walks is
+legal(), both workload classes, all three families; G2 the
+incremental == full identity extends to ENGINE-GENERATED deltas
+(ScoreSession driven by proposal moves, migrations to free slots
+included -- the S1 pin only exercised swaps); G3 greedy (t0=0)
+monotone non-worsening + same-seed reruns bit-identical (toy
+objective, DECLARED MEANINGLESS: weighted slot-index sum --
+exists only to exercise machinery, its numbers are not readings);
+G4 constructive_path(a, b) lands exactly on b with every
+intermediate legal and length <= the mismatched-slot count, random
+legal pairs both classes; G5 rejection mode never accepts an
+infeasible state and counts rejections. The line-load incremental
+structure (ordered per-wire loads, recompute-affected-then-remax)
+ships WITH the ordering instance on day 7 where it earns its pin;
+ScoreSession covers the 2.7B incremental leg today. Ergodicity
+page: analysis/ergodicity.md -- constructive path between any two
+legal seatings at fixed cuts (monotone mismatch argument),
+irreducibility because every path move has positive proposal
+probability, aperiodicity from rejection self-loops, the
+saturated-host two-step case, and the DECLARED degenerate
+configurations (A1 degeneracy theorem zeroes the within-die space
+absent co-residency -- the within-die instance runs under A3;
+the 355M uniform chain is the solved corner per [AMENDED 10]). DAY 6 DONE 2026-09-11: scripts/search_sa.py (propose with the
+three families exactly as declared; apply_delta;
+constructive_path with the monotone-mismatch construction; anneal
+with Metropolis + geometric schedule + greedy mode + rejection
+counting + the infeasible-start refusal implementing the
+section-6 guardrail's engine side; multistart with per-start
+derived RNG and name-ordered tie-break) + analysis/ergodicity.md
+(the one-page argument as pre-registered, including the
+saturated-host statement: exchange = swap = two-step migrate on
+one-die sets, the path uses exchanges only there) +
+tests/test_search_sa.py = GROUP 50, 9 gates, ALL GREEN FIRST RUN:
+G1 legality walks both classes (plus the saturated-migration
+shape check: on 48/48 every migrate touches exactly two sets);
+G2 ScoreSession == full score to 1e-12 on 12 engine-generated
+deltas (free-slot migrations included -- new coverage beyond the
+S1 swap-only pin); G3 greedy monotone + same-seed bit-identical
+reruns, Metropolis best_j <= start and best reproduces its own J;
+G4 constructive path exact, all intermediates legal, length <=
+mismatch count on four named pairs across both classes, and the
+size-mismatch refusal; G5 rejection mode never accepts an
+infeasible state, counts rejections, never penalizes, and refuses
+an infeasible START (the guardrail's engine half). No instance
+numbers produced today (toy objectives declared meaningless).
+Fast suite 394 -> 403. DAY-6 REVIEW ROUND APPLIED (the reviewer's audit passed the
+mathematics; fixes were bookkeeping + two rigor sentences): (1)
+ergodicity.md now states the implicit step EXPLICITLY -- the
+annealing chain inherits the proposal chain's irreducibility
+because at fixed t > 0 the Metropolis acceptance of any finite
+Delta is strictly positive (and greedy t0 = 0 claims no
+ergodicity); and carries the SCOPE + USAGE TEMPLATE for
+constrained instances: the constructive path argues the FULL
+structurally-legal space, feasibility rejection walks a subset,
+connectedness does not inherit -- every constrained instance
+fills (a) walks-the-full-space or (b) its own connectedness
+argument; the S4 sparse cuts axis is the first expected client
+of (b), slot left in the page. (2) The nine-gate LIST in full so
+the count audits without opening files (group 50):
+g1_random_walks_stay_legal, g1_saturated_migration_is_two_step,
+g2_scoresession_matches_full_on_engine_deltas,
+g3_greedy_monotone_and_deterministic,
+g3_metropolis_still_tracks_best,
+g4_constructive_path_both_classes,
+g4_path_refuses_mismatched_inventories,
+g5_rejection_mode_never_accepts_infeasible,
+multistart_deterministic_and_picks_min -- 394 + 9 = 403. (3) The
+two C64-d-attached hangers CHECKED IN: the S6 which-instance
+declaration is now SPEC ([AMENDED 12]: the four arms run on the
+die-level ordering instance under the cross-traffic class load,
+E1's flip exhibit and E2's one-hot axis both live there; the row
+inherits the day-7 condition confirmation) -- and ladder_v0.json
+is HASH-PINNED: sha256 = d41b4ecf0a8736fe6c30cb81f5d2c1ac
+c4b8a495392b5e277a5f3a8fd6646c75 (the file is regenerable and
+uncommitted by repo policy; the hash makes the official readings
+and the delivered seed pool auditable -- a regeneration that
+changes the hash is a moving number and must be explained).
+DAY-7 DECISION STANDING AS DECLARED BY THE REVIEW: the
+cross-traffic condition flips from changeable to SET when the
+ordering instance first reads numbers -- the user's confirm (one
+word) or veto arrives with the day-7 release; a veto must land
+before numbers, else the arm's readings are provisional-marked.
+DAY 7 OPENED 2026-09-14; THE RELEASE CARRIED NO VETO, so per the
+declared rule the CROSS-TRAFFIC CONDITION IS NOW SET (changeable
+-> fixed; [AMENDED 10] and the S6 [AMENDED 12] row both stand on
+it). DAY-7 PRE-REGISTRATION (written BEFORE any number is read):
+THE ORDERING INSTANCE, declared in full -- Omega = the standard
+frozen 2.7B Pi space (per-op sets, legal() unchanged; the
+ergodicity page's usage template is filled with option (a): this
+instance walks the full structurally-legal space, no feasibility
+predicate). J = the wire-time caliber on the DECLARED cross-
+traffic class load: stages = the 32 layers (per-op sets unioned
+per layer, exactly check-C's granularity), pairs (s, s+k) for
+k in {2,4,8}, s+k < 32 (82 pairs), V = 1e6 words per pair, flows
+by the frozen R-split boundary convention verbatim, routed on the
+nominal 1 word/cycle die mesh; J is REPORTED as busiest-wire
+volume in words (wire time = volume x cycle at the nominal
+bandwidth -- the monotone identity is declared, the numbers stay
+comparable to the filed 18.29M-30.00M ladder). The named ladder
+for THIS instance = the check-C fan-out column (sequential 22.24M
+/ snake 28.00M / clustered 30.00M / least_manhattan 29.12M /
+nmap_greedy 26.76M / heaviest_first 19.29M / random 18.29M), and
+the objective must REPRODUCE those numbers as an identity anchor
+before any search runs (pin). BUDGET, declared: multi-start over
+the seven named seeds (the delivered pool), base seed 0, all
+three operator families, Schedule(t0 = 1.0e6 words, alpha =
+0.996, steps = 2000) per start -- identical budget on both legs.
+LEGS: active leg = the fan-out load above; CONTROL leg = the
+uniform chain pattern ((s, s+1), 31 pairs, same V) -- the safe-
+cell analog on this instance. The Delta column rides as 1.00 BY
+CONSTRUCTION (packet-free mesh weave; construction-default
+declared at S1). EXPECTATIONS, two-handed: E-O1 the multi-start
+best is <= every named rung on its leg -- BY CONSTRUCTION (seeds
+include the named seatings and best-tracking never loses them);
+the pin verifies the bookkeeping, this is not a bet. E-O2 (the
+real bet, active leg): search lands SUBSTANTIVELY below the best
+named rung (random 18.29M) -- bar: >= 10% below (< 16.46M);
+landing in [0, 10%) is a FINDING (the dispersed floor is near-
+optimal and the named ladder already brackets the space). E-O3
+(control leg): the search best stays in the compact family's
+neighborhood -- J <= clustered's 6.18M with margin <= 15%; a
+larger margin is a FINDING (the corridor pattern has real seating
+headroom beyond rectangle tiling -- NOTE the solved-corner claim
+[AMENDED 10] is about the 355M avg-hops caliber and is NOT
+touched by this leg either way). E-O4 the incremental line-load
+structure (per-pair wire-contribution cache; a move recomputes
+only the pairs touching the moved sets' stages, then re-takes the
+max -- the spec section 8(a) structure, delivered HERE where it
+is consumed) matches the full link_occupancy evaluation to 1e-9
+along random engine walks (its pin, plus the within-stage
+op-swap J-invariance pin: J sees stage unions only). Flips booked
+as findings; readings become official only with the suite green
+and this block already on file. DAY 7 RESULTS (scripts/search_ordering.py; pins group 51 FIRST,
+all green before the run: P1 the objective REPRODUCES the filed
+check-C fan-out ladder rung for rung AND matches the independent
+full link_occupancy evaluation; P2 incremental == full along
+random engine walks, integer-count exactness; P3 within-stage op
+swaps exactly J-invariant -- J sees stage unions only; P4 the
+control-leg chain anchor. Suite 403 -> 407). OFFICIAL READINGS
+(analysis/search_ordering.{json,png}; sha256 of the json =
+3da4291210855991099f21ddaa87f093d8707201df7b6e25785cc2a9c12e
+8618): ACTIVE LEG (fan-out): search best 16.294M words busiest
+wire, from the nmap_greedy start; regret vs best named (random
+18.29M) = 0.891, i.e. 10.9% below -- E-O2 LANDS, clearing the
+pre-registered 10% bar by 0.9 points (honest note: close to the
+bar, the margin is real but not large). ALL SEVEN STARTS converge
+into a 1.8%-wide band (16.294-16.588M) and EVERY start ends below
+EVERY named rung -- the reading is multi-start-consistent, not a
+lucky seed; notable: the best start was the COMPACT nmap_greedy
+seed, i.e. the SA walked out of the compact basin and past the
+dispersed floor. CONTROL LEG (uniform chain): search best 6.118M
+from the clustered start, 1.0% below clustered's 6.18M -- E-O3
+LANDS well inside the 15% neighborhood bound (the compact
+corridor family is confirmed near-optimal for the chain pattern;
+all starts land 6.118-6.235M). E-O1 held by construction and
+verified in the bookkeeping (per-start best <= its own start rung
+and <= all rungs). E-O4 pinned (P2 + the run's own final
+incremental-vs-full assert on the best seating). Delta column =
+1.00 by construction (packet-free mesh), reported in the json. NO
+FLIPS on day 7. Acceptance traffic: ~52-57% of proposals accepted
+early-schedule per start (recorded per start in the json). S6
+NOTE, filed for [AMENDED 12]: the four arms inherit THIS instance
+exactly (same Omega / budget / seeds); E1's distance-proxy arm is
+expected to walk TOWARD compactness on this load and score
+30M-class under E0 -- the pre-written S6 cell expectation, to be
+formalized at S6's own pre-registration. DAY 8 OPENED 2026-09-14. PRE-REGISTRATION (before any run): THE
+WITHIN-DIE INSTANCE = SA on the A3 co-residency space exactly as
+C49-b declared it (the REALIZABLE reopened space; offload config,
+d = 1024, blocks tile integrally): attn die = qkv_proj on 3 of 8
+macro slots + out_proj on 1 of the rest (280 joint seatings, FOUR
+FREE slots -> the migrate family runs its plain form), ffn die =
+ffn1 on 4 + ffn2 on 4 (70 seatings, SATURATED -> two-step form);
+within-op order irrelevant by uniformity (sets, not tuples).
+Ergodicity template filled with option (a): full structurally-
+legal space, no feasibility predicate (legality = set sizes +
+slot disjointness, BY CONSTRUCTION in the engine; the die-level
+tiler clause does not apply to this level, declared). J = the
+per-die JOINT STACK COST at the g = 0.4 GB/s anchor (the below-
+knee active cell), the C49-b composition verbatim: sum over the
+die's ops of write + prop + max(compute, a3_ser x scale), with
+a3_ser = the stored-lever (D,U) x 8/k flows on the op's own seats
+through the production 2x4 mesh (glb centre) link_occupancy at
+REF_WC, and scale = REF_WC / wc(0.4); levers READ FROM the stored
+soft_lever.json (no refit); phases prefill AND decode. REFERENCE
+(this instance's ladder): the space is exhaustively enumerable --
+ground truth = the EXHAUSTIVE optimum; rungs reported = shipped-
+contiguous seating (qkv {0,1,2} + out {3}; ffn1 {0..3} + ffn2
+{4..7}), exhaustive best, exhaustive worst. IDENTITY ANCHOR
+(pin, before any SA): the recomputed A3 fold (both dies + the
+fixed rest of the stack) reproduces the STORED soft_lever.json
+a3_cells rows at every anchor, both phases (stack 1.4341/1.057
+at 0.4, mech 3.0/2.6667) to 1e-9-class tolerance. BUDGET,
+declared: 2 dies x 2 phases, 3 starts each (shipped / random
+seed 0 / reversed-shipped), Schedule(t0 = 0.02 x J(shipped),
+alpha = 0.98, steps = 400), base seed 0, all three families.
+EXPECTATIONS, two-handed: E-W1 SA regret vs the exhaustive
+optimum = 1.000 EXACTLY on every die x phase (the space is tiny;
+a miss is an engine-quality finding, not a space finding). E-W2
+the identity anchor above (an anchor, not a bet). E-W3 OPEN
+two-handed reading, no direction pre-claimed: whether the
+shipped-contiguous seating already sits at the optimum (finding
+either way: "shipped is optimal in the reopened space" vs "free
+headroom on the shipped mapping", with the margin). E-W4 SAFE-
+CELL CONTROL realized here: at g = 2.0 (above the knee) the
+stored ratio is 1.0 -- the objective is FLAT, every seating
+ties; the exhaustive check must confirm all-ties and SA must
+return best = start (no strict improvement exists). Delta column
+1.00 by construction (no packet fields on the within-die
+schemes). DAY 8 RESULTS (scripts/search_withindie.py; pins group 52 first:
+W1 the recomputed A3 fold == the stored a3_cells rows both
+phases all anchors; W2 SA hits the exhaustive optimum; W3 the
+g = 2.0 safe cell is all-ties. Suite 407 -> 410). OFFICIAL
+READINGS (analysis/search_withindie.json, sha256 = f10a22bfde59
+2cf27a8095112dea4ad6d394450f05f35872d7c971171e080a60): E-W1
+LANDS EXACTLY -- SA regret vs the exhaustive optimum = 1.000000
+on all four die x phase cells (winning start: random0 in each).
+E-W2 the identity anchor held (stack 1.4341/1.057 at 0.4, mech
+3.0/2.6667 reproduced). E-W3 the open reading RESOLVES to "FREE
+HEADROOM ON THE SHIPPED MAPPING", booked as a FINDING: the
+shipped contiguous seating sits MID-BAND, +17.8%/+17.5% (attn
+prefill/decode) and +20.0%/+19.7% (ffn) above the exhaustive
+best per-die joint cost at 0.4 GB/s; exhaustive bands 1.515
+(attn) and 2.000 (ffn). The optimum INTERLEAVES the co-resident
+ops (ffn1 {0,1,3,5} / ffn2 {2,4,6,7}; qkv {0,1,6} + out {4}) --
+the MASKED form of the same mechanism, one level down
+[REWORDED per the day-8 review: NOT "the flip repeats" -- this
+data contains no rank inversion; what the condition changes is
+the MAGNITUDE (18-20% in the 0.4 active cell, ZERO in the safe
+cell) -- rank inversion stays exclusive to the check-C flip, the
+sharpest piece of the evidence set; MATERIALS.md entry reworded
+accordingly, the 18-20% permanently bound to "0.4 GB/s active
+cell x A3 co-residency" with the safe-cell zeroing as the other
+half of the sentence, plus the review's third-level reading:
+whether within-die placement matters at all is itself a CELL
+question]. E-W4 LANDS: g = 2.0
+all-ties confirmed exhaustively and SA returns best == start --
+the S3 pre-registration's safe-cell all-ties expectation is
+realized. NO ENGINE-QUALITY FLIPS. S3 CLOSE-OUT (C64-d DONE, days 6-8): the SA body + ergodicity
+page (day 6, gates G1-G5 = group 50); the ordering instance
+under the SET cross-traffic condition with the line-load
+incremental structure and its pins (day 7, group 51; active-leg
+regret 0.891 vs best named, control-leg 0.99 vs clustered); the
+within-die instance on the A3 co-residency space with exhaustive
+ground truth (day 8, group 52; regret exactly 1.000, shipped
+headroom finding). Spec section 10's S3 ship list is fully
+delivered: SA body per section 8, ergodicity page, two
+single-level instances, regret readings against the declared
+references, Delta column riding (1.00 by construction on every
+leg -- packet-free weaves). Expectations: pre-registered on all
+three days; two flips across S3, BOTH bookable findings (day-7
+none; day-8 shipped-headroom is a reading not a flip -- the open
+two-handed E-W3 resolved; the S2-era F-L1/F-L2 stand). Suite
+385 -> 410 across S3. DAY-8 REVIEW ROUND APPLIED 2026-09-14: (1) the BIT-LEVEL
+COINCIDENCE ruled STRUCTURAL, one line, decomposition printed:
+attn/prefill-worst and ffn/prefill-shipped are the SAME TERM
+MULTISET -- all four ops share write = 0, prop = 1.8e-7 s,
+compute = 5.19168e-3 s in the stored ledger, and the ser word
+counts land on the power-of-two lattice ({4,194,304 + 2,097,152}
+words vs {2,097,152 + 4,194,304}): identical addends in a
+different order, hence bit-identical sums including the float
+noise (decode pair likewise, {8192 + 4096} words). Same lattice
+explains the exact 1.2000 / 2.0000 ratios. Noted, no line to
+chase. (2) The SEVEN test names 403 -> 410, per the standing
+audit rule (group 51: test_p1_objective_reproduces_the_filed_
+fanout_ladder, test_p2_incremental_matches_full_along_engine_
+walks, test_p3_within_stage_op_swap_is_invariant,
+test_p4_control_chain_anchor; group 52: test_w1_fold_reproduces_
+stored_a3_cells, test_w2_sa_hits_the_exhaustive_optimum,
+test_w3_safe_cell_is_all_ties). (3) EDGE-WEIGHT MAGNITUDE
+BACKFILL RESCHEDULED, on the record not silent: [AMENDED 2]
+pre-registered the DP hand-off-fee optimism magnitude to fall
+out of "day 8's joint-vs-decomposed small instance" under the
+ORIGINAL numbering; the S3 day 8 (within-die) came due without
+it because that instance belongs to S4's linkage -- NEW HOME =
+S4 DAY 10 (the joint-vs-decomposed small instance of the DP+SA
+linkage); this line is the reschedule record and the item MUST
+appear in S4's day-9/10 pre-registration as front matter.
+(4) RULED BY THE USER 2026-09-14 -- path (a), absorbed into S4
+day 10: the linkage's SA-seating leg on the A4 payload runs with
+E as its main objective per [AMENDED 9] and produces the seating
+instance's first readings there; spec [AMENDED 13] records it,
+the S3 close-out wording is fixed in both SUMMARYs ("its own two
+instances complete; the seating instance's readings are an S4
+day-10 deliverable"), and S4's pre-registration MUST carry it as
+front matter next to the edge-weight backfill. Original open
+text kept below for the audit trail: the 2.7B SEATING instance -- [AMENDED 9] gave it main
+objective E, S6 inherits the ORDERING instance per [AMENDED 12],
+and no seating-instance reading exists yet while the S3
+close-out says "ship list fully delivered"; one of the two
+statements needs revision. Recommended path (a): absorb into S4
+day 10 -- the linkage's SA-seating leg on the A4 payload runs
+with E as its main objective per [AMENDED 9] and produces the
+instance's first readings there, recorded as an explicit
+amendment + close-out wording fix; alternatives (b) explicit
+postponement after S4, (c) rule it out (user's own reasons).
+The SUMMARY close-out sentence is adjusted once the ruling
+lands. S4's release is NOT blocked by (3)/(4) per the review;
+both ride as S4 pre-registration front matter. DAY 9 OPENED 2026-09-14 (S4 / C64-e first half). FRONT MATTER,
+carried per the day-8 review: (i) the [AMENDED 2] edge-weight
+optimism magnitude backfill is DUE DAY 10 (joint-vs-decomposed
+small instance of the linkage); (ii) the 2.7B seating instance
+produces its first readings DAY 10 as the linkage's SA-seating
+leg with main objective E ([AMENDED 13], user-ruled). DAY-9
+PRE-REGISTRATION (before any run): THE INTERVAL DP, declared in
+full. Blocks = the 32 homogeneous layers; state F(k, j, d) =
+first j blocks in k segments using d dies (spec section 8 level
+1, states unchanged per [AMENDED 1]). ORACLE, closed form on the
+frozen accounts (zero mapper): t(segment [i, j), g) = (j - i) x
+layer_serial_s(prefill) + entry hand-off fee; the GROUP-SIZE
+AXIS g runs over the LAYER-LEVEL tiler-feasible size set = all
+sums of per-op feasible counts (ss.feasible_die_counts per op,
+per-op cap = standing + 3), a SPARSE set: 17 is the standing
+minimum (4+1+2+5+5) and 16 MUST be absent (it would need ffn1 =
+4, the O10 counterexample) -- pinned. V1 DECLARED FLAT IN g:
+tau(g) = layer_serial_s at the production point for every
+feasible g (the replication/heterogeneity speed model is OUT of
+v1 scope, stated -- the spec's "DP earns its keep under
+heterogeneity or replication" enters day 10+ through constrained
+two-phase mu, weave conditions and seam variants, which move the
+FEES; today's job is a PROVABLY CORRECT DP). FEES per [AMENDED
+2]: the entry boundary priced at ADJACENT-SEATING REFERENCE
+HOPS = 1, fee_s = inter-layer boundary words (the evaluator's
+own boundaries() convention, read once from the standing
+payload) / (12.5 GB/s GRS) -- systematically optimistic,
+direction declared, magnitude backfill day 10. CALIBERS: pipe
+(primary; the DP is MINIMAX -- F = min over cuts of max(stage
+times), stage = m x tau + entry fee, wrap excluded) and single
+(sum form; expected degenerate to k = 1 since cuts only add
+fees). BUDGET d <= 576. GATES (correctness, not findings):
+D1 DP == brute force on randomized SYNTHETIC small instances
+(heterogeneous per-block tau, random fees, randomly-thinned
+sparse G; L <= 8, exhaustive over all cut sets x g choices) --
+the real optimality gate, both calibers; D2 the sparse axis is
+honored: a size absent from G never appears in any plan, and the
+layer-level echo of O10 (16 absent / 17 present) is pinned;
+D3 homogeneous-payload degeneracy: for every k the DP interval
+equals the balanced-cut interval, minimal g = 17 everywhere
+(flat tau => no die wasted), single-caliber optimum is k = 1
+with zero fees; D4 determinism + budget accounting (allocated =
+544 = 17 x 32 at the optimum); D5 reconstruction returns (cuts,
+per-segment g) that re-price EXACTLY to the DP value. ERGODICITY
+TEMPLATE SLOT (b) RESOLVED for S4 (the page gets the fill): the
+sparse cuts/size axis hosts NO Markov chain -- the DP enumerates
+it EXACTLY, so feasible-region connectedness is moot there; the
+only chains S4 runs are the linkage's SA-seating legs, which
+walk the full structurally-legal seating space (option (a)).
+EXPECTATIONS, two-handed: E-D1 the homogeneous stack is
+NEAR-DEGENERATE exactly as the spec pre-wrote -- uniform/
+balanced cutting optimal at every k (A4's flat spread is that
+point), now DP-VERIFIED rather than assumed; a deviation is a
+finding. E-D2 the pipe-caliber optimal k on the standing payload
+at GRS: the interval falls ~1/k with balanced cuts while fees
+add per-segment -- expected optimum at the LARGEST k the fee
+tax permits; the reading (k*, interval, fee share) is the day's
+number, no bar pre-set (first reading, bracketed not bet).
+Flips booked as findings. DAY 9 RESULTS 2026-09-14 (scripts/search_dp.py; gates group 53
+first, all green: D1 DP == brute force on 6 randomized synthetic
+instances x k in {1,2,3} x both calibers -- heterogeneous taus,
+random fees, thinned sparse G; D2 sparse axis honored + the O10
+echo pinned; D3 homogeneous degeneracy; D4 determinism + budget;
+D5 reconstruction re-prices exactly, asserted inside solve().
+Suite 410 -> 415; test names: test_d1_dp_equals_brute_force_on_
+synthetic_instances, test_d2_sparse_axis_honored_and_o10_echo,
+test_d3_homogeneous_degeneracy_and_single_k1,
+test_d4_determinism_and_budget_accounting,
+test_d5_reconstruction_reprices_exactly). READINGS on the
+standing payload: the LAYER-level feasible size set G =
+{17..28} with 16 ABSENT (the O10 counterexample surfacing at
+layer granularity: 16 would need ffn1 = 4; the fixed-function
+attention die is a declared singleton axis {1} -- it is not a
+weight matmul and is not tiler-planned, clarification recorded);
+layer_s 28.7848 ms, inter-layer boundary 5.24M words -> fee
+0.4194 ms at reference hop 1 (GRS). E-D1 LANDS: balanced cuts at
+EVERY k, minimal g = 17 everywhere, 544 dies allocated -- the
+pre-written near-degeneracy is now DP-VERIFIED, A4's flat spread
+is exactly this point. Single caliber prefers k = 1 (921.113 vs
+921.533 ms at k = 2: cuts only add fees), as pre-registered.
+E-D2 READING: pipe-caliber k* = 32 (one layer per stage),
+interval 29.2042 ms = layer_s + one fee, fee share 1.44% at GRS
+-- at the safe-cell bandwidth the fee tax never overturns
+deeper pipelining on the homogeneous stack; the interesting k*
+regime (fees biting) moves to the weak-D2D / condition-varied
+cells, which is DAY 10's linkage territory. ERGODICITY SLOT (b)
+FILLED on the page: the sparse axis hosts no chain -- exact DP;
+the linkage's SA legs fill option (a). NO FLIPS. LEDGER PROVENANCE LINE, added per the day-9 review (the attention
+DIGITAL-UNIT cost, auditable for the 9.33x / 1.11x citations):
+the unit is fabric.DigitalUnit (O24), a PLATFORM INPUT (DR-8);
+shipped generic configuration 64 lanes x 1 GHz (sized to the die
+array output rate: 256 arrays x 128 outputs per 1.4486 us device
+cycle = 22.6 G results/s), per-op energies from the Horowitz
+ISSCC 2014 45 nm table at 16-bit intermediates, registered in
+ANCHORS.md -- provenance grade: GENERIC PUBLIC EXAMPLE VALUES,
+not vendor-calibrated (the DR-8 register row carries the grade).
+Latency formula: arith_ops / (lanes x clock). At the 2.7B point
+(d = 2560, S = 512, prefill, per layer): softmax 524.29 us, GELU
+491.52 us, LayerNorm 204.82 us, residual 40.96 us; at the 355M
+point (d = 1024): softmax 262.14 us prefill / 0.51 us decode,
+elementwise total 557.07 / 1.09 us per layer. WHERE IT ENTERS:
+2.7B account -- the elw term of Workload2p7B.layer_terms_s
+(block_elementwise_ops x elementwise_cost), a FIXED term that
+device_scale does NOT divide (pinned:
+test_device_scale_shrinks_the_matrix_part_only); 355M account --
+the same elementwise_cost values as fixed adders in the
+stack_latency composition (the C49 record's convention). The
+qk^t / av MATMULS are separate array ops in the frozen per-op
+account (2.7B prefill compute 2.596 / 1.298 ms) and DO scale;
+only the vector unit is the fixed digital term. Constant wrt
+seating and ordering -- it appears in no placement objective;
+the line exists so the 9.33x (prefill device sweep) and 1.11x
+(decode, K/V-write-walled) figures cite a traceable number. DAY 10 OPENED 2026-09-14 (S4 second half). PRE-REGISTRATION --
+the review's three declarations FIRST, then exhibits, then
+numbers. (1) T_PREFILL BUDGET, per the user's frame (a
+DEMONSTRATION pre-registered constraint, not a performance
+promise; too loose binds nothing, too tight kills feasibility):
+PROPOSED B = 120 ms, selection procedure declared -- the
+constrained solver is min T_decode(single caliber: cuts only ADD
+decode fees, so decode wants FEW cuts) subject to
+T_prefill(pipe interval) <= B, whose optimum is the SMALLEST k
+whose balanced interval fits the budget; the staircase of
+critical points is interval(m) = m x 28.7848 + 0.4194 ms at
+max-stage m = ceil(32/k), so B = 120 sits inside the m = 4 step
+(k* = 8), differing from the unconstrained decode optimum k = 1
+-- the constraint BITES, meeting the acceptance standard; the
+run reports the FULL threshold staircase with readings on both
+sides of every critical point, including the first-bite edge
+921.11 ms (k 1 -> 2) and the local edges 115.56 / 230.70 ms.
+(2) EDGE-WEIGHT BACKFILL, quantified negligibility standard
+declared BEFORE the measurement: the [AMENDED 2] optimism is
+NEGLIGIBLE iff (a) re-running the DP with fees priced at the
+ACTUAL SA-found seating's hops (per cut boundary: words/bw +
+max_hops x 20 ns, vs the reference words/bw + 1 x 20 ns) changes
+NO cut decision at k in {2,4,8,16,32} nor in the constrained
+exhibit at B = 120; AND (b) the bottleneck-stage reading shifts
+< 1% at every tested k. Either failing -> the magnitude is a
+FINDING and the DP fee model is upgraded, not excused. (3) THE
+2.7B SEATING INSTANCE's first readings ([AMENDED 13]): main
+objective E; REFERENCE DECLARED = the ladder E column, reference
+rung clustered 2.3379 J (the E-best named; direct exhaustion of
+the 544-seat space is impossible, declared); regret reported vs
+all seven rungs, T alongside as the flat column; evaluator = a
+diff-driven ScoreSession-backed incremental E callable (its own
+pin); budget: seeds {clustered, snake, random0}, Schedule(t0 =
+0.005 J, alpha = 0.996, steps = 1200), base seed 0, all three
+families. EXHIBITS, expectations two-handed: EX1 constrained
+two-phase table (the previously-unobtainable result class):
+T_decode monotone increasing in k (each cut adds a decode fee),
+constrained k* = smallest feasible k -- the staircase IS the
+exhibit; flip = finding. EX2 weave condition enumeration (the
+die_weave knob, O19 pool): seating SA rerun under torus and ring
+vs the mesh default, same budget/seeds; expectation: the E
+spread across seatings NARROWS under torus (the fold shortens
+worst-case distances; O19's hub-lever zeroing precedent) and
+WIDENS under ring (the weave lever precedent, 12.26x vs 3.57x
+ordering spread); flips = findings. EX3 seam-bound variant: cuts
+BOUND to the A4 seam example (16 layers/package -> cuts (16,32),
+use_seam payload) vs the DP's free k = 2; expectation: the seam
+bound costs ~nothing at GRS (16|16 IS balanced, fee 0.42 ms) --
+interval equal to free k = 2 to within the fee; the exhibit
+prices a real deployment bound; flip = finding. GATES (group
+54): L1 the constrained solver == brute enumeration over k on
+the standing instance at several B (and bites at B = 120); L2
+the SessionE incremental == full score e_J along engine deltas;
+L3 backfill identity -- actual fees at hops = 1 reproduce the
+reference DP exactly. Numbers only after this block; S4 closes
+with the day + SUMMARY sync. DAY 10 RESULTS (scripts/search_linkage.py, gates group 54 first,
+all green -- test_l1_constrained_solver_structure_and_bite,
+test_l2_session_e_matches_full_score,
+test_l3_backfill_identity_at_reference_hops; suite 415 -> 418;
+data analysis/search_linkage.json, sha256 = c984708bc4257970
+f6bdd6387439fde0b19a6ccf8022b5f4d22ef97b1fce45f3): EX1 LANDS,
+the constraint BITES per the acceptance standard: B = 120 ms ->
+constrained k* = 8 (T_prefill 115.56 ms, T_decode 24.115 ms) vs
+unconstrained decode-optimal k = 1; full staircase filed
+(first-bite edge 921.11 ms verified on both sides by gate L1;
+thresholds 460.98 / 317.05 / 230.70 / ... / 115.56). Honest
+note: the decode price of pipelining at GRS is feather-light
+(~0.7 us per cut; T_decode 24.110 -> 24.115 ms over k 1 -> 8) --
+the staircase is real but the two-phase tension at GRS is
+gentle; it steepens where fees grow (weak D2D), the cell
+discipline's point. BACKFILL DUE CLOSED (spec [AMENDED 2] now
+carries the number): cut-boundary hops up to 10 at the SA-found
+seating; NO cut change at any tested k; bottleneck shift 2.2e-7
+... 6.8e-6 relative -- NEGLIGIBLE under the pre-declared
+standard. SEATING INSTANCE FIRST READINGS ([AMENDED 13]): best
+E = 2.337921 J = the clustered rung EXACTLY (start clustered,
+unimproved in 1200 steps; snake likewise unimproved at its rung;
+random improved 2.525133 -> 2.489385 without reaching the
+clustered basin) -- regret 1.0000 vs the E-best named (the
+json's 1.00001 is a 4-decimal-constant rounding artifact,
+declared); the first reading is honest: at this budget the
+E-best named seating is not beaten, the E-column named ceiling
+stands (deeper budgets belong to S6-era runs); T flat column
+1034.793 ms rides. EX2 SPLITS, one land one flip, plus a bonus
+finding: ring LANDS -- the E spread across the three rungs
+explodes (2.512 / 3.499 / 6.433 vs mesh 2.338 / 2.354 / 2.525)
+AND the ordering INVERTS: snake < clustered under ring (3.347
+after SA polish still above snake's 2.512) while clustered <
+snake on mesh/torus -- booked as FINDING F-L4: a genuine RANK
+INVERSION on the E column across the weave CONDITION (the
+condition-bound motif now measured on a third axis: traffic
+pattern, then cell, now weave). TORUS FLIPS the expectation --
+booked as FINDING F-L3: every rung's E RISES under torus
+(clustered 2.3379 -> 2.3789, random 2.5251 -> 2.6418) and the
+spread WIDENS slightly (1.11 vs 1.08), against the
+count-caliber precedent the expectation leaned on: the E column
+reads the PHYSICAL caliber, where the torus fold is a TAX
+(folded wires are twice as long; compact seatings gain nothing
+to offset it) -- the C59/E3 folded-x2 lesson resurfacing on the
+energy column. EX3: EXPECTATION-PREMISE ERROR, recorded as
+such, then the corrected reading: the pre-registration misread
+the A4 seam example as 2 packages x 16 layers; it is 16
+packages x 2 layers (cuts every 2 layers, 16 segments), so the
+declared baseline (free k = 2) was the wrong comparison. The
+corrected exhibit: the seam-bound plan IS the free DP's
+balanced k = 16 plan -- intervals BIT-IDENTICAL
+(0.05798899839999999 s both, verified) -- the seam bound costs
+ZERO at its own segment count; the script's EX3 is fixed to the
+same-k baseline for future regeneration. No model number moved;
+the error lived in the expectation text alone. S4 CLOSES
+(C64-e DONE, days 9-10): exact interval DP over the sparse
+tiler-feasible axis (gated vs brute force), DP+SA linkage on
+the A4 payload, the three exhibits delivered, both front-matter
+dues paid ([AMENDED 2] backfilled with numbers, [AMENDED 13]
+seating readings produced), ergodicity slot (b) filled. Spec
+section 10 S4 ship list complete. Suite 410 -> 418 across S4.
+FIGURE ROUND (day-10 review; the user ordered both figures drawn,
+everything else passed): DECLINED per the review -- no figure
+for the seating E column (engine validation, not a selling
+point) nor the constraint staircase (the table is clearer).
+FIGURE 1 analysis/weave_inversion.png (generator
+scripts/fig_weave_inversion.py + weave_inversion.json): ring |
+torus side by side, ALL SEVEN named seatings each, ONE shared
+y-scale per the craft note, unit = D2D surplus traffic in G
+word-hops (declared: exactly the measured E-column
+seat-dependent channel / 10 pJ -- the quantity the inversion was
+measured on), mesh reference dots in both panels, x fixed to the
+mesh ladder order. The full seven-rung computation SHARPENS
+F-L4 beyond the three-start version: under ring the ENTIRE
+ladder reorders -- sequential becomes best (10.78 G) ahead of
+snake (20.05) while clustered falls mid-field (118.8) and
+least_manhattan/nmap blow up (92.8/96.0 vs mesh 2.7/2.8);
+torus preserves the mesh order rung for rung, wholesale shift
+~2.5x -- "some weaves reorder, some only shift" is now one
+glance. FIGURE 2 analysis/condition_axes.png (generator
+scripts/fig_condition_axes.py; drawn NOW on the user's
+instruction, the reviewer's caution RECORDED: this is a
+narrative close-out figure and may be RESEEDED when section 5
+takes shape after S6): three slopegraph panels -- load axis
+clustered/snake CROSS (6.18/15.06 -> 30.00/28.00 M words); cell
+axis shipped/interleaved CONVERGE to the 10.38 ms tie (labeled
+MASKS, gap -> 0, deliberately NOT an inversion per the settled
+scope wording); weave axis clustered/snake CROSS (2.67/4.25 ->
+118.80/20.05 G word-hops); per-panel units labeled, the verdict
+carries the panel. DAY 11 OPENED 2026-09-14 (S6 / C64-f first half). PRE-
+REGISTRATION (arms + gates today; argmin RUNS are day 12; every
+number below that cites filed rungs is ARITHMETIC ON THE FILED
+LADDER, not a new reading). THE FOUR ARMS on the ordering
+instance, [AMENDED 12] inherited exactly (same Omega = frozen
+2.7B Pi space, same seeds = the seven named, same algorithm =
+the day-6 SA, same budget rule): E0 (truth) = the mu-weighted
+busiest-wire volume over the DECLARED PATTERN MIX mu = {chain
+0.5, fanout 0.5} (equal demonstration weights, declared,
+swappable; J0 = 0.5 x busiest_chain + 0.5 x busiest_fanout, the
+day-7 line-load machinery per pattern). E0 DEFINITION CHANGE,
+stated with its reason (day-11 review): S3 day 7's instance
+objective was the SINGLE fan-out load; S6's truth is the
+two-pattern MIX -- a necessity of the experiment design (a
+single-condition arm is only meaningful against a
+multi-condition truth), NOT a revision of day 7: S3's 16.294M
+is a fan-out-LEG number and is never compared to S6 mix
+numbers except leg by leg. The 0.5/0.5 weights are
+demonstration-arbitrary and the conclusions must not ride on
+them: after the main run the same arm solutions are re-scored
+(and E0 re-optimized) under mu = {0.3, 0.7}; one line files
+whether every verdict holds. E2 MAPPING DECLARED [REASON
+REWRITTEN at the day-11 review -- the first wording ("the
+sharpest deception available") stated the RESULT as the
+selection criterion, which a referee kills as arm-tuning]:
+one-hot on CHAIN because chain is THE STANDARD pipeline load,
+the single condition any engineer tunes for by default; that it
+lands as the worst arm is a FINDING, not the reason it was
+chosen. Per the same review a FAN-OUT one-hot arm (E2b) rides
+at near-zero cost: with both one-hot directions run,
+"single-condition tuning does not transfer" is claimed in both
+directions, not a chosen one; the matrix becomes 5 x 5. E1 = the Hu-Marculescu distance proxy, the spec's
+literal Sigma_e v_e dist(e): every producer-die -> consumer-die
+flow of the SAME mu-weighted pair set at piece x Manhattan
+[the pre-registration first wrote "stage-centroid distance"
+here -- a deviation from the pre-written definition, caught by
+gate R4 and corrected BEFORE any run; day-11 record] (citation
+in code; per C58 its validity domain is price-proportional-to-
+length WITHOUT a contention axis -- this instance HAS one,
+which is the exhibit). E3 = J0's mix computed under the WRONG
+WEAVE = ring (O19 pool; bus declined: its shared-medium busiest
+resource is SEAT-INVARIANT, the objective degenerates to a
+constant and regret is undefined -- per the day-11 review that
+degeneration is PROMOTED to a standalone exhibit in
+MATERIALS.md, the measured form of "without the right paradigm
+the objective cannot even be written", not merely a decline
+reason). BUDGET RULE, uniform across
+arms with unit-sane scaling (declared): Schedule(t0 = (max seed
+J_i - min seed J_i)/20 in the ARM'S OWN units, alpha = 0.996,
+steps = 2000), 7 named starts, base seed 0, all families.
+PROTOCOL: each arm argmin -> ALL re-scored by E0 -> regret
+R_i = E0(Pi_i*) / E0(Pi_0*); the cross-scoring matrix E_j(Pi_i*)
+raw; the core exhibit cell = "self-scores well, E0 scores
+badly". CELLS: active cell = the declared mix; SAFE-CELL
+CONTROL = mu one-hot chain as the condition for ALL arms (there
+E2 == E0 by definition). PER-CELL EXPECTATIONS, pre-written
+from the filed rungs (mix rungs by arithmetic: random 12.65M
+best named, heaviest 14.03, sequential 15.36, nmap 17.41,
+clustered 18.09, lm 18.18, snake 21.53): ACTIVE cell -- E1 walks
+compact (distance always rewards compactness) and E0 judges it
+30M-class on the fanout half: R_E1 >= 1.3 expected; E2 (chain
+one-hot) walks the same compact direction: R_E2 >= 1.3; E3
+(ring-optimal) reorders per F-L4: R_E3 > 1, bracket looser
+(>= 1.05); E0's own arm must land at or below the best named
+mix rung (by construction of seeding + best-tracking). SAFE
+chain cell -- all four regrets ~ 1.00 (E1 and chain-E0 agree on
+compactness there; E2 == E0; E3's ring chain optimum is
+adjacency-shaped like mesh's), the all-tie control. Flips
+booked as findings. GATES (group 55, today): R1 E2 == the chain
+component of E0 (identity on probes); R2 E3 deterministic,
+differs from E0 on a probe (non-degenerate), and its host is
+the ring weave verbatim; R3 E1 hand-check on a tiny synthetic
+seating (centroid arithmetic by hand); R4 isolation probe --
+the four arms' rankings of the seven named seatings are NOT all
+identical (top-1 disagreement between E1 and E0 expected from
+the filed arithmetic); R5 determinism given seed. DAY 11 RESULTS: arms shipped
+(scripts/search_referee.py: MixJ over the two line-load legs,
+E2 = chain one-hot, E3 = the ring-hosted mix, E1 =
+DistanceProxyJ) + gates group 55 all green (suite 418 -> 423;
+test_r1_e2_is_the_chain_component_of_e0,
+test_r2_e3_is_ring_hosted_and_not_degenerate,
+test_r3_e1_hand_check_on_a_tiny_seating,
+test_r4_isolation_probe_rankings_differ,
+test_r5_arms_deterministic). GATE R4 EARNED ITS KEEP BEFORE ANY
+ARM RAN [RECORD REWORDED at the day-11 review: the first
+write-up framed the episode around the deception cell
+dissolving -- an arm-tuned-toward-failure framing, inadmissible
+in this file or the paper; the correct framing follows]: the
+first E1 draft DEVIATED FROM THE PRE-WRITTEN PROXY DEFINITION
+(the spec's literal Sigma_e v_e dist(e)) by pricing
+stage-CENTROID distances; the SYMPTOM was collapse under
+dispersed seatings (a spread set's centroid sits mid-grid;
+random scored 194.9M-wd best); the FIX moved the implementation
+TOWARD the spec definition (per-flow word-hops, the same
+mu-weighted pair set as E0, no contention term) BEFORE any
+argmin ran; no reading existed under the deviant form. The
+episode's residue -- two faithful-looking proxies contradicting
+each other, one fully fooled by dispersion -- is filed as
+MATERIAL (MATERIALS.md), better registered than hidden. The
+corrected seven-rung probe (arithmetic on filed machinery, not
+a search reading): E1 ladder clustered 10.180G < sequential
+10.226G < snake 11.112G < nmap 11.417G < lm 11.682G <
+heaviest 14.486G < random 15.277G word-hops -- NEAR-INVERTED
+against the E0 mix ladder (random 12.65M best ... snake 21.53M
+worst): the two judges now demonstrably disagree at the rung
+level -- the R4 premise on file. DAY-12 VERDICT STANDARDS,
+fixed at the day-11 review before the runs: (i) the
+cross-scoring matrix is COMPLETE, 5 x 5 (E0 / E1 / E2-chain /
+E2b-fanout / E3): every arm's argmin scored under every
+evaluator, self-score and truth-score in one table; (ii) the
+acceptance threshold uses S3's measured noise floor -- a
+defective arm's E0-regret must EXCEED the multi-start
+convergence band's 1.8% to write "definitely wrong"; within
+1.8% only "possibly wrong"; (iii) predictions pre-written from
+the filed rungs: E1 and E2-chain converge to compact seats and
+read clearly costly under the mix; E3's ring-optimal linear
+ordering lands near the sequential rung under the mesh mix,
+medium regret; all three above E0's optimum and beyond the
+noise band = section 5's three pieces assembled; E2b-fanout
+expected NEAR-RIGHT under the mix (its own condition is half
+the truth) and clearly wrong in the chain safe cell -- the
+one-hot pair is symmetric by design; (iv) safe-cell (chain
+one-hot) control: E1 / E3 regrets ~ 1.00, E2-chain == E0 there
+by definition, E2b the deceived arm there. Flips booked. DAY 12 RESULTS 2026-09-15 (scripts/search_s6.py; gate r6
+E2b == the fan-out leg added first, suite 424; data
+analysis/search_s6.json, sha256 = 596fa0999bdefbcbc560a89881
+19200324d5d6600a6a9fdc8e7c1f3b5cc89301; figure search_s6.png.
+Operational note: the host-side task was killed at a session
+teardown mid-run; the container-side process SURVIVED and
+completed untouched -- no restart, no partial artifact, the
+json is written once at the end). ACTIVE CELL: E0's own optimum
+11.382M (random start), 10.0% below the best named mix rung
+(12.65M) -- the search beats the ladder on the mix as well.
+REGRETS AND VERDICTS (threshold = the S3 noise band 1.8%,
+final verdicts apply the pre-registered weight-robustness
+clause): E1 = 1.5891 DEFINITELY WRONG (the core matrix cell:
+self-judge 1.00, truth 1.59; its argmin's E0 score 18.088M sits
+at the clustered mix rung -- the distance proxy walked to
+compact exactly as pre-written, and holds 1.7054 at 0.3/0.7);
+E2-chain = 1.0724 DEFINITELY WRONG (1.0926 at 0.3/0.7;
+consistency note: its own-judge optimum 6.118M chain IS the S3
+control-leg optimum, the arm reproduced S3 exactly); E3 =
+1.0982 DEFINITELY WRONG (1.0953 at 0.3/0.7; the "lands near
+the sequential rung" detail was off -- its E0 score 12.50M
+polishes BELOW sequential's 15.36 rung; medium regret held);
+E2b-fanout = 1.0181 = BAND-EDGE (exceeds 1.01804 by 8e-5) and
+FAILS the weight-robustness clause (1.0035 at 0.3/0.7, inside
+the band) -- FINAL VERDICT: NOT claimed wrong; the pre-written
+symmetric prediction ("near-right, its condition is half the
+truth") holds; the json's mechanical verdicts field is the
+0.5/0.5 read and is superseded by this record (script comment
+added). WEIGHT-SENSITIVITY LINE: at mu = {0.3, 0.7} the three
+defective-arm verdicts HOLD (1.7054 / 1.0926 / 1.0953, all
+beyond the band; E0' re-optimization gains only 0.31% over the
+re-scored 0.5/0.5 argmin) -- no conclusion rides on the
+weights, except E2b's band-edge as designed. BENIGN-LOAD CONTROL LEG
+(chain one-hot) [TERMINOLOGY FIXED at the day-12 review: this
+leg is NOT a "safe cell" -- that term stays reserved for MASKED
+cells where every seating ties (the within-die g = 2.0 kind);
+under the chain load seatings still matter (E2b wrong 13.5%,
+E3 38.5%), the load is merely benign; conflating the two would
+turn our own data against the "no crossing along the bandwidth
+axis" sentence in section 5]: E1_chain 1.0096 inside the band
+(ties, as pre-written); E2-chain == truth by definition; E2b
+deceived there, 1.1346 (the symmetric one-hot roles land);
+E3_chain = 1.3846 -- EXPECTATION FLIP booked as FINDING F-S6a:
+THE WEAVE ARM IS WRONG EVEN UNDER THE BENIGN LOAD. The pre-registration
+assumed ring's chain optimum resembles mesh's; it does not --
+ring's chain optimum is ring-ADJACENCY (sequential-like, which
+scores 8.47M-class on the mesh chain = 1.38x) while mesh's
+chain optimum is the rectangle family: "compact is
+weave-relative" bites even in the benign-load cell. The flip
+STRENGTHENS paradigm-dependence (E3 wrong in both cells) while
+flipping the all-ties control expectation for that one arm.
+SECTION 5'S THREE PIECES ARE ASSEMBLED AND DISJOINT:
+condition-bound (the load axis), paradigm-dependence (the
+weave axis + both E3 cells), rank inversion proper (E1 vs E0,
+now measured at ARGMIN level, not just rung level). The 5x5
+matrix reads as designed: diagonal 1.00 everywhere, the E1 row
+the core exhibit (self 1.00 / truth 1.59 / judge-E2b 1.85).
+S6 CLOSES (C64-f DONE, days 11-12) => THE SEARCH MILESTONE
+(worklist step 7) CLOSES: S1 evaluator frozen + triple anchors;
+S2 registry + faithfulness gate + ladder v0 + seed pool; S3 SA
+body + ergodicity page + two instances; S4 DP + linkage + three
+exhibits + both dues; S6 five arms + matrix + controls; S5
+retired with the collaborator. Hash-pinned artifacts:
+ladder_v0.json d41b4ecf..., search_ordering.json 3da4291...,
+search_withindie.json f10a22bf..., search_linkage.json
+c984708b..., search_s6.json 596fa099....
+Suite across the milestone: 385 -> 424, zero expected-fail. DAY-12 REVIEW ROUND (two items; the operational item passed as
+noted): (1) TERMINOLOGY FIXED across the records, both SUMMARYs,
+MATERIALS and the script -- the chain one-hot leg is the
+BENIGN-LOAD CONTROL LEG, never a "safe cell": that term stays
+reserved for MASKED cells where every seating ties (the
+within-die g = 2.0 kind); on the chain leg seatings still
+matter (E2b 13.5%, E3 38.5% there), the load is merely benign;
+conflating the two would let our own data bite section 5's "no
+crossing along the bandwidth axis" sentence. F-S6a rephrased
+accordingly ("the weave arm is wrong even under the benign
+load"). (2) E2b's JUDGEMENT BASIS UPGRADED, one supplementary
+run (deterministic, reproduces day-12's E0 arm bit for bit --
+11.3824M from the random start): the review is right that the
+S3 1.8% band was measured on the PURE FAN-OUT target; the
+correct scale for a mix-target verdict is E0's OWN seven-start
+scatter = 11.3824-11.6176M = a 2.067% BAND. E2b's 1.0181 falls
+INSIDE it -- the "not claimed wrong" verdict now stands
+DIRECTLY on the primary band criterion, with the
+weight-robustness clause (1.0035 at 0.3/0.7) as reinforcement
+rather than the sole decider. The other three verdicts (7.2 /
+9.8 / 58.9%) clear the wider band unchanged. The script now
+computes and stores E0's own band on every regeneration
+(per_start_best kept in the json). Commit/push per the user's
+instruction NOW.
 
 Cell discipline: search experiments run only where the phase diagram has
 play -- the fast device tier, the shared-medium tier, offload-decode, weak

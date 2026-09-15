@@ -1762,3 +1762,36 @@ seat-invariant by construction, so seating moves 2.7B T only by ppm
 instance-to-objective mapping and the 355M solved-degenerate-corner
 declaration went into the spec ([AMENDED 9-11]). Fast suite: 394 /
 0 xfail.
+
+C64-d/e/f (S3-S6, days 6-12). Day 6: the SA body
+(scripts/search_sa.py -- exchange / migrate with the two-step form
+on saturated hosts / whole-set swap; Metropolis + geometric
+schedule; rejection-mode constraints with infeasible starts
+refused; multistart; constructive_path) + analysis/ergodicity.md +
+group 50 (9 gates). Day 7: the ordering instance under the SET
+cross-traffic condition (scripts/search_ordering.py; the ordered
+line-load incremental structure with integer flow counts) + group
+51 (4 pins incl. the filed-ladder identity anchor); active-leg
+regret 0.891 vs best named, all seven starts in a 1.8% band. Day
+8: the within-die instance on the A3 space (search_withindie.py) +
+group 52 (3 pins); SA regret exactly 1.000 vs exhaustion; shipped
+contiguous mapping +17.8-20% headroom finding. Day 9: the exact
+interval DP over the sparse tiler-feasible axis (search_dp.py) +
+group 53 (5 gates incl. DP == brute force); G = {17..28}, 16
+absent (O10 at layer granularity); homogeneous near-degeneracy
+DP-verified. Day 10: the DP+SA linkage + three exhibits
+(search_linkage.py) + group 54 (3 gates); constrained k* = 8 at
+B = 120 ms; [AMENDED 2] fee backfill negligible (max 6.8e-6); the
+2.7B seating instance's first readings (E = the clustered rung,
+regret 1.0000); weave enumeration findings F-L3/F-L4 (torus tax on
+the physical caliber; ring rank inversion); the seam
+expectation-premise error recorded and corrected (bit-identical to
+free k = 16). Days 11-12: the five-arm referee family
+(search_referee.py / search_s6.py) + group 55 (6 gates; R4 caught
+the E1 centroid-caliber deviation from Sigma_e v_e dist(e) before
+any run); E0 mix optimum 11.382M; verdicts E1 1.589 / E2 1.072 /
+E3 1.098 definitely wrong (robust at mu 0.3/0.7), E2b 1.0181
+inside E0's own 2.067% seven-start band -- not claimed wrong;
+benign-load control leg (terminology fixed: not a "safe cell");
+F-S6a: the weave arm wrong even under the benign load. Fast
+suite: 385 -> 424, zero expected-fail.
