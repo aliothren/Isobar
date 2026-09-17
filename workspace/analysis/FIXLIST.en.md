@@ -4513,9 +4513,52 @@ one (fixed gamma, search alpha/beta), arm two stays zero (the DP's
 own solution is the uniform tiling), and arm three contributes
 nothing to attribute. Recorded with its scope: the homogeneous
 regime only, since the cut-decision invariance that makes it zero is
-exactly what heterogeneity or replication would break. THE NOTES'
-LIST IS NOW COMPLETE: A1-A4 done, B5 done, B6 all three arms
-attributed, B7 both halves done.
+exactly what heterogeneity or replication would break. THE NOTES' LIST IS NOW COMPLETE: A1-A4 done, B5 done, B6 all three arms attributed, B7 both halves done. FIG.1 REBUILT TO THE ISOBAR SPEC 2026-09-15 (isobar_fig1_spec.md;
+NEW FILE analysis/phase_diagram_isobar.png + .json, sha256 (superseded below)
+-- the standing analysis/phase_diagram.png is UNTOUCHED, as
+instructed; palette kept to the repo's own grey-band / amber-estimate
+style rather than the spec's colour advice, also as instructed).
+WHAT THE REBUILD CHANGES, each traceable to a spec clause: BOTH AXES
+ARE RATES -- x = MVM row rate s = 1/t_row in Mrows/s (the RECIPROCAL
+of the old axis, so every boundary, chip and label is recomputed, not
+swapped), y = link bandwidth per direction. THREE REGIONS BY
+PLACEMENT EXTREMA, not by organisation: max_P H < R compute /
+fixed-cost dominated, min_P H <= R <= max_P H placement-dependent
+dominance, min_P H > R communication dominated -- and the lower
+region is NOT called placement-free, it is labelled "placement still
+sets how severe". BOUNDARIES CARRY THE FIXED TERM: B_-(s) = A_min /
+R(s), B_+(s) = A_max / R(s) with R(s) = N*s_ref/s + F, so they rise
+and then FLATTEN where the non-scaling terms take over -- visible in
+panel (b), and panel (a) keeps slope +1 because its fixed term is
+0.36 us against 10.38 ms of compute (stated in the panel title rather
+than left as a silent difference). PER-PANEL ENVELOPE QUANTIFIER, the
+spec's certified/observed rule: panel (a) is the within-die
+co-residency space, EXHAUSTIVE over its 70 seatings -> certified
+envelope, B_+/B_- = 2.67x; panel (b) is the package, the seven named
+seating rules -> observed envelope over P, B_+/B_- = 2.37x. Both
+ratios are MEASURED on their own instance -- the old 1.4-2x is not
+reused, per the spec's warning. CHIP PROVENANCE SPLIT: row rate is
+known for all four, so all four get axis ticks with their status
+(measured / derived / design-point); only chips with a bandwidth
+coordinate get a point, hollow -- HERMES at its derived aggregated
+per-link rate, Mythic and ISAAC as estimated bands with bars. Nothing
+is placed at a fabricated height. PORT RULE STATED ON THE FIGURE (the
+spec requires it): one injection + one ejection port per die AT THE
+LINK RATE, so ports scale with B and H = A(p)/B holds with A taken
+over links and ports. REVISED 2026-09-16 on review (three rounds): the repo's colour families instead of a greyscale misreading (slate blue = compute side, brick = communication side, cream band, bronze chips, charcoal envelope); estimated chip bands as capped error bars; the envelope as a capped bar with a two-line reading in words instead of a bare arrow; region labels centred in their regions and the band label set along the band's own slope; and the spec's OPTIONAL spread-contour layer added (5 / 20 / 50 %, denominator T_min over the same P stated in the legend). Layout verified collision-free by the renderer (zero overlapping text boxes). SECOND REVIEW ROUND 2026-09-16 (four items; answered with sources, then applied): (1) HERMES -- the 83.6 GB/s coordinate was the C37 aggregation in anchors.py ((418 links / 64 cores) x 0.4 GB/s x 32 arrays, all links of an equivalent 32-core group assumed concurrent), i.e. an AGGREGATE of ~208 physical links, exactly what the reviewer suspected; and it sat on the INTER-die panel although the published figure is a core-to-core (intra-die) link. Corrected: HERMES REMOVED from panel (b); placed on panel (a) at the PUBLISHED per-link 3.2 Gbit/s = 0.4 GB/s, no aggregation, at both published MVM latencies (4-phase 520 ns open, 1-phase 133 ns filled; which matches our 8-bit-input caliber is left to the text), labelled a hardware-derived reference point with the granularity caveat stated in the caption. anchors.py itself is NOT changed (the standing figures still use C37). ISAAC added to panel (a) as an architecture model at 32-bit flit x 1.2 GHz = 4.8 GB/s assuming one flit per cycle (parameters as cited by the reviewer; Table I not independently re-read here -- flagged). (2) ENVELOPE RATIOS vs the old 1.4-2x: the axis inversion does not touch B+/B- (= max_P A / min_P A, s-independent). The old 1.4-2x (METRICS row 'bandwidth-equivalent envelope ratio', observed over the anchor set) was the best/worst heaviest-block attribution on the block-chain family under the WIRE-ONLY term; the new 2.37x is max/min of the whole-stack busiest-resource words over the SEVEN NAMED seating rules (sequential 1314.8M / random 555.6M) under links+ports. DECOMPOSED on the same seven seatings (phase_diagram_isobar_envelope_decomp.json): wire-only 2.656x, links+ports 2.366x -- pricing the ports LOWERED the ratio (it raises the dispersed seatings' A more than the stacked ones'); so the change from 1.4-2x is the placement SET and the instance (the fully stacked 'sequential' rule is in P), not the axis and not the port term. 2.67x on panel (a) is the A3 ffn co-residency space, exhaustive, a different level entirely. The main text must carry these numbers with their sets, not the old summary. Endpoints now shown to 3 significant digits (18.2 -> 48.5, 4.04 -> 9.55) so the displayed ratio reproduces; 'certified' relabelled 'exhaustive over P; this instance & model'. (3) LEGEND now the definitions B- = min_P B_c(p), B+ = max_P B_c(p); the region text carries the meaning. Latency object stated on each panel: (a) one die's two co-resident operators, a sub-problem; (b) whole-model serial prefill. (4) LAYOUT: titles '(a) Intra-die placement' / '(b) Inter-die placement'; suptitle removed; grid lightened; one spread contour (20%); M1076 and ISAAC drawn as one shared ASSUMED range 0.4-8 GB/s with no nominal centre; the two EVALUATED configurations (0.4 and 12.5 GB/s at the NeuRRAM row rate) added to panel (b) with their own marker, tying the figure to the 3.53% / 0.24% search results; NeuRRAM axis marker kept as is (user's call). THIRD ROUND 2026-09-16 (three items, applied as suggested): the assumed ranges drawn as narrow translucent bands rather than centre-less error bars, names below, one shared 'Assumed bandwidth range' caption; the envelope as a thin double-headed arrow in the boundary grey with only the ratio beside it (endpoints and enumeration conditions in the caption; the white callout dropped); the two evaluated configurations as green hollow circles labelled 'NeuRRAM-based, 0.4 / 12.5 GB/s' with the legend saying what that means (NeuRRAM device rate, the two interconnect bandwidths) -- which also gives the chip its coordinate, so the axis-only NeuRRAM triangle and its caption are gone. FOURTH ROUND 2026-09-16, seven marker/label details applied to the large version (comm label aligned across panels, contour label embedded on the curve, ISAAC and the assumed ranges in the HERMES diamond-and-line style, white-filled evaluated points, captions lowered clear of the lines). PRINT VERSION 2026-09-16 as a SEPARATE file, analysis/phase_diagram_isobar_print.png, generator scripts/fig_phase_isobar_print.py (imports the large version's boundary, contour and palette code; the large version is unchanged): drawn at the double-column width 7.16 x 3.35 in with text at 7-8 pt AT FINAL SIZE rather than scaled down; the two instance boxes moved to the caption, only '70 placements' / '7 placement rules' left in-figure; chip captions cut to the name (HERMES keeps its phase line), the evaluated points to their bandwidths; legend cut to the two boundary definitions, the 20% contour, and the three chip entries the reviewer named. Layout collision-free by the renderer. Full caption: analysis/phase_diagram_isobar_caption.md. JSON sha256 6ba12a56d3b5ae7c5fb717bc02c4037dd8bbf89a6bc112cf652f9217c79a8d5d. DROPPED per the spec:
+the d-family of width lines, the organisation/fabric comparison
+lines, the collapse inset, the digital-anchor forest, calibration
+markers, internal experiment numbers. READINGS at the reference rate:
+within-die B_- 0.303 .. B_+ 0.808 GB/s; package B_- 0.603 .. B_+
+1.427 GB/s -- so at the measured analog tier the package operating
+point sits BELOW its own lower boundary at 0.4 GB/s (communication
+dominated for every named seating) and above it at 12.5 (compute
+dominated for every named seating), which is exactly the 60.1% vs
+4.6% hand-off share the two search cells reported. NOT DONE, and not
+invented: the optional (c) bandwidth-slice panel stays out of Fig.1
+per the spec's default (it belongs in the search section, and its
+honest form needs ONE fixed placement pair re-scored across
+bandwidths rather than two independently-found search results).
 
 
 Cell discipline: search experiments run only where the phase diagram has
@@ -5084,3 +5127,392 @@ paradigm column only, per the C29 bound statement), not an exclusion.
 
 Not scheduled until asked: giant layers across dies beyond the tiler's
 range, multi-package scaling.
+
+
+PRE-WRITING CHECKLIST (the writer's nine items, 2026-09-16; the reply
+with sources is in the session record, items 2/7/8/9 are text). RUN
+ORDER 5 -> 6 -> 7 -> 4 -> 3, each pre-registered here before its
+number.
+
+ITEM 5 PRE-REGISTRATION -- platform speed and search cost, MEASURED
+(scripts/timing_probe.py -> analysis/timing_probe.json). Four
+timings reported SEPARATELY, never blended: preprocessing (workload
+construction, the seven named seatings), the full score (se.score on
+the A4 seating, single caliber, GRS), the incremental step (one SA
+step through SessionJ: propose + apply + J update, and the J update
+alone, over a 400-step walk), and a whole seating leg (3 starts x
+1200 steps) per cell; plus the hardware. EXPECTATIONS: the full
+score is a whole-model per-op evaluation building die flows for 544
+dies -- order 0.1-1 s; the incremental update touches only the
+boundaries a move changes -- order 10-1000 us; the ratio is what
+makes the search affordable. THE ABSTRACT'S 'microseconds' IS
+DECIDED HERE: it is true only of the interface that measures in
+microseconds, and the text must name that interface. No number
+below is quoted without saying which of the four it is.
+ITEM 5 RESULT (timing_probe.json; AMD EPYC 9254, 96 logical CPUs,
+Python 3.10.12, single-threaded pure Python, perf_counter wall
+clock): preprocessing -- workload construction 10 ms, the seven
+named seatings 9 ms; FULL SCORE (se.score, A4 seating, single
+caliber, GRS) median 37.0 ms, min 35.5; INCREMENTAL -- one SA step
+(propose + apply + SessionJ update) median 1.37 ms, the J update
+alone median 1.34 ms, min 0.52 ms, i.e. ~730 steps/s, full /
+incremental = 28x; WHOLE SEARCH -- one seating leg of 3 starts x
+1200 steps: 5.7 s (GRS), 5.9 s (weak), ~1.9 s per start. FINDING
+F-T1: THE ABSTRACT'S 'MICROSECONDS' IS NOT TRUE OF ANY INTERFACE
+THE 2.7B SEATING SEARCH USES -- the incremental update is
+MILLISECONDS (0.5-1.4 ms per move, 544 dies, per-op flows rebuilt
+for the boundaries a move touches). The text must say 'about a
+millisecond per move' or name a different, smaller session (the
+355M unit chain, not timed here). Expectations otherwise hit: the
+full score is order 0.1 s, the ratio is what makes 1200-step legs
+cost seconds.
+
+ITEM 6 PRE-REGISTRATION -- fixed-pair bandwidth slice
+(scripts/bw_slice_pair.py -> analysis/bw_slice_pair.json + .png).
+TWO FIXED SEATINGS: the reference = random (seed 0, the strongest
+named baseline at both cells) and the optimized = the weak-cell
+search winner (search_linkage.json, seating_mesh_weak.best_pi);
+the GRS winner is carried as a third column for cross-evaluation.
+Re-scored, NOT re-searched, at 0.1 / 0.2 / 0.4 / 1 / 2 / 4 / 8 /
+12.5 / 25 GB/s, single caliber, prefill. Per bandwidth: T_ref,
+T_opt, H_ref, H_opt, r = H_ref/T_ref, eta = (H_ref - H_opt)/H_ref,
+G = 1 - T_opt/T_ref. EXPECTATIONS (identities, so the check is
+1e-9): G = eta * r exactly (R is seat-invariant); H * B constant per
+seating (555.6M words for random, ports included); eta constant
+across bandwidths for the fixed pair (both H scale as 1/B), so the
+whole curve G(B) = eta * r(B) is the share curve alone. If eta is
+NOT constant something in the evaluator depends on B beyond 1/B,
+and that is a finding. Also reported: the weak winner scored at GRS
+and the GRS winner at weak (are they the same seating? no -- the
+search found different points; how much does each lose off its own
+cell?).
+
+ITEM 7 PRE-REGISTRATION -- the zero-span temperature. S6 sets
+t0 = (max seed J - min seed J) / 20 per objective; an objective
+that degenerates to a constant over the seed set (the bus
+paradigm's objective, F in MATERIALS) gives t0 = 0, and
+search_sa.anneal's rule at t = 0 is GREEDY: accept iff dJ < -1e-15,
+so a tie (dJ = 0) is REJECTED and a constant objective leaves the
+start untouched with accepted = 0. That is the intended reading --
+'the objective cannot discriminate' -- and it is distinguishable
+from a search failure precisely because accepted = 0 and best = start
+exactly. PINNED as a test (tests/test_search_sa.py): a constant J at
+t0 = 0 returns the start bit-identically with accepted == 0, and a
+J with ties but a strict improvement available still takes it.
+Written into SEARCH_SPEC as [AMENDED 17].
+
+ITEM 4 PRE-REGISTRATION -- 544-die seating search statistics
+(scripts/rerun_seating_seeds.py -> analysis/seating_seeds.json).
+Distinguished explicitly: THREE START FAMILIES (clustered / snake /
+random) x THREE INDEPENDENT SA SEEDS (0, 1, 2) per cell (GRS, weak)
+= 18 runs of the standing schedule (1200 steps, alpha 0.996, t0 2 /
+20 ms); plus the RANDOM BASELINE'S OWN DISTRIBUTION, seeds 0-4
+scored at both cells. Reported: per (start, seed) endpoint; per
+cell the endpoint distribution (min / median / max, spread %); the
+random baseline's min / median / max; the gain RELATIVE TO THE
+STRONGEST BASELINE = min over the seven named rules (seed 0) and the
+five random seeds; and the budget-quality curve (best-so-far every
+100 steps) per run. The standing 0.24% / 3.53% remain the record of
+the runs already made (seed 0 at each start); the new gain is
+reported beside them, not in place of them. EXPECTATIONS: GRS
+endpoints within the 1.8% noise band of each other and of the
+random baseline (the cell is nearly closed); weak endpoints spread
+< 1% across seeds; random baseline spread at weak of a few %
+(dispersed fills differ in their busiest port); the weak gain
+against the strongest of 5 random seeds SMALLER than 3.53%.
+ITEM 6 RESULT (bw_slice_pair.json sha256 0b9bb72a4b924479...; figure
+bw_slice_pair.png). Every expectation hit, as identities: |G - eta*r
+- residual| <= 1.5e-16 at all nine bandwidths; eta = 5.874% at EVERY
+bandwidth (both H scale as 1/B, so the fixed pair's communication
+improvement is bandwidth-free); H*B = 555.61M words for the
+reference at every bandwidth (the port-inclusive busiest words,
+exactly the ladder's A(random)); the seat-dependent part of R
+(propagation) contributes |residual| <= 0.00018% -- negligible, so
+'R seat-invariant' holds to that tolerance and G(B) = eta * r(B) IS
+the communication-share curve scaled by one constant. Readings: G =
+5.04% at 0.1 GB/s (r = 85.8%), 3.53% at 0.4 (r = 60.1%), 0.77% at 4
+(r = 13.1%), 0.27% at 12.5 (r = 4.6%), 0.14% at 25 (r = 2.4%). Cross-
+evaluation column: the GRS winner scored against random at every
+bandwidth (in the JSON); it is a different seating from the weak
+winner. This is the light experiment the figure spec asked for, and
+it needs no search.
+
+ITEM 7 RESULT: [AMENDED 17] written into SEARCH_SPEC; test a17 added
+to tests/test_search_sa.py (constant J at t0 = 0 -> start returned
+bit-identically, accepted == 0, proposed == steps; tied J with one
+strict improvement -> the improvement is the only acceptance). Fast
+suite 432 -> 433. No numbers change; the bus leg's reading is a
+signature, not a regret.
+
+ITEM 4 NOTE BEFORE THE RESULT: the first run enumerated the start
+families in declaration order while seating_leg enumerates them
+SORTED, so only clustered/s0 reproduced the standing run; the script
+now uses the sorted order and s = 0 reproduces all three (the
+record). The first run's numbers are superseded by the rerun below;
+its one substantive reading -- endpoints converging to the same
+discrete seating from different RNG streams (random/s1 = the
+standing random run's 2228.64 ms exactly) -- is expected in a
+discrete space and is not a finding.
+ITEM 4 RESULT (seating_seeds.json sha256 573a4f0cc4911993...; figure
+seating_seeds.png; 3 start families x 3 SA seeds x 2 cells = 18 runs
+of the standing schedule; s = 0 reproduces the standing runs exactly:
+963.34 / 963.37 / 963.47 and 2239.78 / 2228.64 / 2233.23 ms).
+GRS: endpoints 963.12 / 963.34 / 963.73 ms (min / median / max),
+spread 0.063%; random baseline seeds 0-4: 964.39 / 965.42 / 965.65,
+spread 0.130%; STRONGEST BASELINE IS A RANDOM SEED (964.39, seed 3,
+not the seed-0 fill the ladder carries); gain vs strongest 0.13%
+(record vs seed 0: 0.24%). Everything inside the 1.8% noise band --
+the cell is closed, as expected. WEAK: endpoints 2228.64 / 2233.23 /
+2245.02 ms, spread 0.735% (expectation '< 1%' hit); random baseline
+seeds 0-4: 2270.91 / 2303.02 / 2310.23, spread 1.73% (expectation 'a
+few %' hit -- dispersed fills differ in their busiest port); the
+strongest baseline is again a random seed (2270.91); GAIN VS THE
+STRONGEST BASELINE 1.86% (expectation 'smaller than 3.53%' hit).
+FINDING F-S4b: THE WEAK-CELL SEATING GAIN AGAINST THE STRONGEST
+BASELINE IS 1.9%, NOT 3.5% -- the 3.53% record measured the search
+against one random draw (seed 0), which happens to be the WORST of
+five; against the best draw the gain roughly halves. Both numbers
+are kept, each with its denominator (METRICS.md row to be added:
+'seating gain vs strongest baseline', denominator = min over the
+seven named rules and five random seeds). Budget-quality curves
+(best-so-far per 100 evaluations, in the JSON and the figure): every
+run is within 0.3% of its endpoint by 600 evaluations at GRS and by
+800 at weak; the last 400 steps buy < 0.2%.
+ITEM 3 PRE-REGISTRATION -- the search gain under an outside judge, on
+a SHRUNK COMPLETE INSTANCE (scripts/b3_shrunk_rerank.py ->
+analysis/b3_shrunk_rerank.json). The writer's ruling: shrink the
+whole instance, keep the communication dependencies, the routing and
+the port constraints, then rank the SAME candidates under our
+evaluator and under BookSim; a sub-network cut out of the crowded
+part could not speak for a whole placement. THE INSTANCE: the 2.7B
+per-op structure verbatim (qkv 4 dies, attention 1, out 2, ffn1 5,
+ffn2 5 per layer; R-split multicast; entry hand-off from the previous
+layer), TWO layers = 34 dies seated on a 6x6 = 36-die mesh, XY
+routing, one injection + one ejection port per die at the link rate;
+9 boundaries per candidate. It is built by the standing machinery
+(Workload2p7B on a 36-slot fabric with n_layers = 2), so the named
+rules, score() and SessionJ run on it unchanged. VOLUME SCALE: the
+hand-off volumes are 2.6-26.2M words per boundary (655k packets per
+candidate); BookSim runs them at 1/16 (the heaviest boundary = 12,800
+packets, 2.5 s; probed in b3_booksim_cost_probe.py), and the packet
+clock is set so that the hand-off TIME is the nominal cell's: one
+flit (8 B) per cycle at bandwidth B/16, i.e. cycle = 128/(B*1e9) s.
+Our judge scores the UNSCALED volumes at the nominal B (identical
+seconds). BookSim's cycle count is bandwidth-free, so ONE simulation
+per candidate serves both cells. Each boundary is its own batch
+(batch-1 serial semantics, the same per-boundary sum our term makes).
+CANDIDATES (15, all on this instance): the seven named rules at seed
+0; random seeds 1-4; SA winners from the three start families at the
+weak cell and from the random start at GRS (standing schedule, 1200
+steps, alpha 0.996; t0 = (max seed J - min seed J)/20 per cell, the
+S6 rule, since the 2-layer objective is ~150 ms not ~1 s).
+READINGS: per cell, Spearman and top-1 agreement between our T and
+BookSim's T over all 15; per candidate the BookSim / ours ratio of
+the hand-off sum (the term's looseness on a complete instance); and
+THE PAIR THE ITEM IS ABOUT -- the weak-cell SA winner against the
+STRONGEST random draw (chosen under our judge, as the paper does):
+gain under ours, gain under BookSim, sign agreement; the same pair
+at GRS. EXPECTATIONS: ours <= BookSim on every candidate's hand-off
+sum (it is a bound); ratios inside 1.1-2.4 (B7's range) with the
+header overhead 17/16 as the floor; Spearman >= 0.8; the weak-cell
+winner beats the strongest random under BookSim too, by a SMALLER
+margin than under ours (the S6 rerank compressed 1.85x to 1.26x); the
+GRS pair inside the noise band under both. DECLARED IN ADVANCE: this
+gives the 544-die reading representative outside evidence; the
+544-die 3.53% (vs seed 0) and 1.86% (vs strongest) stay MODEL
+PREDICTIONS. Flip rule: if BookSim reverses the weak-cell pair, that
+is booked as a finding against the search claim, not explained away.
+ITEM 3 RESULT (b3_shrunk_rerank.json sha256 cd39c9e8140d16471da73695d220922b44be4cb7cf12a7b87edd454f8a162a1d; 15 candidates, 9
+boundaries each, BookSim at 1/16 volume, ~8 s per candidate). Held:
+the bound holds on every candidate (BookSim / ours on the hand-off
+sum 1.443..1.944, inside the pre-registered 1.1-2.4); the sign of the
+pair agrees for the winner our tie-break selects; the GRS pair is
+inside the noise band under both judges (0.14% / 0.52%). FAILED, and
+booked as such: Spearman over the 15 candidates is 0.575 (pre-
+registered >= 0.8), and 0.455 over the 11 non-search candidates
+alone; the top-1 differs (both are search winners); and BookSim's
+pair margin is LARGER than ours (8.84% vs 1.89%) rather than
+smaller. Three findings, in the order they explain each other:
+
+F-B3a THE PORT FLOOR. Under R-split multicast every consumer die's
+ejection port carries the boundary's full volume V_b (P producers x
+V_b/P), so the busiest-resource term is >= sum_b V_b for EVERY
+seating, with equality iff no link exceeds V_b. Pinned as a test
+(test_search_eval.py, port floor). On the shrunk instance all FOUR
+search winners sit exactly on the floor (ours H = 78.64 ms = floor)
+and are TIES under our judge; on the 544-DIE INSTANCE THE WEAK-CELL
+WINNER SITS EXACTLY ON THE FLOOR TOO (523.0M busiest words = floor,
+ratio 1.0000; random seed 0 = 1.062x, sequential 2.514x). So the
+seating search's entire weak-cell gain (3.53% vs seed 0, 1.86% vs the
+strongest draw) IS THE DISTANCE OF THE BASELINE FROM THE PORT FLOOR,
+and the search's job under this term is exactly 'remove every link
+loaded above V_b'. Below the floor the term has no resolution at all.
+
+F-B3b THE TIE SET IS NOT EQUIVALENT. BookSim ranks the four floor-
+sitting winners from 189.5 to 210.5 ms -- a 11% spread inside a set
+our judge cannot order -- and against BookSim's OWN strongest random
+draw (191.18 ms) the four read +0.88%, +0.11%, -4.30%, -10.08%. The
++8.84% pair margin above is an artefact of choosing the baseline
+under our judge: random_s1 is our best draw and BookSim's worst
+(209.5). The honest reading under the outside judge: the search's
+advantage over the best random fill is at most ~1% and depends on
+which floor-sitting winner the tie-break returns.
+
+F-B3c RANKING POWER ON A COMPLETE INSTANCE. rho = 0.575 (0.455
+without the ties) is far below B7 half B's 0.886 on a single cross-
+traffic pattern. With ports priced most good seatings are at or near
+the floor, so the ordering among them is decided by the term's
+LOOSENESS (contention on links loaded up to V_b, header 17/16, hop
+latency), not by the bound. The term is a bound that tells floor
+from non-floor; it is not a ranking instrument among floor-sitters.
+The B7 half-B 0.886 stands for its pattern; this number stands for
+the complete instance, and the text must carry the latter next to
+the former. Expectation-failure rule applied: nothing above is
+explained away; the 544-die 3.53% / 1.86% remain model predictions
+whose mechanism is now named (floor-reaching), and whose outside
+validation is the ~1%-and-tie-dependent reading of F-B3b.
+
+S7 PRE-REGISTRATION -- search settings chosen from the phase diagram
+(design: analysis/search_setting_design.md; NOT RUN; awaiting the
+writer's two declarations). THE RULE: fix the instance, then sample
+bandwidth by declared multiples of ITS boundaries -- above 2B+,
+in-band sqrt(B-B+), below B-/2 -- keeping 0.4 and 12.5 as labelled
+legacy points; search ONCE and re-score the same batch at every point
+(ordering is B-invariant under T = R + A/B, R seat-invariant to 2e-6,
+pinned by item 6). TWO INSTANCES, split by the bottleneck's SOURCE,
+not by bandwidth: A = the 544-die 2.7B stack (port-floor instance:
+every search endpoint at A/floor = 1.0000, best random draw 1.032x,
+B- 0.603 / B+ 1.427 GB/s); B = the fan-out cross-traffic load on the
+same seating (shared-link instance: every rule 6.1-10.0x above the
+port floor, ports never bind, A_min 18.29M random / A_max 30.00M
+clustered, B- 0.0199 / B+ 0.0326 GB/s at V = 1e6). PREDICTIONS FOR A
+(identities): G at 2B+ / sqrt / B-/2 = 1.02 / 2.31 / 3.92% vs seed 0
+and 0.55 / 1.23 / 2.09% vs the strongest draw; ceilings 20.1 / 36.5 /
+49.7%; no point opens room below the floor. EXPECTATIONS FOR B: the
+search endpoint stays link-bound (A/floor >= 2) and beats the best
+rule by > 1.8% in the communication term; at the legacy points r < 5%
+so the whole-model gain is diluted below the noise band while the
+term's gain is not -- reported side by side. FLIP RULE: an endpoint of
+B on the port floor, or not beating the best rule, is a finding against
+the search claim. TWO DECLARATIONS DUE BEFORE ANY RUN: (1) V for the
+fan-out load -- 1e6 words (current, synthetic) or the layer's hidden
+state 5.24M words (scales both boundaries by 5.24, leaves eta,
+ceilings and spread unchanged); (2) whether instance B also gets a
+shrunk complete run under the item-3 BookSim protocol (~3 min) or
+rests on B7 half B (rho 0.886) and the S6 rerank (rho 1.000). Cost
+once declared: re-scoring only for A; for B three SA seeds (2000
+steps each, ~10 s) plus re-scoring.
+S7 REVISED 2026-09-16 per the writer's synchronisation notes
+(Isobar_search_experiment_notes.md; design doc updated in place). (i)
+Instance A = whole-model bandwidth slices, re-scoring only, three
+named references (random seed 0 / strongest draw / best rule), G =
+r_ref * eta_achieved checked directly, eta_ceiling reported as a bound
+not a gain. (ii) Instance B KEEPS V = 1e6 (synthetic, no tensor
+provenance; scaling V scales A uniformly) and gets ITS OWN shrunk
+BookSim re-evaluation; the earlier suggestion to re-declare V as the
+hidden state is withdrawn -- the execution-phase correspondence would
+have to be settled first and a volume change alone does not build a
+real workload. B's boundaries are not a hardware anchor for the real
+2.7B and B's one-shot batch is not spliced onto the 921 ms compute.
+(iii) REMOVED from B's expectations: the 'A/floor >= 2' requirement
+(reaching the port floor is a valid result) and the 1.8% threshold
+(B uses its own seed / baseline distribution and the packet judge).
+(iv) CODE-CALIBER CHECK recorded in the design doc section 3: V is
+split V/17 per producer die at width 1 byte, every consumer die
+receives every piece; B is ONE merged batch (A_merged = max_r sum_k);
+A is 159 serial boundaries (A_serial = sum_k max_r) with R = layers
+(compute scaling with device rate + K/V write + elementwise, fixed) +
+propagation (<= 2e-6 of T); BookSim = one batch, all packets ready at
+t = 0, one packet per node per cycle on a single injection channel,
+completion = last delivery; extra statistics available: packet /
+network / flit latency averages and hops average, no per-port
+counters. RUNS: a_bandwidth_slices.py (A), b_fanout_search.py (B full,
+3 seeds x 2000 steps from random + 1 clustered contrast),
+b_shrunk_fanout_rerank.py (B shrunk, both judges). rerun_seating_seeds
+now also stores each endpoint's seating (needed by the slices); its
+values are unchanged by that, its hash is re-pinned below.
+S7 RESULTS 2026-09-16 (hashes: a_bandwidth_slices.json 9edbd382ba78ff6b;
+b_fanout_search.json dd4650e893aef0d4; b_shrunk_fanout_rerank.json
+8335c7bdefe4720c; b3_shrunk_rerank.json RE-PINNED ac816866fed4df50
+(now stores each SA winner's seating and BookSim's per-boundary
+packet / network / flit latency and hop averages; every value
+unchanged); seating_seeds.json RE-PINNED 3cf7038c993c9d3a (now stores
+each endpoint's seating; values unchanged). Fast suite 434.
+
+A -- BANDWIDTH SLICES (re-scoring, 20 candidates: 7 rules, 4 random
+draws, 9 endpoints). Boundaries from P = the seven rules: B- 0.603,
+B+ 1.427 GB/s (A_min 555.6M random, A_max 1314.8M sequential, R
+921.20 ms, floor 523.0M). The identity G = r_ref * eta_achieved holds
+DIRECTLY (T re-scored, not derived) at every point and reference to
+the printed digits. Per reference: random seed 0 (= the best named
+rule) eta_achieved 5.874% = eta_ceiling 5.87% -- the endpoint IS the
+floor; strongest random draw (seed 3) eta 3.132% = ceiling 3.13%. G:
+2B+ (2.855 GB/s) 1.02% / 0.53%; sqrt (0.928) 2.31% / 1.21%; B-/2
+(0.302) 3.92% / 2.07%; 0.4: 3.53% / 1.86%; 12.5: 0.27% / 0.14% (vs
+seed 0 / vs strongest). READING: at every bandwidth the search has
+already taken ALL the headroom the analytic term can see; what varies
+with B is only r_ref. Figure a_bandwidth_slices.png.
+
+B -- FULL INSTANCE SEARCH (V = 1e6, 82 pairs, one merged batch, E2b
+objective in words; t0 = span/20 = 0.586M words, alpha 0.996, 2000
+steps, ~25 s per run). Three independent seeds from the random start
+end at 16.35 / 16.24 / 16.24M (spread 0.72%); the clustered-start
+contrast also reaches 16.24M. Every baseline and endpoint is LINK-
+bound (link-only A == A with ports; port max = floor = 3.00M);
+endpoints at A/floor 5.41. eta: +11.25% vs random seed 0, +8.61% vs
+the strongest random draw (seed 4, 17.76M); the random draws span
+17.76-19.24M (8.3%). READING: on the full instance the search removes
+part of the shared-link contention and stays far above the port
+floor; no packet judge at this size (intractable).
+
+B -- SHRUNK COMPLETE INSTANCE UNDER TWO JUDGES (9 stages x 4 dies =
+36 dies on 6x6, 13 pairs, V = 65,536 words, ~26.6k packets, merged
+batch; 5 named rules, 5 random draws, 4 SA endpoints). Spearman
+0.807 over 14 candidates; BookSim / ours 1.350..2.198; bound holds.
+CAVEAT FIRST: on this grid the search endpoints ALL REACH THE PORT
+FLOOR (A/floor 1.00, busiest = port) -- the shrunk instance does NOT
+reproduce the full B's link-bound endpoint regime (5.41x), because 4
+dies per stage on 36 slots leave room to route every pair below V
+while 17 per stage on 576 do not. Under our judge every endpoint is
++25.0% vs the best random draw; under BookSim, against BookSim's own
+best draw (random_s0): -5.61 / -5.13 / +2.64 / +6.56%; against our
+best draw (random_s2): -0.01 / +0.44 / +7.80 / +11.51%. Top-1
+differs (ours: a floor-tied endpoint; BookSim: the clustered-start
+endpoint). READING: once the floor is reached the packet judge
+splits the tie set both ways again, here by +-6%.
+
+A -- TIE-SET DIAGNOSIS (item-3 instance, the two most different
+floor-tied endpoints, snake-start 412,260 vs random-start 477,772
+cycles). The single-die boundaries (attention in, out_proj in) are
+cycle-identical (B/A = 1.00): no seating freedom, port-bound in both
+judges. ALL the difference is on the 5 -> 5 die boundaries: ffn1@L0
+1.33x, ffn2@L0 1.23x, ffn2@L1 1.37x (ffn1@L1 0.86x the other way).
+BookSim's statistics: mean network latency 2289 -> 3067 cycles
+(+34%; on ffn2@L0 1918 -> 4552), mean source-side wait (packet minus
+network latency) 19,702 -> 23,225, hops 4.37 vs 4.39 (path length is
+NOT the cause). So the discriminator inside the floor tie set is
+DYNAMIC CONTENTION ON LINKS LOADED UP TO V -- exactly the load our
+term treats as free (<= V costs nothing beyond the port). Per-port
+arrival counters are not available in the bridge; this is what the
+exposed statistics can say. Suggested (not run) analytic tie-breaker
+for the writer's consideration: among floor-tied seatings prefer the
+smaller total link occupancy or the fewer links at the floor value.
+
+CONCLUSION (deliverable 4, also in search_setting_design.md sec. 6).
+(1) A's further gain is limited by the PORT FLOOR of the R-split
+mapping: the search endpoint sits on it at every bandwidth, the best
+random draw is 3.1% above it in the communication term, and the
+whole-model gain is that 3.1% (or 5.9% vs the seed-0 draw) times the
+communication share -- 0.5-3.9% across the sampled band; nothing
+below the floor is reachable by placement, only by the mapping. (2) B
+removes SHARED-LINK contention: on the full instance the busiest
+link's load falls 11.3% from the random fill and 8.6% from the best
+draw while staying 5.4x above the floor; on the shrunk instance the
+search removes all of it and lands on the floor. (3) The analytic
+cost and the packet completion time support the same selection ONLY
+DOWN TO THE FLOOR: whenever the search's endpoints are floor-tied
+(A's endpoints everywhere; B's on the shrunk grid) BookSim orders the
+tie set over +-6-11% and picks a different member, and against
+BookSim's own best random draw the selected endpoint can lose (down
+to -10% on A's shrunk instance, -5.6% on B's). Where the endpoints are
+link-bound (B, full size) there is no packet judge at that size.

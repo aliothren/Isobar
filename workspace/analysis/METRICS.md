@@ -20,6 +20,8 @@ matrix (`observed`); the exhaustive within-die instance is the
 | bandwidth-equivalent envelope ratio (1.4–2×) | the bandwidth needed to hold the operating point | how much link speed the software band is worth at a fixed operating point | observed (the anchor set) |
 | ordering latency spread (6.55× / 12.26× / 3.57×) | that weave's BEST ordering latency | 48-die pipelined orderings on one weave; adversarial configurations marked in place | observed (enumerated orderings per weave) |
 | weave energy spread (ring / torus / mesh) | the mesh ladder's energy per rung | the SAME seven seatings re-priced under another weave — an ENERGY column quantity, named apart from the ordering spread above | observed (7 named seatings) |
+| fan-out busiest-link reduction (11.3% vs random seed 0 / 8.6% vs strongest draw) | the reference's busiest-link words on instance B (V = 1e6, 82 pairs, merged batch) | the communication-term gain of the fan-out search; NOT a whole-model gain (B carries no R) | observed (3 SA seeds from the random start) |
+| seating gain vs strongest baseline (weak 1.86% / GRS 0.13%) | min over the seven named rules (seed 0) and five random fills (seeds 0–4), scored under the evaluator | the 544-die seating search's endpoint against the best baseline the evaluator can name; the earlier 3.53% / 0.24% are the same endpoints against random seed 0 alone (kept, labelled) | observed (3 start families × 3 SA seeds) |
 | within-die band ratio (1.51× attn / 2.00× ffn) | the exhaustive best joint per-die cost | A3 co-residency space, 280 / 70 seatings, 0.4 GB/s cell | **certified** (exhaustive) |
 | within-die shipped headroom (+17.8% / +20.0%) | the exhaustive optimum | the shipped contiguous mapping's distance from it, same cell | **certified** |
 

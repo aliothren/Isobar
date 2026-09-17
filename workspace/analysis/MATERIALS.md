@@ -162,3 +162,29 @@ the split for the homogeneous stacks reported here and not in general.
 
 Generator: `scripts/b5_joint_exact.py`. Data:
 `analysis/b5_joint_exact.json`.
+
+## The port floor: where the seating search's gain comes from, and where it stops
+
+Under R-split multicast every consumer die's ejection port carries the
+boundary's full volume V_b, so the hand-off term is ≥ Σ_b V_b for EVERY
+seating — a floor no placement can go below — with equality iff no link
+is loaded above V_b. The 544-die weak-cell winner sits exactly on it
+(ratio 1.0000); random fills sit 3–6% above it; stacked rules 2.4–2.5×.
+So the whole seating gain is the baseline's distance from the floor
+times the communication share: 1.9% against the strongest random draw
+at 0.4 GB/s, 0.13% at 12.5, and 0.5–3.9% across the band sampled from
+the diagram. Below the floor the analytic term has no resolution, and a
+packet-level judge on a shrunk complete instance orders the floor-tied
+endpoints over 11%, by dynamic contention on links loaded up to exactly
+V — the load the term treats as free.
+
+Use: the search chapter's central mechanism paragraph — it explains
+the gain, bounds it, and names what an improved term would need (a
+tie-breaker inside the floor set). Pair with the shared-link instance
+(fan-out), where the search cuts the busiest link 8.6–11.3% and stays
+far above the floor: two bottleneck sources, two behaviours.
+
+Generators: `scripts/a_bandwidth_slices.py`, `scripts/b3_shrunk_rerank.py`,
+`scripts/b_fanout_search.py`, `scripts/b_shrunk_fanout_rerank.py`;
+test pin: `test_port_floor_under_r_split`. Design and conclusion:
+`analysis/search_setting_design.md`.

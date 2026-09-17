@@ -513,3 +513,48 @@ def test_faith_B_evaluator_parameter_blindness():
     for name in sb.NAMES:
         assert (sb.generate(name, W_lo, seed=5)
                 == sb.generate(name, W_hi, seed=5)), name
+
+
+def test_port_floor_under_r_split():
+    """F-B3a's structural half, pinned: under R-split multicast every
+    consumer die's ejection port carries the boundary's full volume V_b
+    (P producers x V_b/P), so the busiest-resource term is >= sum_b V_b
+    for EVERY seating -- the port floor -- and a seating attains it iff
+    no link exceeds V_b. Checked on the shrunk 2-layer / 36-slot
+    instance for the seven named rules: per-boundary port load == V_b to
+    1e-9, and busiest >= floor throughout."""
+    import dataclasses as dc
+    from scripts import llm_workload as lw
+    from scripts import search_baselines as sb
+    W0 = se.Workload2p7B()
+    levels = [dc.replace(l, per_parent=36, mesh=(6, 6)) if l.name == "die" else l
+              for l in W0.fab.levels]
+    W = se.Workload2p7B(fabric=dc.replace(W0.fab, name="t36", levels=levels).validate())
+    W.cfg = dc.replace(W.cfg, n_layers=2, name="2L")
+    base = lw.block_chain(W.cfg, W.S, "prefill", on_chip=True, max_dies=36)
+    attained = 0
+    for rule in ("sequential", "clustered", "snake", "random", "least_manhattan",
+                 "nmap_greedy", "heaviest_first"):
+        pi = sb.generate(rule, W, seed=0)
+        chain, seating = [], {}
+        for li in range(W.cfg.n_layers):
+            for e in base:
+                n = f"{e['name']}@L{li}"
+                chain.append({**e, "name": n})
+                seating[n] = list(pi.seat[n])
+        fb = lw.block_die_flows(chain, seating, W.fab)
+        floor = 0.0
+        for e in chain[1:]:
+            ej = {}
+            vol = 0.0
+            for f in fb[e["name"]]:
+                w = f["volume"] * f["width"]
+                ej[f["nodes"][1]] = ej.get(f["nodes"][1], 0.0) + w
+                vol += w
+            v_b = vol / len(set(f["nodes"][1] for f in fb[e["name"]]))
+            assert all(abs(x - v_b) < 1e-9 * v_b for x in ej.values())
+            floor += v_b
+        busiest = sum(b["busiest_words"] for b in W.boundaries(pi, "prefill"))
+        assert busiest >= floor * (1 - 1e-12)
+        attained += abs(busiest - floor) < 1e-9 * floor
+    assert attained >= 0                # attainment is a property of the seating, not asserted here

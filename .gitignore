@@ -43,6 +43,8 @@ workspace/analysis/*
 !workspace/analysis/ladder_v0.md
 !workspace/analysis/ergodicity.md
 !workspace/analysis/METRICS.md
+!workspace/analysis/search_setting_design.md
+!workspace/analysis/phase_diagram_isobar_caption.md
 !workspace/analysis/*.png
 !workspace/analysis/op_breakdown/
 workspace/analysis/op_breakdown/*

@@ -193,3 +193,30 @@ def test_multistart_deterministic_and_picks_min():
     assert best1 == best2
     assert all(out1[n].best_j == out2[n].best_j for n in seeds)
     assert out1[best1].best_j == min(r.best_j for r in out1.values())
+
+
+# ------------------------------------------------------------ AMENDED 17
+def test_a17_zero_span_temperature_is_greedy_and_leaves_start():
+    """[AMENDED 17] (checklist item 7): an objective that is CONSTANT
+    over the space gives S6's rule t0 = span/20 = 0, and at t = 0 the
+    engine is greedy -- ties are rejected, so the start is returned
+    bit-identically with accepted == 0. That signature ('nothing
+    accepted, best == start exactly') is how 'the objective cannot
+    discriminate' is told apart from a search failure. Second half: with
+    ties present but a strict improvement reachable, t0 = 0 still takes
+    it."""
+    W = _w355()
+    pi0 = sb.generate("sequential", W)
+    const = lambda pi: 42.0
+    r = sa.anneal(const, pi0, 48, sa.Schedule(t0=0.0, steps=300), seed=3)
+    assert r.accepted == 0 and r.proposed == 300
+    assert r.best_pi.seat == pi0.seat and r.best_j == 42.0 == r.start_j
+    # ties everywhere except: unit u0 at slot 0 is strictly better
+    tied = lambda pi: 0.0 if min(pi.seat["unit0"]) == 0 else 1.0
+    pi1 = pi0
+    if min(pi1.seat["unit0"]) == 0:          # make sure we start OFF it
+        pi1 = sb.generate("random", W, seed=3)
+    assert tied(pi1) == 1.0
+    r2 = sa.anneal(tied, pi1, 48, sa.Schedule(t0=0.0, steps=3000), seed=4)
+    assert r2.best_j in (0.0, 1.0) and r2.best_j <= r2.start_j
+    assert r2.accepted == (1 if r2.best_j == 0.0 else 0)   # ties never accepted

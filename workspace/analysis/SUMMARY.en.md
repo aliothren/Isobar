@@ -1155,6 +1155,70 @@ balanced cutting optimal throughout this work, and it is precisely
 what capacity heterogeneity or replication would break — so the zero
 is a statement about the regime reported here, not a theorem.
 
+**The phase diagram, rebuilt to the figure specification (09-16).**
+Both axes are now rates (MVM row rate, link bandwidth); the three
+regions come from the placement EXTREMA of the communication cost --
+above B₊ = max_P A/R every evaluated placement is compute-dominated,
+below B₋ = min_P A/R every one is communication-dominated and the
+placement still sets how severe -- with the fixed terms carried, so
+the package panel's boundaries flatten at the fast edge. Each panel
+states its quantifier: the within-die envelope is exhaustive over its
+70 seatings (2.67×), the package envelope is observed over the seven
+named rules (2.37×). Two corrections made on review: HERMES had been
+placed on the inter-die panel at an aggregated 83.6 GB/s, which was a
+sum over ~208 physical links; it now sits on the intra-die panel at
+its published per-link 0.4 GB/s, a reference point not an operating
+point. And the old 1.4–2× envelope was a different placement set on a
+wire-only term; decomposed on the same seven rules, pricing the ports
+LOWERED the ratio (2.66 → 2.37), so the change is the set, not the
+axis and not the port term. The two configurations this paper
+evaluated (NeuRRAM rate, 0.4 and 12.5 GB/s) are drawn: one below B₋,
+one above B₊, which is exactly why the same seating search buys 3.5%
+at one and 0.24% at the other. A print-size version exists.
+
+**Nine pre-writing checks, five with numbers -- and three corrections
+to what we had been saying (09-16).** (1) Timing: the incremental
+score is about a MILLISECOND per move (0.5–1.4 ms, 544 dies), the full
+score 37 ms, a 1200-step leg ~2 s; the abstract's "microseconds" is
+not true of any interface this search uses. (2) The weak-cell seating
+gain against the STRONGEST baseline is 1.9%, not 3.5%: five random
+draws spread 1.7% among themselves, and the 3.53% had been measured
+against the worst of them; GRS is entirely inside the noise band.
+(3) The seating search's whole gain has a mechanism, and a ceiling:
+under R-split multicast every consumer die's port must carry the
+full hand-off volume, so the hand-off term has a PORT FLOOR Σ V_b that
+no seating can go below -- and the weak-cell winner sits exactly on
+it (ratio 1.0000). The search's job is "remove every link loaded
+above V_b"; the baseline's distance from the floor (3–6% of the
+communication term) is all there is to win, times the communication
+share. (4) Below the floor the term has no resolution, and a packet
+judge on a shrunk complete instance shows the floor-tied endpoints
+are NOT equivalent: BookSim spreads them over 11%, ranks the
+selected one from +0.9% to −10% against its own best random draw,
+and the term's rank correlation on a complete instance is 0.575 (the
+0.886 of the earlier probe stands for its single pattern only). The
+difference inside a tie is dynamic contention on links loaded up to
+exactly V -- the load the term treats as free. (5) A fixed seating
+pair re-scored across bandwidth obeys G = η·r to 1e-16 with η
+constant: the whole gain-vs-bandwidth curve is the share curve.
+
+**Search settings chosen from the diagram, not from where the gain
+is largest (09-16).** The rule: fix the instance, sample bandwidth at
+declared multiples of its own boundaries (2B₊, √(B₋B₊), B₋/2), search
+once, re-score everywhere -- ordering is bandwidth-invariant. And the
+dimension that changes what placement can do is the communication
+STRUCTURE, so two instances by bottleneck source: the 2.7B stack
+(port-floor; the endpoint is on the floor at every bandwidth, whole-
+model gains 0.5–3.9% across the band, all of it the baseline's
+distance from the floor) and a synthetic fan-out task on the same
+seating (shared-link; the search cuts the busiest link 8.6–11.3% and
+stays 5.4× above the floor; on a shrunk grid it removes all the
+contention and reaches the floor, where the packet judge again splits
+the tie set ±6%). The analytic cost and the packet completion time
+support the same selection only down to the floor; a tie-breaker
+inside the floor set is the natural next refinement, proposed, not
+run.
+
 **What the busiest wire means (O26 done, C29).** For a given routing, any
 schedule — a compile-time one included — needs at least volume ÷ bandwidth on
 each wire, so the busiest wire's occupancy is the least serialisation any

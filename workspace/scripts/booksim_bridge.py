@@ -155,7 +155,15 @@ def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES,
         raise RuntimeError(f"booksim output unparsable:\n{out.stdout[-2000:]}"
                            f"\n{out.stderr[-500:]}")
     cycles = int(m.group(1))
-    return {"cycles": cycles, "seconds": cycles * CHANNEL_CYCLE_S}
+    res = {"cycles": cycles, "seconds": cycles * CHANNEL_CYCLE_S}
+    for key, pat in (("packet_latency_avg", r"Packet latency average = ([\d.]+)"),
+                     ("network_latency_avg", r"Network latency average = ([\d.]+)"),
+                     ("flit_latency_avg", r"Flit latency average = ([\d.]+)"),
+                     ("hops_avg", r"Hops average = ([\d.]+)")):
+        mm = re.search(pat, out.stdout)
+        if mm:
+            res[key] = float(mm.group(1))
+    return res
 
 
 def run_per_packet_serial(flows, k=MESH_K):

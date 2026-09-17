@@ -499,3 +499,17 @@ from then on, ANY interface or semantic change goes through a formal
 amendment of THIS document (marked in place) plus the FIXLIST record —
 never a casual code-side edit. The day-2 inventory amendment is the
 precedent: code and spec must move together.
+
+
+**[AMENDED 17 — the zero-span temperature.]** Objective-substitution
+legs set the SA temperature from the objective's own scale, t₀ =
+(max seed J − min seed J)/20. An objective that is constant over the
+seed set — the shared-medium bus objective is the registered case —
+gives t₀ = 0, and the engine's rule at t = 0 is greedy: a move is
+accepted iff ΔJ < −1e-15, so ties are rejected and a constant
+objective returns its start unchanged with accepted = 0. That is the
+intended reading, "the objective cannot discriminate", and it is told
+apart from a search failure by exactly that signature (nothing
+accepted, best == start bit-identically). A leg whose t₀ is zero is
+reported with that signature, never as a regret number. Pinned in
+tests/test_search_sa.py (a17).

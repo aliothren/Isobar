@@ -1887,3 +1887,7 @@ stack -- checked, not assumed. Branch A of the pre-registered
 three. B6 arm three needs no run: its question is what joint
 optimisation adds, and the certified answer is zero. Fast suite:
 432.
+
+- 2026-09-16 [AMENDED 17] test a17 (tests/test_search_sa.py): a constant objective at t0 = 0 returns its start bit-identically with accepted == 0; a tied objective with one strict improvement takes only that improvement. Fast suite 432 -> 433.
+
+- 2026-09-16 test_port_floor_under_r_split (tests/test_search_eval.py): under R-split every consumer die's port load equals V_b, so the busiest-resource term is >= sum_b V_b for every seating (F-B3a); checked on the shrunk 2-layer / 36-slot instance for the seven named rules. Fast suite 433 -> 434.
