@@ -45,6 +45,12 @@ workspace/analysis/*
 !workspace/analysis/METRICS.md
 !workspace/analysis/search_setting_design.md
 !workspace/analysis/phase_diagram_isobar_caption.md
+!workspace/analysis/paper_numbers.md
+!workspace/analysis/main_config_results.md
+!workspace/analysis/baseline_provenance.md
+!workspace/analysis/energy_export.md
+!workspace/analysis/intra_die_correspondence.md
+!workspace/analysis/mechanism_table.md
 !workspace/analysis/*.png
 !workspace/analysis/op_breakdown/
 workspace/analysis/op_breakdown/*

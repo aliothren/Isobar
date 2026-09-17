@@ -62,9 +62,9 @@ class SessionJ:
     rollback). column = "t" (t_opt_s, the [AMENDED 15] main objective)
     or "e" (e_J); the other column rides along via last_score."""
 
-    def __init__(self, W, pi0, column="t", d2d_gbps=GRS):
+    def __init__(self, W, pi0, column="t", d2d_gbps=GRS, caliber="single"):
         self.W, self.column = W, column
-        self.sess = se.ScoreSession(pi0, W, d2d_gbps=d2d_gbps)
+        self.sess = se.ScoreSession(pi0, W, d2d_gbps=d2d_gbps, caliber=caliber)
         self.last_score = None
 
     def __call__(self, pi) -> float:

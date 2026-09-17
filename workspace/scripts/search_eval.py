@@ -147,7 +147,8 @@ class Workload2p7B:
             li = int(e["name"].rsplit("@L", 1)[1])
             out.append({
                 "into": e["name"], "words": words,
-                "busiest_words": busiest_link_words(fl, self.die_ic),
+                "busiest_words": busiest_link_words(
+                    fl, self.die_ic, kappa=getattr(self, "port_ratio", 1.0)),
                 "segment": seg_of_block[li],
                 "inter_layer": e["name"].startswith(base[0]["name"]),
                 "max_hops": max(hops) if hops else 0.0,
@@ -218,31 +219,14 @@ def _one_boundary_flows(prev_e, e, prod_slots, cons_slots, fab):
     return flows
 
 
-def busiest_link_words(flows, icl, ports: bool = True) -> float:
-    """The hand-off's BUSIEST-RESOURCE volume over links AND node ports.
-
-    Every producer->consumer flow is routed on the declared die weave
-    (icl.path_directed) and its volume x width is accumulated per
-    (resource, direction) exactly as link_occupancy's node-to-node
-    branch does (pinned identical). PORTS (added after the B7 external
-    adjudication, finding F-B7): each die also has ONE INJECTION and
-    ONE EJECTION port at the link rate -- declared model, the same
-    assumption the BookSim bridge makes -- so a flow also loads its
-    source's injection port and its destination's ejection port. The
-    hand-off time is set by the busiest of ALL these resources.
-
-    Why it was added: counting links but not ports is loose exactly
-    where flows stack on an endpoint instead of a wire, which is the
-    DISPERSED geometry -- the very family our own ladder calls best.
-    B7 measured the bias (a dispersed hand-off's busiest link carried
-    816 flits while its busiest injection port carried 1088), so the
-    omission was biased in favour of our own conclusion. `ports=False`
-    reproduces the wire-only term for the B7 comparison rows.
-
-    Degeneration, pinned: when a hand-off is a single flow the port
-    and every link on its path carry the same volume, so the maximum
-    is unchanged -- the 355M backend and any one-die-to-one-die
-    hand-off read exactly as before."""
+def resource_loads(flows, icl, ports: bool = True, kappa: float = 1.0):
+    """The per-(resource, direction) load map behind the hand-off term:
+    links by icl.path_directed, plus each die's ONE injection and ONE
+    ejection port. `kappa` = C_port / C_link (S8): port loads are
+    expressed in LINK-TIME units, i.e. divided by kappa, so kappa = 1
+    is the standing 'ports at the link rate' model and kappa -> inf
+    recovers the wire-only term. Returned so tie-breaking features can
+    be read off the same map the maximum comes from."""
     load = {}
     split = icl.duplex
     for f in flows:
@@ -254,8 +238,39 @@ def busiest_link_words(flows, icl, ports: bool = True) -> float:
             key = (r, tag if (split and tag) else "")
             load[key] = load.get(key, 0.0) + vol
         if ports:
-            load[("port", a, "inj")] = load.get(("port", a, "inj"), 0.0) + vol
-            load[("port", b, "ej")] = load.get(("port", b, "ej"), 0.0) + vol
+            load[("port", a, "inj")] = load.get(("port", a, "inj"), 0.0) + vol / kappa
+            load[("port", b, "ej")] = load.get(("port", b, "ej"), 0.0) + vol / kappa
+    return load
+
+
+def busiest_link_words(flows, icl, ports: bool = True, kappa: float = 1.0) -> float:
+    """The hand-off's BUSIEST-RESOURCE volume over links AND node ports.
+
+    Every producer->consumer flow is routed on the declared die weave
+    (icl.path_directed) and its volume x width is accumulated per
+    (resource, direction) exactly as link_occupancy's node-to-node
+    branch does (pinned identical). PORTS (added after the B7 external
+    adjudication, finding F-B7): each die also has ONE INJECTION and
+    ONE EJECTION port -- at the link rate when kappa = 1 (the declared
+    model, the same assumption the BookSim bridge makes), at kappa x
+    the link rate otherwise (S8 port sweep; port load / kappa) -- so a
+    flow also loads its source's injection port and its destination's
+    ejection port. The hand-off time is set by the busiest of ALL these
+    resources, in link-time units.
+
+    Why ports were added: counting links but not ports is loose exactly
+    where flows stack on an endpoint instead of a wire, which is the
+    DISPERSED geometry -- the very family our own ladder calls best.
+    B7 measured the bias (a dispersed hand-off's busiest link carried
+    816 flits while its busiest injection port carried 1088), so the
+    omission was biased in favour of our own conclusion. `ports=False`
+    reproduces the wire-only term for the B7 comparison rows.
+
+    Degeneration, pinned: when a hand-off is a single flow the port
+    and every link on its path carry the same volume, so the maximum
+    is unchanged -- the 355M backend and any one-die-to-one-die
+    hand-off read exactly as before (and for any kappa >= 1)."""
+    load = resource_loads(flows, icl, ports, kappa)
     return max(load.values()) if load else 0.0
 
 
@@ -397,7 +412,9 @@ class ScoreSession:
                 li = int(name.rsplit("@L", 1)[1])
                 by_name[name] = {
                     "into": name, "words": words, "segment": seg_of[li],
-                    "busiest_words": busiest_link_words(fl, self.W.die_ic),
+                    "busiest_words": busiest_link_words(
+                        fl, self.W.die_ic,
+                        kappa=getattr(self.W, "port_ratio", 1.0)),
                     "inter_layer": by_name[name]["inter_layer"],
                     "max_hops": max(hops) if hops else 0.0,
                     "surplus_J": lw.die_flow_surplus_energy(

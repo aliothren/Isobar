@@ -1219,6 +1219,73 @@ support the same selection only down to the floor; a tie-breaker
 inside the floor set is the natural next refinement, proposed, not
 run.
 
+**The main configuration, and the paper's number (09-17).** The
+reference port setting had been deciding the small gain: with ports at
+the link rate every good seating sits on the port floor and the search
+can only close the baseline's 3% gap to it, while with ports at twice
+the link rate (κ = 2, now the main configuration; ports never bind
+again beyond that) every candidate is link-bound and the search removes
+a third of the strongest baseline's excess. On the frozen configuration
+-- 2.7B, 544 of 576 dies on 24×24, XY, NeuRRAM rate, 0.4 GB/s, κ = 2,
+3 starts × 3 seeds -- the headline is **9.9% whole-model latency
+reduction against the strongest simple rule** (median of seeds, range
+9.7–10.1%), 54% against the default fill, 0.7% at 12.5 GB/s
+where communication is 4% of the total, 1.6% in decode where it is
+9%. The κ = 2 phase diagram has a wider package envelope (2.66× vs
+2.37×) and a slightly lower band (0.535–1.421 GB/s); the frozen pair's
+gain follows G = η·r exactly across bandwidth with η = 17.5%. At the same
+configuration the distance and hop proxies select seatings 11% worse
+than the resource-aware objective. The intra-die lever, priced with its
+own chain's hand-offs in the denominator, is 9.0% per layer on the
+355M-class instance. What the packet judge cannot yet do is κ = 2: the
+bridge has one terminal channel per node and no knob changes that, so
+the κ = 1 fan-out validation stands as the method check and is not
+written up as a reproduction of the main experiment.
+
+**Second round on the search: what the pipe caliber, the two-level
+split, the objective ablation and the packet judge say (09-16).** The
+existing pipe caliber is a steady-state initiation interval (max over
+segments, no fill/drain, no cross-segment sharing); under it the
+selection changes, and the serial-sum objective's endpoints re-scored
+in pipe beat a direct pipe-objective search of the same budget (10.9%
+vs 6.7% at κ 1) -- a max-over-stages objective is flat under most
+moves, so the sum is the better surrogate; this is a statement about
+the II estimate only. On the one instance with within-die levers the
+current model is separable in the two placement levels -- the joint
+gain is the sum, no coupling term -- which licenses the split and names
+the coupling a finer model would add. Against the distance and hop
+proxies at the same budget, the resource-aware objective avoids
+2.6-2.8% of latency at the reference ports and ~11% once links bind,
+while pricing the ports changes the search's own result by < 0.7%. And
+the packet judge, on a 24×24 fan-out task that keeps 17 dies per stage
+(so it stays link-bound like the full instance), agrees with the
+analytic cost on the selection: ρ = 0.96, the same best random draw,
+every search endpoint ahead of it by 12-31% -- where ports bind it does
+not order the tie set, where links bind it does.
+
+**Why random beats the adapted rules, and the search beats random
+(09-17).** R-split multicast makes a 5 → 5 hand-off 25 flows. The
+distance rules reach the shortest paths (4.1 G word-hops, 2.9 hops)
+but funnel those flows through the few links between two compact
+groups -- 10 stacked flows on the busiest link under clustered, 10-12
+under nmap, all 25 under the default fill -- while a random fill at five
+times the path length stacks only 8-10 and so has the lower
+busiest-resource sum. The search keeps the dispersion and de-stacks the
+rest (5 flows on its busiest links, a third of the boundaries at the
+port floor). The intra-die panel of the phase diagram was corrected on
+review: its boundaries had compared one op's serialization with two
+ops' summed compute; against each op's own compute -- the max model's
+masking switch -- they double (B₋ 0.606, B₊ 1.616 GB/s), the 2.67× is
+unchanged, and the A3 work point 0.4 GB/s reads "below B₋", which is
+what its per-op table shows. Dynamic energy, exported from the model as
+coded (per-op CiMLoop energy + elementwise + payload words × hops × 10
+pJ; static not modelled; independent of bandwidth and κ): the headline
+layout costs no energy -- +0.26% against its baseline, all nine endpoints
+between +0.10 and +0.56% -- because communication is 9% of dynamic energy
+for dispersed layouts; the compact rules do save 81% of communication
+energy, 7.3% of the system, at 1.8-20% more latency. The intra-die
+level has no modelled energy (no coefficient on the macro link).
+
 **What the busiest wire means (O26 done, C29).** For a given routing, any
 schedule — a compile-time one included — needs at least volume ÷ bandwidth on
 each wire, so the busiest wire's occupancy is the least serialisation any

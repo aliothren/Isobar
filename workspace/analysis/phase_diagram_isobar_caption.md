@@ -65,3 +65,32 @@ the configurations this paper's searches actually ran, NeuRRAM's measured
 row rate (10.14 us per row, 0.099 Mrows/s) with the two interconnect
 bandwidths of the study, 0.4 GB/s (the HERMES-class per-link rate) and
 12.5 GB/s (the GRS die-to-die link).
+
+## κ = 2 variant (`phase_diagram_isobar_k2.png`, `_print_k2.png`) — the paper's main configuration
+
+Identical construction with the package panel's ports at **twice the link
+rate** (κ = C_port / C_link = 2; injection and ejection independent). Only
+the package panel changes: the seven-rule envelope widens to **2.66×**
+(κ = 1: 2.37×) because the port cap had been holding the dispersed rules'
+busiest-resource load at the port floor; B₋ / B₊ move to 0.535 / 1.421 GB/s
+at the NeuRRAM rate (κ = 1: 0.603 / 1.427). The two evaluated
+configurations keep their regions: 0.4 GB/s below B₋, 12.5 above B₊. The
+intra-die panel does not read κ and is unchanged (2.67×). Envelope arrows
+and contours are computed from the same seven rules; the search endpoints
+of the main experiment lie inside the band's lower edge and are not used
+to draw it.
+
+## Correction to panel (a) (2026-09-17, F-FIG1a)
+
+Panel (a)'s cost model is per-op: t = write + prop + max(compute,
+serialization/B), so its boundaries are the **masking thresholds against
+each op's own compute** (5.19 ms at the NeuRRAM rate): B₋ = A_min/c =
+0.606 GB/s, B₊ = A_max/c = 1.616 GB/s (an earlier draft divided by the
+two ops' summed compute and drew them at half these values). The 20%
+contour is the max-model spread (T_max − T_min)/T_min over the 70
+seatings, solved numerically (1.154 GB/s at the reference rate); it
+reaches zero at B₊, where every seating is masked. The 2.67× envelope
+is unchanged. At the A3 work point 0.4 GB/s the panel reads "below B₋":
+every seating has an exposed op and the seating sets how severe, which
+is what the per-op table of the A3 case shows; at ≥ 2 GB/s it reads
+"above B₊", matching the measured zero gain.

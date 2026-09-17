@@ -54,6 +54,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 WS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -150,6 +151,8 @@ def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES,
             ["docker", "exec", CONTAINER, "bash", "-c",
              f"cd /home/workspace/tools/booksim2/src && ./booksim {cfg_path}"],
             capture_output=True, text=True)
+    if os.environ.get("BOOKSIM_DEBUG"):
+        sys.stderr.write("[booksim stdout tail]\n" + "\n".join(out.stdout.splitlines()[-40:]) + "\n")
     m = _DURATION.search(out.stdout)
     if not m:
         raise RuntimeError(f"booksim output unparsable:\n{out.stdout[-2000:]}"

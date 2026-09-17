@@ -212,3 +212,109 @@ selected one below the best random draw. A tie-breaker inside the
 floor set (total link occupancy, or the count of links at the floor
 value) is the natural next refinement of the term; it is proposed, not
 run.
+
+## 7. Second round (S8): port ratio, geometry, pipe caliber, intra-die, ablation
+
+Scope per the writer's second-round notes and the three precisions
+from review; FIXLIST S8 carries every pre-registration, the two
+protocol errors found and fixed on the way (the incremental path had
+not received the port ratio; the S6 temperature rule is 4.5× too hot
+on this instance), and the corrected records.
+
+**Port ratio κ = C_port / C_link (S8-A).** Six cells, {24×24, 12×48} ×
+κ ∈ {1, 2, 4}, search per cell (3 starts × 3 seeds, declared schedule),
+re-scored at 0.4 and 12.5 GB/s. At κ = 1 the 24×24 cell reproduces the
+record (1.86% vs the strongest baseline). At κ ≥ 2 the ports never
+bind again (κ = 2 and 4 are identical), every candidate is link-bound,
+and the search's gain vs the strongest baseline rises to **~10%** at
+0.4 GB/s (24×24 10.1%, 12×48 9.8%) and 0.7% at 12.5. The hardware gain
+of κ itself is reported apart: 6.7–8.0% at 0.4 GB/s, 0.5–0.6% at 12.5,
+all of it between κ = 1 and 2. **Finding F-K1: the reference port
+setting was hiding the link-side placement headroom** — a placeholder
+parameter decided the small gain, and the κ ≥ 2 result is a different
+regime, not a hardware co-optimisation.
+
+**Pipe caliber (S8-B).** The existing caliber is a steady-state II
+(max over the 32 single-layer segments), no fill/drain, no cross-
+segment sharing; timed at 1.5–1.6 ms per step. The selection changes
+with the caliber (different strongest baseline, different endpoint;
+rank correlation 0.79–0.83). **F-P1: the sum objective is the better
+search surrogate even for the max target** — serial endpoints re-scored
+in pipe gain 10.9% (κ 1) / 12.7% (κ 4) vs the strongest pipe baseline,
+a direct pipe-objective search 6.7% / 9.4% with larger seed spread.
+What this supports: selection under the max-stage objective; nothing
+about contention that pipelining adds.
+
+**Intra-die integration (S8-U6).** On the only instance with within-die
+levers (A3, 355M-class d = 1024), the per-op formula is wired into a
+layer objective with no double counting (checked) and reproduces the
+stored band as an identity. β gain 9.5% of latency at 0.4 GB/s (22.6%
+at 0.1, 0 at ≥ 2); exposed intra-die communication 26.7% → 19.0% of
+layer time. On that instance α moves latency by ≤ 0.0003% (one-flow
+hand-offs). **F-U6: the current model is separable in α and β** — the
+joint gain is the sum, which licenses the two-level split and names the
+coupling a finer model would need. 2.7B: not integrated (no levers).
+
+**Same-budget objective ablation.** Against the resource-aware
+objective, the distance / hop proxies lose 2.6–2.8% (κ 1) and 11.2%
+(κ 4) of latency and cannot beat the strongest simple rule at κ 1;
+pricing the ports changes the search's result by < 0.7% even though it
+changed the reported gain against the outside judge.
+
+**S8-C (24×24, 17 dies per stage, BookSim).** With the stage width kept
+(153 dies, 13 pairs, 40 packets per flow, ~154k packets per candidate)
+every candidate is link-bound — the full instance B's regime. Spearman
+0.962 over 14 candidates, bound 1.44–2.11×, the same strongest random
+draw under both judges, and every search endpoint ahead of it under
+BookSim by +12 to +31% (ours: +27 to +29%). Network latency is
+8% of the batch duration: serialization dominates, not a short-
+flow regime. **F-C1: where links bind, the analytic cost and the packet
+completion time support the same selection; where ports bind (item 3)
+they do not order the tie set.**
+
+**Answers to the notes' four questions.** (1) The small gain at the
+reference ports is largely a consequence of that placeholder setting:
+≈ 10% opens once ports run at ≥ 2× the link rate. (2) The existing pipe
+model adds no shared contention; it does change the selection, and the
+practical rule is "search on the sum, report under the max". (3) On the
+one priced instance intra-die placement adds 9.5% at 0.4 GB/s,
+additively; the levers have never been priced together on one instance.
+(4) The search beats the strongest baseline stably at every κ (1.8% at
+κ 1, ~10% at κ ≥ 2); the independent re-evaluation supports the
+selected seating in the link-bound regime (+12–31% under BookSim
+against the same best random draw, ρ = 0.96) and does not order the
+floor-tied set in the port-bound regime.
+
+## 8. Closing round (S9): the main configuration and the paper's numbers
+
+**Main configuration.** 2.7B (d 2560, 32 layers), batch 1, S = 512, 544 of
+576 dies on a 24×24 mesh, XY, NeuRRAM-derived row time, serial prefill;
+link bandwidth 0.4 GB/s per link per direction (12.5 as the high-bandwidth
+contrast); **κ = 2** — each die's injection and ejection capacity is an
+independent resource of 2·B. κ = 1 and 4 are sensitivity. Search: 3 start
+families × 3 independent seeds, 1200 steps, α 0.996, t₀ = 20 ms (declared).
+Headline statistic: the median over seeds of best-over-starts.
+
+| quantity | value | denominator / statistic |
+|---|---|---|
+| **G, prefill, 0.4 GB/s** | **9.91%** (9.66–10.12%) | strongest baseline random_s3 2119 ms → selected 1909 ms; median of 3 seeds |
+| best-of-nine | 10.12% | labelled apart |
+| G vs the default fill | 54.5% | A4 stacked fill 4193 ms |
+| G, prefill, 12.5 GB/s | 0.70% | communication share 4.0% |
+| G, decode, 0.4 GB/s | 1.57% | one token over the 512 cache; ranking vs prefill 0.987 |
+| package envelope, κ = 2 | 2.66× | seven rules; B₋ 0.535 / B₊ 1.421 GB/s |
+| fixed-pair slice | η = 17.5% at every B; G 12.7% (0.2) → 9.9% (0.4) → 6.6% (√) → 0.7% (12.5) | G = η·r to 3e-16 |
+| objective ablation | proxies lose 11.4–11.2% | vs the resource-aware endpoint, same budget |
+| A3 intra-die β gain | 9.02% (incl. package) / 9.52% | layer-level, 355M-class; not added to the 2.7B number |
+| S8-C packet judge | ρ 0.962, +12–31% | synthetic fan-out batch, κ = 1; method validation only |
+
+**BookSim at κ = 2** is not expressible with the current bridge (one
+injection and one ejection channel per node at channel width; subnets,
+concentration, injection rate and crossbar speedups do not change κ). The
+minimal change is a network-construction patch (κ terminal channels per
+node); not made this round. The κ = 1 packet checks are not presented as
+a reproduction of the κ = 2 experiment.
+
+**Decode** is one re-evaluation: the same placement cost scaled by a
+common factor (ranking 0.987, the prefill selection #2 of 21 in decode),
+so no decode search.

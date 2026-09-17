@@ -188,3 +188,39 @@ Generators: `scripts/a_bandwidth_slices.py`, `scripts/b3_shrunk_rerank.py`,
 `scripts/b_fanout_search.py`, `scripts/b_shrunk_fanout_rerank.py`;
 test pin: `test_port_floor_under_r_split`. Design and conclusion:
 `analysis/search_setting_design.md`.
+
+## Link stacking: the mechanism behind the ranking (main configuration)
+
+Under R-split multicast a 5-die → 5-die hand-off is 25 flows. The
+distance-driven rules minimize path length and win at it (4.1 G word-hops,
+2.9 hops, vs 22.7 G and 16 hops for a random fill) but stack 10–25 of the
+flows on the link between two compact groups; the random fill stacks 8–10
+and so has the lower busiest-resource sum (479 M vs 494–652 M words). The
+search keeps the dispersion and de-stacks the rest (5 flows on its busiest
+links, 55 of 159 boundaries at the port floor): 395 M words, −9.9% of the
+model at 0.4 GB/s. Use: the one paragraph in §4.3 that explains, with
+loads, why the adapted rules place below a random fill on this instance
+and what the search adds. Data: `analysis/mechanism_table.md`;
+provenance of every rule: `analysis/baseline_provenance.md`.
+
+## Dynamic energy: no penalty within the search's family, a real trade-off between families
+
+Energy as coded: per-op CiMLoop energy + elementwise + payload words ×
+max(hops, 1) × 10 pJ; static not modelled; independent of bandwidth and
+κ. The headline layout changes system dynamic energy by +0.26% against its
+baseline (nine endpoints +0.10…+0.56%), because communication is 9% of
+dynamic energy for dispersed layouts; the compact rules save 81% of
+communication energy = 7.3% of the system at 1.8–20% more latency. Use:
+the energy sentence of the main result and the compact-vs-dispersed
+trade-off; intra-die energy is not modelled and is said so. Data:
+`analysis/energy_export.md`.
+
+## The packet judge agrees where links bind
+
+On a 24×24 fan-out task that keeps 17 dies per stage (link-bound like the
+full instance), BookSim and the analytic cost pick the same best random
+draw, rank 14 candidates at ρ = 0.96, and place every search endpoint
+12–31% ahead of that draw; on the port floor (the 6×6 shrinks) the packet
+judge spreads the analytically tied endpoints by ±6–11%. Use: §3.3, the
+scope sentence for the term's discriminating power. Data:
+`analysis/b_fanout_24x24_rerank.json`, `analysis/b3_shrunk_rerank.json`.

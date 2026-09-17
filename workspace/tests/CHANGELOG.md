@@ -1891,3 +1891,6 @@ optimisation adds, and the certified answer is zero. Fast suite:
 - 2026-09-16 [AMENDED 17] test a17 (tests/test_search_sa.py): a constant objective at t0 = 0 returns its start bit-identically with accepted == 0; a tied objective with one strict improvement takes only that improvement. Fast suite 432 -> 433.
 
 - 2026-09-16 test_port_floor_under_r_split (tests/test_search_eval.py): under R-split every consumer die's port load equals V_b, so the busiest-resource term is >= sum_b V_b for every seating (F-B3a); checked on the shrunk 2-layer / 36-slot instance for the seven named rules. Fast suite 433 -> 434.
+
+- 2026-09-16 test_s8_port_ratio_kappa (tests/test_search_eval.py): the port-capacity ratio kappa = 1 is bit-identical to the standing term, kappa -> inf equals wire-only, a one-flow hand-off is unchanged for any kappa, W.port_ratio threads into boundaries(). Fast suite 434 -> 435.
+- 2026-09-16 test_s8_kappa_incremental_equals_full (tests/test_search_eval.py): the incremental path (ScoreSession.update) applies the same kappa as the full path along engine moves at kappa 2 and 4 -- the bug that had rejected every move from a good start at kappa > 1. Fast suite 435 -> 436.

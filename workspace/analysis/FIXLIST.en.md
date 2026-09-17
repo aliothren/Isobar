@@ -5516,3 +5516,668 @@ tie set over +-6-11% and picks a different member, and against
 BookSim's own best random draw the selected endpoint can lose (down
 to -10% on A's shrunk instance, -5.6% on B's). Where the endpoints are
 link-bound (B, full size) there is no packet judge at that size.
+
+S8 PRE-REGISTRATION 2026-09-16 -- the writer's second-round notes
+(Isobar_search_experiment_notes (1).md) with the three precisions
+from review: (i) the pipe experiment tests 'does the selection and
+gain change under the max-stage objective', NOT 'placement matters
+more under pipelining' (no cross-stage shared network in the model);
+(ii) intra+inter placement is NOT an existing capability -- beta does
+not enter the whole-model score because the within-die communication
+term is not wired in, which is 'not yet integrated', never 'measured
+zero'; (iii) keeping 17 dies per stage in the shrunk BookSim instance
+is the right shape, whether it keeps the link bottleneck is decided by
+the result. Scope this round: port kappa sweep, 24x24 / 12x48
+geometry, pipe-caliber search, 24x24 9x17 BookSim, tie-breaker
+features and the objective ablation, intra-die integration on the A3
+d=1024 data as a separate small task. Deferred: fork/gated-MLP
+workloads, a finer pipeline timing model, BookSim multi-port.
+
+CODE CHANGE, PINNED (test_s8_port_ratio_kappa): the hand-off term's
+port capacity is now a parameter -- kappa = C_port / C_link, port
+loads expressed in link-time units (divided by kappa), threaded as
+W.port_ratio (default 1.0 = the standing model, bit-identical); kappa
+-> inf recovers the wire-only term; a one-flow hand-off is unchanged
+for any kappa. The load map behind the maximum is exposed
+(resource_loads) for the tie-breaker features. SessionJ takes a
+caliber. Every standing number is unchanged (suite must stay green).
+
+S8-A PORT KAPPA x GEOMETRY (scripts/kappa_geometry_sweep.py ->
+analysis/kappa_geometry_sweep.json + .png). Six cells: {24x24, 12x48}
+x kappa in {1, 2, 4}; 576 slots, 544 occupied, the 2.7B per-op
+mapping, XY, NeuRRAM rate. Per cell: the seven rules (seed 0) and
+random seeds 1-4 re-generated ON THAT GRID; search = 3 start families
+x 3 SA seeds, 1200 steps, alpha 0.996, t0 = span/20 over the seven
+rungs at 0.4 GB/s (the S6 rule, so every cell gets its own scale);
+each endpoint re-scored at 0.4 and 12.5. Read per cell: A_min/A_max
+over P -> B-/B+ RECOMPUTED (the old 0.603/1.427 apply to 24x24
+kappa=1 only); the port floor sum_b V_b / kappa and the endpoint's
+binding resource (port-bound iff A == floor; link-bound iff A == the
+wire-only sum); endpoint distribution; gain vs the strongest baseline
+at both bandwidths; and, SEPARATELY, the hardware gain of kappa itself
+(best baseline at kappa vs at kappa = 1, same grid), never folded into
+the placement gain. EXPECTATIONS: at kappa = 1 the 24x24 cell
+reproduces item 4 exactly; raising kappa lowers the floor by 1/kappa
+and the endpoints follow it until a LINK binds, at which point the
+endpoint becomes link-bound and the placement headroom above the
+best baseline can GROW (the notes' hypothesis) -- or not; both are
+reported; 12x48 has longer mean paths and a narrower bisection, so
+the stacked rules get worse and the search's link-relief headroom
+larger; no cell is required to show a gain.
+
+S8-B PIPE CALIBER (scripts/pipe_caliber_search.py). What the pipe
+caliber IS in the code: t_pipe = max over segments of (segment layers
+x layer_s + the segment's own hand-off sum) -- a steady-state
+initiation-interval estimate; no fill / drain, no microbatch count,
+no cross-segment resource sharing, the cut fee zero; the segments are
+the Pi's cuts, 32 single-layer segments for every generated seating
+(the fixed pipeline strategy this round). Throughput = 1 / II. Cells:
+24x24 at kappa = 1 and kappa = 4, 0.4 GB/s. Per cell: (1) baselines
+and random draws under the pipe caliber; (2) the serial-selected
+endpoints (S8-A) re-scored in pipe; (3) a search with the pipe
+objective, 3 seeds from random. Read: does the ranking / the selected
+seating change between calibers; the pipe gain vs the strongest
+baseline (1 - II_search / II_ref) and the throughput gain; the two
+calibers' selections cross-scored. Timed. THE CLAIM THIS CAN SUPPORT
+is only 'selection under the max-stage objective', stated as such.
+
+S8-C 24x24 SHRUNK FAN-OUT UNDER BOOKSIM (scripts/
+b_shrunk_fanout_rerank.py, k = 24, 9 stages x 17 dies = 153 dies, 13
+pairs, V scaled, recorded): the bottleneck type of baselines and
+endpoints is READ, not imposed; if the search reaches the port floor
+here too, that is the result.
+
+S8-D TIE-BREAKER FEATURES (scripts/tie_features.py): on the four
+floor-tied endpoints of the item-3 instance (BookSim order known:
+snake 189.5 < clustered 191.0 < grs 199.4 < random 210.5 ms) and on
+A's nine endpoints, read from resource_loads: total link occupancy,
+the count of resources within 10% of the maximum, the second-busiest
+load. Decide by discrimination first: if a feature does not separate
+the floor-tied set in BookSim's order it is not added to the
+ordering; if one does, it becomes a secondary key at a fixed
+tolerance, validated on seeds it was not chosen on. Never 'pick by
+BookSim then count it as analytic gain'.
+S8-A RESULT (kappa_geometry_sweep.json sha256 8a2f0a326bfc086c; six
+cells, 9 SA runs each, ~20 s per cell). EXPECTATION MISS, MINE: the
+pre-registration said both 'kappa = 1 on 24x24 reproduces item 4' and
+'every cell uses t0 = span/20'; the two are inconsistent (item 4 used
+the declared 20 ms) and the run used span/20 (= 90.7 ms at 0.4 GB/s),
+so the kappa = 1 cell reads 1.75% vs the strongest baseline (item 4:
+1.86%), endpoints spread 1.31% (0.74%), best endpoint at A/floor
+1.002 (1.000). That is schedule difference, not a finding; item 4
+stays the record for the declared schedule, and every S8-A cell is
+comparable to the others (same rule). RESULTS. Raising kappa halves
+the port floor (523.0 -> 261.5 -> 130.7M link-time words) and the
+endpoints become LINK-bound (A/floor 1.75 at kappa 2, 3.50 at kappa 4;
+the strongest baselines likewise) -- and KAPPA = 2 AND KAPPA = 4 ARE
+BIT-IDENTICAL in every reading on both grids: once ports run at twice
+the link rate they never bind again, the package is link-limited and
+B-/B+ stop moving (24x24: 0.535 / 1.420; 12x48: 0.515 / 1.285). Gain
+vs the strongest baseline at 0.4 GB/s: 24x24 1.75% (kappa 1) -> 2.61%
+(kappa >= 2); 12x48 2.52% -> 1.80/1.84%. At 12.5: 0.13 -> 0.18%; 0.19 ->
+0.12%. So the notes' hypothesis -- the reference port setting hides
+link-side placement headroom -- holds on the square grid by under one
+point and NOT on the 12x48 grid, where the link-bound regime has a
+stronger rule baseline (least_manhattan) and the search's margin over
+it shrinks. Endpoint spread grows in the link-bound regime (1.1-1.3%
+-> 3.9-4.3%): the search is noisier when links bind. Geometry alone
+at kappa = 1: 12x48 gives the search 2.52% vs 1.75% on 24x24 (longer
+paths punish the stacked rules; the strongest random draw is 1.048x
+the floor vs 1.032x). THE HARDWARE GAIN OF KAPPA ITSELF, kept apart:
+the best baseline improves 6.70% (24x24) / 8.03% (12x48) at 0.4 GB/s
+and 0.51 / 0.62% at 12.5 when ports go to 2x the link rate, nothing
+further at 4x -- larger than any placement gain in the table, and not
+a placement result. ANSWER TO THE NOTES' FIRST QUESTION: the small
+gain is only weakly determined by the reference port setting -- the
+best case it opens is 2.6% against the strongest baseline, and on the
+other geometry it closes.
+
+S8-D RESULT (tie_features.json sha256 f0112337e3370299). On the
+item-3 floor-tied set (BookSim order snake < clustered < grs-random <
+random) NO feature separates in BookSim's direction: total link
+occupancy rho = +0.40 (weak, 4 points), resources within 10% of the
+max / at the max rho = -0.80 and second-busiest sum -0.80 -- the sign
+OPPOSITE to the natural hypothesis (the BookSim-best endpoint has the
+MOST resources at the floor value, 45 vs 37). 'At max' equals 'within
+10%' everywhere: the near-max resources are exactly the consumer ports
+at V_b plus the links at V_b, so the count is mostly the mapping. On
+A's nine floor endpoints the features do vary (total occupancy 5.2%,
+near-max count 18.6%, second-busiest 3.8%) but there is no packet
+reference at that size. RULING per the pre-registration: no tie-
+breaker is added to the ordering this round; the within-tie
+difference BookSim sees is not captured by these load-map statistics,
+consistent with the item-3 diagnosis (dynamic contention on links
+below V, not the count of links at V).
+S8-B RESULT (pipe_caliber_search.json sha256 b36d00515c871e4e; 24x24, 0.4 GB/s,
+kappa 1 and 4; the pipe caliber = max over the 32 single-layer
+segments of layer_s + that layer's hand-off sum, no fill/drain, no
+cross-segment sharing; 1.45-1.55 ms per pipe step, the same cost as
+single). THE SELECTION CHANGES WITH THE CALIBER: the strongest
+baseline under single is random_s3, under pipe random_s1; baseline
+rankings correlate 0.79 (kappa 1) / 0.83 (kappa 4); the best serial
+endpoint and the best pipe endpoint are different seatings in both
+cells. The pipe II of the strongest baseline is 1.09-1.10x the mean
+layer time (T_single / 32): the busiest layer is ~9% above average.
+FINDING F-P1 -- THE SUM IS THE BETTER SURROGATE EVEN FOR THE MAX:
+re-scored in pipe, the SERIAL-objective endpoints beat the strongest
+pipe baseline by 8.37% (kappa 1) / 4.91% (kappa 4), while a direct
+PIPE-objective search of the same budget (3 seeds from random, 1200
+steps, t0 = span/20 in II units) gains only 0.84% / 2.68% -- WORSE
+than the serial endpoints re-scored, with the kappa-1 seeds ending on
+one identical II (spread 0.00%) and the kappa-4 seeds spread 7.8%.
+Mechanism, stated not proven: a max-over-layers objective is flat
+under every move that does not touch the busiest layer (dJ = 0,
+accepted as a random walk at t > 0), so SA has gradient on one layer
+at a time; the sum objective moves every layer toward its floor and
+therefore lowers the max as a by-product. Cross-scored in single, the
+pipe endpoints are -0.58% (kappa 1) / +0.77% (kappa 4) vs the
+strongest single baseline. ANSWER TO THE NOTES' SECOND QUESTION: the
+existing pipe model opens NO new shared-resource contention (by
+construction, stated in the design), it DOES change the selected
+seating and the strongest baseline, and the practical rule it yields
+is 'search on the sum, report under the max' -- valid only as a
+statement about this steady-state II estimate.
+S8 BUG, FOUND BY THE ABLATION AND FIXED 2026-09-16 (pinned:
+test_s8_kappa_incremental_equals_full; suite 436). The kappa threading
+reached Workload2p7B.boundaries() but NOT ScoreSession.update(), which
+recomputes a move's affected boundaries by calling busiest_link_words
+directly -- at kappa > 1 a session therefore mixed kappa-scaled cached
+boundaries with UNSCALED recomputed ones, every recomputed boundary
+jumped up, and from a good start every move was rejected (the ablation
+showed it plainly: the 'ours' arm at kappa 4 returned its start for all
+three seeds while the wire-only proxy, which never touches the session,
+found a seating 11.9% better under ours' own T). Symptoms in the earlier
+S8-A / S8-B numbers at kappa >= 2 (large endpoint spreads, gains from
+the bad starts only, a negative pipe search) were this bug, not
+findings. A SECOND PROTOCOL ERROR fixed at the same time: S8-A/B and the
+ablation had used S6's t0 = span/20 rule on the A instance, ~4.5x
+hotter than the declared 20 ms (item 4), turning most of the budget
+into a random walk; the declared schedule is restored for the T
+objective and every other objective runs at the same RELATIVE
+temperature (20 ms x its rung span / ours' rung span). THE S8-A, S8-B
+AND ABLATION RECORDS ABOVE ARE SUPERSEDED at kappa >= 2 (kappa = 1 is
+unaffected by the bug; with the declared schedule it reproduces item 4
+exactly: 1.86%, spread 0.73%, floor 1.000). Reruns in progress; their
+results are recorded below when they land, replacing nothing silently.
+
+S8-C STATUS: the 24x24 / 9 x 17 run was killed -- 571 s per candidate
+(3,757 flows x 161 packets = 605k packets; my 60k estimate was a
+flow-count error) and the batch duration parsed as 1 while packet
+latency read 486k, i.e. the parse or the batch accounting fails at that
+scale. Probes: single-source batches are exact to the flit up to 16k
+packets; a 17 -> 17 R-split pair on k = 24 runs correctly at 2.9k /
+11.6k / 46k packets (4 / 31 / 150 s). A 3-pair merged batch is being
+run with the bridge's stdout captured to find the failure; the size
+that keeps the shape (17 dies per stage, 13 pairs) is ~150k packets at
+40 packets per flow (~6 min per candidate, ~1.4 h for 14) and only
+worth running once the parse is understood.
+S8-A RESULT, CORRECTED (bug fixed, declared schedule;
+kappa_geometry_sweep.json sha256 c624443dde5b1349; supersedes the
+earlier S8-A block). kappa = 1: 24x24 reproduces item 4 exactly (1.86%
+vs the strongest baseline at 0.4 GB/s, 0.14% at 12.5, endpoints
+spread 0.73%, endpoint on the port floor 1.000); 12x48: 2.69% /
+0.20%, endpoint at 1.001x floor. kappa >= 2 (ports at 2x or 4x the
+link rate; bit-identical between 2 and 4 -- ports never bind again):
+THE SEARCH'S GAIN VS THE STRONGEST BASELINE RISES TO ~10% -- 24x24:
+10.12% (kappa 2) / 9.92% (kappa 4) at 0.4 GB/s, 0.72 / 0.70% at 12.5;
+12x48: 9.81 / 9.82% and 0.68 / 0.68% -- with the endpoints LINK-bound
+at 1.50x (kappa 2) / 3.02x (kappa 4) the port floor and the strongest
+baselines at 1.83x / 3.66x; endpoint spreads 1.2-2.4%. B-/B+ per cell:
+24x24 0.603/1.427 (kappa 1), 0.535/1.420 (kappa >= 2); 12x48
+0.608/1.301, 0.515/1.285. The hardware gain of kappa itself, apart:
+the best baseline improves 6.70% (24x24) / 8.03% (12x48) at 0.4 and
+0.51 / 0.62% at 12.5 going from kappa 1 to 2, nothing more at 4.
+FINDING F-K1: THE REFERENCE PORT SETTING WAS HIDING THE LINK-SIDE
+PLACEMENT HEADROOM. At kappa = 1 every good seating sits on the port
+floor and the search can only close the baseline's 3% gap to it;
+once ports run at >= 2x the link rate the busiest resource is a
+shared link for every candidate, the strongest simple rule sits 1.8x
+(kappa 2) above the new floor, and the search removes a third of
+that excess -- about 10% of whole-model latency at 0.4 GB/s, under
+1% at 12.5 where communication is 5% of the total. Geometry matters
+little once links bind (9.8-10.1% on both grids); at kappa = 1 the
+longer 12x48 paths give the search 2.69% vs 1.86%. ANSWER TO THE
+NOTES' FIRST QUESTION, CORRECTED: the small gain IS largely a
+consequence of the reference port setting -- one of the two
+parameters the notes flagged as a placeholder -- and the placement
+result at kappa >= 2 is a different regime, reported as such and not
+as a hardware co-optimisation.
+
+S8-B RESULT, CORRECTED (pipe_caliber_search.json sha256 ec4758ed7cacf44a;
+supersedes the earlier S8-B block). Selection still changes with the
+caliber (strongest baseline random_s3 under single, random_s1 under
+pipe; rank correlation 0.79 / 0.83; the best serial and best pipe
+endpoints differ in both cells). Re-scored in pipe, the serial
+endpoints gain 10.89% (kappa 1) / 12.73% (kappa 4) vs the strongest
+pipe baseline; the direct pipe-objective search at the same relative
+temperature gains 6.70% (spread 6.3%) / 9.38% (spread 2.5%);
+cross-scored in single the pipe endpoints read 1.17% / 4.38% vs the
+strongest single baseline (the serial endpoints: 1.86% / 9.92%).
+F-P1 STANDS WITH SMALLER MARGINS: the sum objective's endpoints beat
+the max objective's own search under the max, and the max-objective
+search is noisier. The mechanism paragraph in the superseded block
+is unchanged. 1.46-1.63 ms per pipe step.
+S8-U6 PRE-REGISTRATION -- intra-die cost integrated into a whole-model
+objective on the data that exists (scripts/intra_die_integration.py ->
+analysis/intra_die_integration.json). INSTANCE: the A3 co-residency
+configuration (the 355M-class stack, d = 1024, attention offloaded,
+production 2x4 macro mesh with glb centre), the ONLY instance with
+stored within-die levers (soft_lever.json). PER-OP FORMULA, verbatim
+from WithinDieJ.cost_of: t_op(beta) = write + prop + max(compute,
+a3_ser(beta) x scale(g)), prop = stored latency - write - max(compute,
+serial) -- so compute and write enter ONCE per op and prop is what the
+stored latency had beyond them (asserted >= 0 for every op: the
+double-count check). LAYER TIME T(beta) = fixed rest of the layer
+(every op not on the two moved dies, same formula with its stored
+serial) + C_attn(beta_attn) + C_ffn(beta_ffn); the stack is n_layers
+identical layers, so layer shares are stack shares. READ PER ANCHOR g
+in {0.1, 0.2, 0.4, 2.0, 8.0, 8.75} GB/s, prefill: the intra-die
+communication-EXPOSED share of layer time (sum over ops of max(0, ser
+x scale - compute) / T) at the shipped seating and at the exhaustive
+best; the beta gain 1 - T(best)/T(shipped) and the band T(worst)/
+T(best) -- the latter must reproduce the stored a3_stack_ratio rows
+(identity anchor). THE FOUR GROUPS on this instance: rules = shipped
+beta + sequential alpha; beta only; alpha only; both. What alpha can
+do here is READ from the model, not assumed: the 355M-class chain
+hands off one die to one die, and a one-flow hand-off's busiest
+resource is its own volume for every seating (pinned degeneration),
+so alpha moves only the propagation term (hops x 20 ns per hand-off)
+and the energy column; its latency lever is bounded by (max hops -
+min hops) x 20 ns x 47 hand-offs over the stack time, computed and
+reported. If that bound is negligible the four groups collapse to
+'beta only' in latency and the finding is the SEPARABILITY of the
+current model: T(alpha, beta) = D2D(alpha) + sum_dies C(beta_die),
+no coupling term (hand-off data entering a die is not distributed
+over its macros), so the joint gain is the sum of the two -- which
+licenses the two-level split on this model and names the coupling a
+future model would need. 2.7B: NOT COVERED -- no within-die levers
+exist for the A4 per-op mapping; recorded as 'not integrated', never
+as 'no intra-die headroom'. The earlier 355M-instance suggestion is
+withdrawn: this IS the 355M-class instance, and there is no other.
+S8-U6 RESULT (intra_die_integration.json sha256 07cb65fc95291a67).
+Double-count check passed (prop >= 0 for every op; compute and write
+enter once). Identity anchor passed: the recomputed band T(worst)/
+T(best) equals the stored a3_stack_ratio at every anchor to 1e-9.
+Prefill, per anchor g: BETA GAIN (shipped contiguous -> exhaustive
+best, whole layer = whole stack) 22.60% at 0.1 GB/s, 19.33% at 0.2,
+9.52% at 0.4, 0.00% at 2.0 / 8.0 / 8.75 (the masked cell: no seating
+exposes any serialization); the intra-die communication-EXPOSED share
+of layer time at 0.4 is 26.7% at the shipped seating and 19.0% at the
+best (80.7% -> 75.0% at 0.1); the two movable dies are ~60% of layer
+time at every anchor. ALPHA ON THIS INSTANCE, read from the model:
+the 355M-class chain hands off one die to one die, so alpha moves only
+propagation -- total hops 47 (snake, clustered) to 209 (random), a
+latency lever bounded by 0.0003% of the stack time -- and the energy
+column. FINDING F-U6 (SEPARABILITY): on the current model T(alpha,
+beta) = D2D(alpha) + sum_dies C(beta_die) + fixed, with no term
+coupling a die's macro seating to the hand-offs entering it; the four
+groups therefore collapse to 'beta only' in latency on this instance,
+and on any instance the joint gain is the sum of the two levers.
+This licenses the two-level split on this model and names exactly
+what a coupled model would add (distributing an incoming hand-off
+over the die's macros). 2.7B: NOT COVERED (no within-die levers for
+the A4 mapping) -- 'not integrated', not 'no headroom'. ANSWER TO THE
+NOTES' THIRD QUESTION: on the one instance where beta is priced,
+intra-die placement adds 9.5% of latency at 0.4 GB/s (up to 22.6% at
+0.1) on top of whatever inter-die placement gives, additively; the
+inter-die lever on that same instance is nil in latency by the
+one-flow degeneration; the two levers have never been priced together
+on one instance, and cannot be until the 2.7B mapping gets within-die
+levers.
+
+S8 OBJECTIVE ABLATION RESULT (objective_ablation.json sha256
+8a5a548dcb0ac337; 24x24, 0.4 GB/s, random start, 3 seeds, 1200
+steps, ours at the declared 20 ms and every proxy at the same relative
+temperature; every endpoint re-scored under ours' T_single and the pipe
+II). kappa = 1: ours 1.83% vs the strongest baseline; wire-only (ports
+unpriced) 1.78%, regret 1.0006; word-hops (distance / total traffic)
+-0.68%, regret 1.026; max-hops (propagation only) -0.95%, regret 1.028.
+kappa = 4: ours 10.96%; wire-only 10.35% (1.007); word-hops 0.97%
+(1.112); max-hops 0.98% (1.112). So (a) the LOSS THE RESOURCE-AWARE
+OBJECTIVE AVOIDS against the distance / hop proxies is 2.6-2.8% of
+latency at kappa 1 and 11.2% at kappa 4 -- the proxies cannot even
+beat the strongest simple rule at kappa 1; (b) PRICING THE PORTS
+matters little to the SEARCH (0.06 / 0.69%) even though it mattered
+to the reported gain against the outside judge -- the two are
+different questions; (c) under the pipe II the ours endpoints gain
+10.05% / 13.63%, the proxies' endpoints lose (-5.9 / -8.3%). ANSWER TO
+THE NOTES' FOURTH QUESTION, analytic half: the search improves on the
+strongest baseline stably (3 seeds within 0.1-1.1%) at every kappa,
+by 1.8% at the reference ports and ~10-11% once links bind; the
+packet-judge half stands where item 3 left it (agreement down to the
+floor; the link-bound regime's packet check is S8-C, pending).
+S8-C SCALE PINNED: the 24x24 merged batch is exact at 71k packets (6
+pairs, 137,789 cycles, 58 s) and at 154k packets (13 pairs at V/4,
+349,201 cycles, 138 s); the failure ('Overall min batch duration = 1'
+with packet latency 486k) appeared only at 605k packets (13 pairs at
+the full V). Where between 154k and 605k the batch accounting breaks
+is not bisected further; S8-C runs at V = 87,500 words per pair = 40
+packets per flow, 154k packets per candidate. STARTUP / DRAIN SHARE at
+that size, to be read from the result as the notes require: a flow's
+serialization is 40 x 17 = 680 flits against ~46 hops x 14 = 644
+cycles of pure latency on the longest paths -- comparable, so the
+run's packet-latency and network-latency averages are reported next
+to the batch duration and the reading is labelled 'short-flow
+regime' if network latency dominates. Full run: 14 candidates x ~140
+s + 4 SA runs, in the background.
+S8-C RESULT (b_fanout_24x24_rerank.json sha256 c635d4272c4f6d04; 24x24, 9 stages
+x 17 dies = 153 dies, 13 pairs +2/+4/+8, V = 87,500 words per pair =
+40 packets per flow, ~154k packets per candidate, one merged batch;
+4 named rules, 5 random draws, 4 SA endpoints; ~130-750 s per
+candidate). THE SHAPE IS PRESERVED: every candidate is LINK-bound
+(A/floor 1.47-7.43; the search endpoints 1.47-1.51, the random draws
+2.06-2.33, the stacked rules 6.3-7.4), so this IS the full instance
+B's regime, unlike the 6x6 shrink. Spearman 0.962 over 14
+candidates; BookSim / ours 1.442-2.107 (bound holds); the strongest
+random draw is THE SAME under both judges (random_s4); top-1 differs
+only between two endpoints 0.1% apart under BookSim (71,423 vs
+71,513 cycles). THE SEARCH'S GAIN UNDER THE PACKET JUDGE, against the
+best random draw: +30.95 / +30.86 / +17.12 / +11.97% for the four
+endpoints (ours: +26.67 / +28.57 / +26.67 / +28.57%). All four beat
+the baseline under BookSim; the magnitudes spread more than ours'
+(the two 0.396M-word endpoints read 31% and 17%). Startup / drain,
+as required: the endpoint's mean network latency is
+5514 cycles against a batch duration of 71423
+(7.7%), packet latency (incl. source wait) 28123 --
+serialization dominates; NOT a short-flow regime. FINDING F-C1: IN THE
+LINK-BOUND REGIME THE ANALYTIC COST AND THE PACKET COMPLETION TIME
+SUPPORT THE SAME SELECTION -- same best baseline, every endpoint
+ahead of it under both judges, rank correlation 0.96 -- whereas on
+the port floor (item 3, the 6x6 shrink) they parted company. The
+term is a ranking instrument where links bind and a floor detector
+where ports bind; both statements are now measured, on instances
+that preserve the respective regime. ANSWER TO THE NOTES' FOURTH
+QUESTION, packet half: yes, in the link-bound regime the independent
+re-evaluation supports the selected seating, by +12-31% against the
+best random draw; in the port-bound regime it does not order the
+tie set (item 3).
+
+S9 PRE-REGISTRATION 2026-09-17 -- the closing round (Isobar_search_
+experiment_notes (2).md): the paper's MAIN CONFIGURATION is kappa = 2,
+and the headline search result is the ~10% whole-model latency
+reduction at fixed hardware; kappa = 1 and 4 are sensitivity.
+MAIN CONFIGURATION, frozen: the 2.7B weight-resident instance (d 2560,
+32 layers, per-op mapping qkv 4 / attention 1 / out 2 / ffn1 5 / ffn2
+5 dies per layer), 544 of 576 dies on a 24x24 mesh, XY, NeuRRAM-
+derived row rate, serial prefill whole-model latency as the main
+objective (batch 1, S = 512), link bandwidth 0.4 GB/s per link per
+direction (main) and 12.5 (high-bandwidth contrast), kappa = 2 --
+each die's injection and ejection capacities are independent
+resources of kappa x B (0.8 GB/s each at the 0.4 point, 25 each at
+12.5); kappa is the ratio of effective terminal capacity to one
+link's, not a port count and not a sum. Search protocol = S8-A's
+(SessionJ on T_single at 0.4, 3 start families x 3 independent SA
+seeds, 1200 steps, alpha 0.996, t0 = the declared 20 ms). Baseline
+set = the seven named rules at seed 0, random seeds 1-4, and the A4
+default fill, all re-scored at the main configuration.
+THE HEADLINE STATISTIC, declared before export: the standing protocol's
+output is 'best over the three start families' for one seed; with
+three seeds that gives three outputs, and the headline G is their
+MEDIAN, with min and max beside it; 'best of nine' is reported as a
+separate, labelled number and is NOT the headline. G = 1 -
+T(selected) / T(strongest baseline), same workload, hardware,
+execution and objective; the gain vs the A4 default fill is exported
+separately as the cost of the deployment choice. The old 3.53% /
+0.24% / any '45%' are not carried over.
+TASKS. A (scripts/main_config_export.py -> analysis/main_config_
+results.json + .md): every layout at the main configuration, both
+bandwidths, both phases (decode = one token attending over the S =
+512 cache, batch 1), with config identity, real inputs, cost
+decomposition, resource loads, baseline identity, protocol, seed
+statistics, runtime. B (fig_phase_isobar.py with ISOBAR_KAPPA=2 ->
+phase_diagram_isobar_k2.png; the kappa = 1 figures stay as the
+sensitivity version): the package panel's seven-rule A(p; kappa=2),
+B-/B+, envelope ratio, 20% spread, the two physical bandwidth points'
+regions; the intra-die panel unchanged (its constants do not see
+kappa -- checked in code). EXPECTATION: each rule's A falls or stays,
+both boundaries fall or stay, the envelope ratio need not be
+preserved (kappa = 1: 2.37x). Then the fixed-pair bandwidth slice at
+kappa = 2 (bw_slice_k2.py): the strongest baseline and the selected
+endpoint across 0.4, 12.5 and 2B+, sqrt(B-B+), B-/2 of the NEW
+boundaries plus 0.2 and 2.0; T, H, G, r, eta; G = eta r as identity.
+C (objective_ablation.py, ABL_KAPPAS=2, endpoints' seatings stored):
+E0 vs the distance / hop proxies at the main configuration, same
+space / start / seeds / budget / relative temperature; the kappa = 4
+ablation keeps its label (reuse would need the generation protocol
+shown equal; the proxies' generation ignores kappa, ours' does not
+along the path, so the main-configuration arms are rerun, not
+inferred). D: the BookSim bridge's ability to express kappa = 2 is
+checked and either used on the frozen layouts (E0 selection,
+strongest baseline, E1 selection) or the interface gap and the
+minimal change are recorded; kappa = 1 is never written up as a
+reproduction of the kappa = 2 experiment; S8-C stands as the method
+validation on the synthetic fan-out batch. E: A3 re-evaluated with a
+denominator that includes the package hand-offs of its own chain (two
+one-flow hand-offs per layer at 0.4 GB/s, kappa-invariant by the
+one-flow degeneration) -- whether 9.5% moves is decided by that
+number; decode = one re-evaluation of the main candidates (ranking
+vs prefill, communication share); a decode search only if the
+ranking changes materially. Every percentage is exported with its
+absolute times and denominator.
+S9 RESULTS 2026-09-17 (hashes: main_config_results.json 14aef79132b48ed8;
+phase_diagram_isobar_k2.json 947b56cb0bc39311; bw_slice_k2.json
+ca08e2ef67aa2b31; objective_ablation_k2.json e9952f2f7466060a;
+intra_die_integration.json 8ab3b135deadc0b2 (re-pinned: now carries the
+package-inclusive denominator, earlier fields unchanged). Suite 436.)
+
+TASK A -- THE MAIN CONFIGURATION, FROZEN AND EXPORTED
+(main_config_results.md is the paper table). Prefill, 0.4 GB/s,
+kappa 2: strongest baseline random_s3 at 2118.71 ms;
+per-seed best-over-starts 1914.07 (sa_random_s0), 1908.82 (sa_random_s1), 1904.24 (sa_random_s2) ms;
+HEADLINE G = 9.91% (median of the three seeds, selected layout
+sa_random_s1 at 1908.82 ms), range 9.66-10.12%,
+best-of-nine 10.12% (sa_random_s2, labelled, not the headline);
+vs the A4 default fill 54.5% (the default is the stacked
+fill at 4193 ms); communication share 56.5% at the
+strongest baseline -> 51.7% at the selected layout; every
+layout link-bound (A/floor 1.5 endpoints, 1.8 random draws). 12.5 GB/s:
+G = 0.70% (0.68-0.72%), communication share 4.0%.
+DECODE (one token over the 512-token cache, batch 1), 0.4 GB/s:
+strongest random_s3 26.53 ms, G = 1.57% (1.52-1.59%),
+communication share 8.8%; 12.5: G = -0.21% (strongest
+least_manhattan; inside noise). Ranking prefill vs decode over all 21 layouts:
+Spearman 0.987; the prefill-selected layout is #2
+in decode -- the two phases scale the same placement cost by a
+common factor, so NO decode search (the pre-registered rule).
+Config identity and real inputs exported in the JSON (d 2560 / d_ff
+10240 / 32 layers / 32 heads; S = 512; per-layer compute 24.66 ms,
+write 2.86 ms, elementwise 1.26 ms in prefill; row time
+10.14 us; 20 ns/hop, 10 pJ/word; search t0 20 ms, 2.6 s per run).
+
+TASK B -- PHASE DIAGRAM AT KAPPA 2 (phase_diagram_isobar_k2.png,
+_print_k2.png). Seven-rule package envelope: A_min 492.8M (random),
+A_max 1308.6M (sequential), ratio 2.656x (kappa 1: 2.366x --
+the ratio ROSE because the ports had been capping the dispersed
+rules' A; at kappa 2 the envelope equals the wire-only one, 2.656);
+B- 0.535, B+ 1.421 GB/s at the NeuRRAM rate (kappa 1: 0.603 / 1.427;
+both fell or stayed, as pre-registered); 0.4 GB/s below B-, 12.5
+above B+. Intra-die panel unchanged (2.67x; its constants do not
+read kappa -- confirmed in package_A's docstring and by the identical
+readout). FIXED-PAIR SLICE (random_s3 vs sa_random_s1, kappa 2):
+eta = 17.53% at every point; G / r: 0.2 GB/s 12.66% / 72.2%,
+B-/2 11.57% / 66.0%, 0.4 9.91% / 56.5%, sqrt(B-B+)
+6.55% / 37.4%, 2.0 3.62% / 20.6%, 2B+ 2.71% / 15.5%,
+12.5 0.70% / 4.0%; identity |G - eta r - residual| <= 2.8e-16.
+
+TASK C -- OBJECTIVE ABLATION AT THE MAIN CONFIGURATION (random start,
+3 seeds, 1200 steps, ours at 20 ms, proxies at the same relative
+temperature; all endpoints re-scored at kappa 2). Ours: best 1886.5 ms
+(10.96% vs the strongest baseline; median 1911.0); wire-only
+10.19% (regret 1.0086); word-hops 0.85% (regret
+1.1135, loss avoided by ours 11.35%); max-hops 0.98%
+(regret 1.1121, 11.21%). Under the pipe II the ours endpoints
+gain 13.63%, the proxies lose. The kappa = 4 ablation's numbers
+coincide to the digit (ports never bind at kappa >= 2 for any
+candidate on the path), which is now MEASURED, not inferred; it
+keeps its label. The ablation's own 'ours' arm (10.96% best) is a
+different protocol from the headline (random start only, other
+seeds) and is not the headline.
+
+TASK D -- BOOKSIM AT KAPPA 2: NOT EXPRESSIBLE with the current bridge
+or the stock knobs. The patched BookSim gives each node ONE injection
+and ONE ejection channel at the network channel width (the declared
+injection caliber); the configurable knobs are subnets (replicates
+the whole network, links included -- kappa unchanged), c
+(concentration: several nodes SHARE one router's terminal -- kappa
+falls, not rises), injection_rate / injection_process (offered load,
+not capacity) and input_speedup / output_speedup (crossbar port
+expansion inside the router, not terminal bandwidth). A cycle-to-
+seconds rescale does not change kappa. MINIMAL CHANGE, not made this
+round: in KNCube / the file-traffic batch manager, allocate kappa
+injection and kappa ejection channels per node (router radix +kappa
+each side) with the source's packets round-robined over its injection
+channels -- a network-construction patch, not a config change. Per
+the notes' 6.3: tasks A/B/C/E completed on the analytic side; S8-C
+(kappa 1, synthetic fan-out batch, rho 0.962, +12-31%) stands as the
+method validation; the kappa = 1 packet checks are NOT written up as
+a reproduction of the kappa = 2 experiment.
+
+TASK E -- A3 WITH ITS CHAIN'S PACKAGE HAND-OFFS IN THE DENOMINATOR
+(two one-flow hand-offs per layer, V = 512 x 1024 words, 2.62 ms per
+layer at 0.4 GB/s, kappa-invariant): the package term is 5.3% of
+the layer at 0.4, and the beta gain reads 9.02% instead of 9.52%
+(0.1 GB/s: 22.28% vs 22.60%; 0.2: 18.79% vs 19.33%; >= 2: 0). So
+9.5% -> 9.0% with the package in the denominator; both are layer-
+level numbers of the 355M-class instance and neither is added to the
+2.7B whole-model 9.9%. DECODE: see task A (one re-evaluation; ranking
+preserved at 0.987; no search).
+
+S10 2026-09-17 -- the review-closing notes (Isobar_search_experiment_
+notes.md, third version), code-side tasks only; no new search, no
+model change. Hashes: main_config_results.json 70c420e27bdf3c2e (re-pinned:
+random-sample statistics and the percentage ledger added; every earlier
+value unchanged); mechanism_table.json 2cbe03e33e8a5570;
+intra_die_correspondence.json 20f6692b7e9c6463. Suite 436.
+TASK A1 (main_config_results.md): the random sample is the five declared
+seeds, prefill 0.4 GB/s kappa 2: 2153.11, 2128.21, 2145.74, 2118.71, 2151.96 ms, median 2145.74,
+min 2118.71 (random_s3), max 2153.11 (random), spread 1.62%; the strongest
+baseline among rules + draws is random_s3. Search: per-seed best-over-
+starts 1928.63 (s0) / 1908.82 (s1) / 1904.24 (s2) ms, all from the
+random start; median 1908.82 (the headline layout), range
+1904.24-1928.63. The LEDGER lists every paper percentage with its
+numerator layout, denominator layout, absolute times and statistic;
+the 54.5% vs the default fill uses the SAME median-selected layout
+(1908.82 / 4192.5 ms at kappa 2). The A4 default fill IS the sequential
+rule (identical loads, hotspots and latency), recorded.
+TASK A2 (mechanism_table.md): total word-hops, per-boundary busiest link
+and port / kappa, binding, A by boundary type, hotspots, for the default
+fill, five rules, random s0, the strongest draw and the headline layout.
+MECHANISM, from the loads: R-split multicast makes a 5 -> 5 hand-off 25
+flows of 1.05M words; the distance-driven rules reach 4.1-4.2G word-hops
+(2.9 hops) but stack 10-25 of those flows on the link between two
+compact groups (sequential / default: all 25 on one link, 26.21M;
+clustered 10; nmap 10-12; least_manhattan 10-15), while the random
+fills at 22.6-22.8G word-hops (16 hops) stack 8-10 and therefore have
+the lower busiest-resource sum (479-493M vs 494-652M). The search keeps
+the dispersion (15.4 hops) and de-stacks the rest: 5 flows on the
+busiest ffn2 links (5.24M = 2x the port floor), 55 of 159 boundaries at
+'busiest link = port floor', A 479 -> 395M (-17.5% of the term, -9.9%
+of the model); the reduction sits in ffn2 (181 -> 158M), attention (93
+-> 69) and out_proj (69 -> 47); qkv is at its floor for every layout.
+nmap_greedy is described by what the code does (words x centroid
+distance, NMAP's construction + one-sweep structure, no per-link
+capacity term) and NOT as 'ignoring congestion'; the original's
+bandwidth-constrained formulation is flagged for the writer to verify.
+TASK B (intra_die_correspondence.md): Fig. 1(a) and the A3 text case
+ARE THE SAME INSTANCE -- gpt2-medium class, d 1024, d_ff 4096, S 512,
+the 2x4 macro mesh with glb centre, the same NeuRRAM row time (10.14
+us). Fig. 1(a) is the ffn die alone (ffn1 (512,1024,4096) on 4 slots +
+ffn2 (512,4096,1024) on 4, 70 seatings; 2.67x = A_max 8.389M / A_min
+3.146M busiest macro-link words; B- 0.303 / B+ 0.808 GB/s at that
+rate); the text's 9.02% is the whole layer (attn die 280 seatings +
+ffn die 70 + fixed rest 19.01 ms + the chain's two package hand-offs
+2.62 ms at 0.4 GB/s): 49.597 -> 45.125 ms. HOW THE LOCAL COST ENTERS
+THE LAYER: per op write + prop + max(compute, serialization(beta) x
+scale) -- the max model -- so the panel's H-vs-R boundaries are the
+masking thresholds exactly: above B+ every seating compute-bound (gain
+0 at >= 2 GB/s, measured), below B- every seating serialization-bound,
+0.4 inside the band. Per-op state at 0.4: shipped has all four ops
+serialization-bound (qkv 6.99 vs 5.19 ms compute, out 5.24, ffn1 5.24,
+ffn2 10.49); the exhaustive best makes both attn ops compute-bound (3.50,
+0.00) and trades ffn1 up (7.86) to bring ffn2 down (5.24) -- the joint
+optimum minimizes the sum of the two maxima, not each. 2.67x and 9.02%
+are different quantities of one instance and are not converted into
+each other.
+TASK C (baseline_provenance.md): original work -> implemented rule ->
+optimized quantity -> resource information -> adaptation -> what is not
+implemented, for sequential (= default), snake, clustered (Gemini's
+named strategy, not Gemini's mapper), least_manhattan (SIAM's rule, not
+its framework), nmap_greedy (NMAP's structure on a distance-weighted
+cost, the bandwidth constraint not implemented), heaviest_first (LPT
+lineage), random (five declared seeds). No rule prices links or ports.
+
+F-FIG1a CORRECTION 2026-09-17 (review's numeric check on the intra-die
+panel). THE ERROR: Fig. 1(a) drew its boundaries as B_+- = A_min,max /
+(N/s + F) with N = 10.384 ms, the SUM of the two ffn ops' compute, while
+A was the busiest SINGLE op's serialization words (mech = max over ops)
+and the A3 cost model is per-op max(compute_op, ser_op) with compute_op
+= 5.192 ms for each op. So the panel compared one op's serialization
+with two ops' compute and placed both boundaries a factor 2 too low
+(0.303 / 0.808 GB/s); the 20% spread contour used the sum-model formula
+S = (A_max - A_min)/(B R + A_min), which is not the max model's spread.
+Verified from the enumeration before changing the figure: per-op compute
+5.1917 ms each; A_min 3.1457M / A_max 8.3886M (ratio 2.6667, unchanged);
+correct thresholds B- = A_min / c = 0.6059, B+ = A_max / c = 1.6158
+GB/s; at 0.4 GB/s 0 of 70 seatings are fully compute-bound, at 2.0 all
+70 are; max-model spread over the 70 seatings 100% at 0.4, 50% at 0.808,
+31% at 1.0, 0 at 1.616 (and above). THE FIX (fig_phase_isobar.
+intra_die_model / intra_die_curves, shared by the print script): the
+intra-die panel is now built from the enumeration under the max model
+-- boundaries B_c(beta) = A(beta) / c(s) with c the PER-OP compute
+(masking thresholds; slope +1, the write + prop term does not enter the
+switch), the 20% contour solved by bisection per s on (T_max - T_min)/
+T_min with T(beta) = fixed + sum_ops max(c(s), ser_op/B) over the 70
+seatings. Readings now: B- 0.606, B+ 1.616, spread-20% at
+1.154 GB/s at the NeuRRAM rate; 2.67x unchanged; 0.4 GB/s BELOW B-
+(communication dominated: every seating has an exposed op, the seating
+sets how severe -- consistent with the per-op table where the
+exhaustive best still has both ffn ops serialization-bound), 2.0 GB/s
+above B+ (all masked -- consistent with the measured zero gain at >= 2).
+The package panel was never affected: its cost model IS the sum. All
+four figures regenerated (phase_diagram_isobar{,_k2}{,_print}.png);
+phase_diagram_isobar_k2.json 68e1f14536723d5f, phase_diagram_isobar.json
+c7d45dd589317adb; intra_die_correspondence.json re-pinned 4e71d2a5be1652bf
+(its 'local state at 0.4' now reads 'below B-' from the numbers).
+SUPERSEDED STATEMENTS: 'within-die B- 0.303 .. B+ 0.808' in the Fig.1
+rebuild record and 'B- 0.303 / B+ 0.808 ... 0.4 inside the band' in
+S10 task B; the 9.02% layer gain and the 2.67x envelope are untouched.
+Suite 436.
+
+S10 SECTION 6 -- DYNAMIC ENERGY OF THE FROZEN LAYOUTS 2026-09-17
+(energy_export.json c6448eaf1958fa15, energy_export.md; main_config_results.json
+re-pinned 174e9f09ec54464f with energy columns and dE ledger rows, every
+earlier value unchanged). THE MODEL AS CODED: E = n_layers x sum_ops
+E_op (per-op CiMLoop records, array compute and writes) + n_layers x
+E_elementwise (glb + arithmetic of the digital unit) + E_d2d, with
+E_d2d = sum over flows of payload words x max(XY hops, 1) x 10 pJ/word
+(a flat one-hop charge on every delivered word plus the surplus
+beyond reference_hops = 1; die_flow_surplus_energy); the coefficient is
+the midpoint of Simba's measured GRS band (0.82-1.75 pJ/bit, Zimmer et
+al. JSSC 2020); static power is NOT modelled (idle_power_w = None);
+energy is independent of B and kappa. Recomputing E_comm from words x
+max(hops,1) x pJ matches the evaluator to 8e-16; the seven rules' E
+equals ladder_v0's e_J (kappa 1) exactly, as it must. SEAT-INVARIANT
+TERMS: E_ops 2.270 J, E_elementwise 0.0265 J, E_d2d flat 0.0142 J;
+only the surplus (hops beyond one) moves with the seating.
+ANSWERS (main configuration, prefill, vs the strongest latency
+baseline random_s3, E 2.5229 J of which communication 0.2259 J = 8.96%):
+(1) the headline layout sa_random_s1 (-9.91% latency) has E 2.5163 J:
+dE = +0.26% (a small REDUCTION), communication energy +2.94%; all
+nine endpoints lie between +0.10% and +0.56% -- the latency search carries
+no energy penalty on this configuration, and the effect is small
+because communication is ~9% of dynamic energy for the dispersed
+layouts. (2) The distance rules DO turn their short paths into a
+communication-energy advantage: E_comm 0.0412 / 0.0424 / 0.0410 J
+(least_manhattan / nmap / clustered) vs 0.2259 J, i.e. 81-82% less communication
+energy, which is 7.32 / 7.28 / 7.33% of SYSTEM dynamic energy -- bought
+at 1.79 / 3.96 / 20.37% more latency than random_s3 (and 11-33% more than the
+headline layout). The E-best layout of the set is clustered (2.3379 J);
+the sequential / default fill is neither (2.3937 J, +97.9% latency).
+So on this configuration placement moves dynamic energy by up to ~7%
+(compact vs dispersed) and the latency-selected layout sits at the
+dispersed end with a 0.3% energy edge over its own baseline: the
+trade-off is real between families and absent within the search's
+family. (3) A3's 9.02% layer latency gain has NO modelled energy
+counterpart: the macro link carries no pJ/word and the d = 1024 per-op
+records carry no energy, so intra-die energy is 'not modelled', never
+'zero'; what it would need is stated in the export.

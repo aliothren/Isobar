@@ -558,3 +558,75 @@ def test_port_floor_under_r_split():
         assert busiest >= floor * (1 - 1e-12)
         attained += abs(busiest - floor) < 1e-9 * floor
     assert attained >= 0                # attainment is a property of the seating, not asserted here
+
+
+
+def test_s8_port_ratio_kappa():
+    """S8: kappa = 1 is bit-identical to the standing term; kappa -> inf
+    equals the wire-only term; a one-flow hand-off is unchanged for any
+    kappa >= 1; W.port_ratio threads into boundaries(); on the random
+    seating (port-bound hand-offs) kappa = 2 lowers the busiest sum and
+    never below the wire-only sum."""
+    from scripts import search_baselines as sb
+    W = se.Workload2p7B()
+    pi = sb.generate("random", W, seed=0)
+    icl = W.die_ic
+    base = lw_boundary_flows(W, pi)
+    for fl in base[:6]:
+        a1 = se.busiest_link_words(fl, icl)
+        assert se.busiest_link_words(fl, icl, kappa=1.0) == a1
+        assert abs(se.busiest_link_words(fl, icl, kappa=1e12)
+                   - se.busiest_link_words(fl, icl, ports=False)) < 1e-6
+        assert se.busiest_link_words(fl, icl, kappa=2.0) <= a1 + 1e-9
+    one = [dict(base[1][0])]                     # a single flow
+    assert se.busiest_link_words(one, icl, kappa=4.0) == se.busiest_link_words(one, icl)
+    s1 = sum(b["busiest_words"] for b in W.boundaries(pi, "prefill"))
+    W.port_ratio = 2.0
+    s2 = sum(b["busiest_words"] for b in W.boundaries(pi, "prefill"))
+    W.port_ratio = 1e12
+    s_inf = sum(b["busiest_words"] for b in W.boundaries(pi, "prefill"))
+    del W.port_ratio
+    wire = sum(se.busiest_link_words(fl, icl, ports=False) for fl in base)
+    assert s2 < s1 and s2 >= wire - 1e-6 and abs(s_inf - wire) < 1e-6
+
+
+def lw_boundary_flows(W, pi, phase="prefill"):
+    from scripts import llm_workload as lw
+    base = lw.block_chain(W.cfg, W.S, phase, on_chip=True,
+                          max_dies=W.fab.level("die").per_parent)
+    chain, seating = [], {}
+    for li in range(W.cfg.n_layers):
+        for e in base:
+            n = f"{e['name']}@L{li}"
+            chain.append({**e, "name": n})
+            seating[n] = list(pi.seat[n])
+    fb = lw.block_die_flows(chain, seating, W.fab)
+    return [fb[e["name"]] for e in chain[1:]]
+
+
+def test_s8_kappa_incremental_equals_full():
+    """S8 bug pin: the incremental path (ScoreSession.update) must apply
+    the same port ratio as the full path -- it did not, so at kappa > 1
+    a session mixed kappa-scaled cached boundaries with unscaled
+    recomputed ones and rejected every move from a good start. Checked
+    along engine-generated moves at kappa = 2 and 4, to 1e-12."""
+    import random
+    from scripts import search_baselines as sb
+    from scripts import search_linkage as sl
+    from scripts import search_sa as sa
+    W = se.Workload2p7B()
+    for kappa in (2.0, 4.0):
+        W.port_ratio = kappa
+        pi = sb.generate("random", W, seed=0)
+        J = sl.SessionJ(W, pi, "t", 0.4)
+        rng = random.Random(11)
+        n = 0
+        while n < 5:
+            delta, _ = sa.propose(rng, pi.seat, 576)
+            if delta is None:
+                continue
+            pi = sa.apply_delta(pi, delta)
+            full = se.score(pi, W, caliber="single", d2d_gbps=0.4).t_opt_s
+            assert abs(J(pi) - full) < 1e-12 * full
+            n += 1
+    del W.port_ratio

@@ -25,19 +25,21 @@ import numpy as np
 from scripts import anchors as an
 from scripts import search_eval as se
 from scripts.fig_phase_isobar import (boundaries, spread_contour, _angle_along,
+                                      intra_die_model, intra_die_curves,
                                       SS, S_LO, S_HI, S_REF, SLATE, SLATE_TXT,
                                       BRICK, BRICK_TXT, FILL_TOP, FILL_MID,
                                       FILL_BOT, BAND_TXT, CHIP, CHIP_TXT,
                                       CONTOUR)
 
-OUT_PNG = os.path.join(se.A, "phase_diagram_isobar_print.png")
+from scripts.fig_phase_isobar import KAPPA, package_A, _SFX
+OUT_PNG = os.path.join(se.A, f"phase_diagram_isobar_print{_SFX}.png")
 WIDTH_IN, HEIGHT_IN = 7.16, 3.35             # double column
 FS = dict(title=8.5, axis=8.0, tick=7.0, text=7.0, legend=7.0, ratio=7.5)
 SPREAD = 0.20
 
 
-def panel(ax, a_min, a_max, n_s, f_s, ylim, zones, env_x, short):
-    lo, hi = boundaries(a_min, a_max, n_s, f_s)
+def panel(ax, a_min, a_max, n_s, f_s, ylim, zones, env_x, short, curves=None):
+    lo, hi = boundaries(a_min, a_max, n_s, f_s) if curves is None else curves[:2]
     ax.fill_between(SS, hi, 1e6, color=FILL_TOP, lw=0, zorder=0)
     ax.fill_between(SS, lo, hi, color=FILL_MID, lw=0, zorder=0)
     ax.fill_between(SS, 1e-6, lo, color=FILL_BOT, lw=0, zorder=0)
@@ -45,7 +47,7 @@ def panel(ax, a_min, a_max, n_s, f_s, ylim, zones, env_x, short):
             label=r"$B_+ = \max_{p\in\mathcal{P}} B_c(p)$")
     ax.plot(SS, lo, "-", color=BRICK, lw=1.0, zorder=3,
             label=r"$B_- = \min_{p\in\mathcal{P}} B_c(p)$")
-    bc = spread_contour(SPREAD, a_min, a_max, n_s, f_s)
+    bc = spread_contour(SPREAD, a_min, a_max, n_s, f_s) if curves is None else curves[2]
     ax.plot(SS, bc, ls=(0, (1.2, 2.2)), color=CONTOUR, lw=0.8, zorder=2,
             label="placement latency spread, 20%")
     ax.set_xscale("log")
@@ -93,19 +95,20 @@ def main():
     comp, wr, elw = W.layer_terms_s("prefill")
     L = W.cfg.n_layers
     n_pkg, f_pkg = comp * L, (wr + elw) * L
-    lad = json.load(open(os.path.join(se.A, "ladder_v0.json")))["table_2p7b"]
-    A = {n: r["d2d_busiest_words"] for n, r in lad.items()}
+    A = package_A(W, KAPPA)
     a_min_pkg, a_max_pkg = min(A.values()), max(A.values())
-    a_min_die, a_max_die = 3.146e6, 8.389e6
-    n_die, f_die = 10.3834e-3, 0.36e-6
+    im = intra_die_model()
+    a_min_die, a_max_die = min(im["A"]), max(im["A"])
+    n_die, f_die = max(im["compute_ref_s"].values()), im["fixed_s"]
+    intra_curves = intra_die_curves(SPREAD)
 
     fig, axes = plt.subplots(1, 2, figsize=(WIDTH_IN, HEIGHT_IN))
     fig.subplots_adjust(left=0.075, right=0.99, top=0.92, bottom=0.30,
                         wspace=0.14)
 
     panel(axes[0], a_min_die, a_max_die, n_die, f_die, (1e-2, 1e3),
-          ((0.22, 0.85), 1.5, (0.82, 0.10), (0.02, 0.02)), 6.0,
-          "70 placements")
+                    ((0.22, 0.85), 1.5, (0.82, 0.10), (0.02, 0.02)), 6.0,
+          "70 placements", curves=intra_curves)
     axes[0].set_title("(a) Intra-die placement", fontsize=FS["title"], pad=4)
     axes[0].set_ylabel("link bandwidth per direction (GB/s)",
                        fontsize=FS["axis"], labelpad=2)

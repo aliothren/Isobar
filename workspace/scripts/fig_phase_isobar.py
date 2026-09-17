@@ -32,6 +32,7 @@ links AND ports.
     python3 scripts/fig_phase_isobar.py
 """
 import json
+import math
 import os
 import sys
 
@@ -44,8 +45,10 @@ import numpy as np
 from scripts import anchors as an
 from scripts import search_eval as se
 
-OUT_PNG = os.path.join(se.A, "phase_diagram_isobar.png")
-OUT_JSON = os.path.join(se.A, "phase_diagram_isobar.json")
+KAPPA = float(os.environ.get("ISOBAR_KAPPA", "1"))   # S9: the package panel's port ratio
+_SFX = "" if KAPPA == 1.0 else f"_k{KAPPA:g}"
+OUT_PNG = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.png")
+OUT_JSON = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.json")
 S_LO, S_HI = 0.02, 40.0                     # Mrows/s
 SS = np.geomspace(S_LO, S_HI, 256)
 S_REF = 1.0 / 10.14e-6 / 1e6                # NeuRRAM's rate, Mrows/s
@@ -77,6 +80,68 @@ def spread_contour(level, a_min, a_max, n_scaling_s, fixed_s):
     return ((a_max - a_min) / level - a_min) / r / 1e9
 
 
+_INTRA = {}
+
+
+def intra_die_model():
+    """The intra-die panel's own cost model, read from the A3 enumeration
+    (ffn die, 70 joint seatings): per op t = write + prop + max(compute,
+    serialization(beta)/B). The masking switch is PER OP against ITS OWN
+    compute (5.19 ms for both ffn ops at the NeuRRAM rate) -- not against
+    the die's summed compute, which an earlier version of this panel used
+    (F-FIG1a). Returns the per-seating per-op serialization words, the
+    per-op compute at the reference rate, and the fixed (write + prop)
+    part; A(beta) = max over ops of the serialization words."""
+    if _INTRA:
+        return _INTRA
+    from scripts import analyze_soft_lever as asl
+    from scripts import search_withindie as sw
+    J = sw.WithinDieJ("ffn", "prefill", sw.G_ACTIVE)
+    w2 = asl.REF_WC / an.CYCLE_S
+    seatings = []
+    for _c, _m, seat in J.exhaustive():
+        seatings.append({n: J.a3_ser(n, seat[n]) * w2 for n, _ in J.ops})
+    comp = {n: J.recs[n]["compute_s"] for n, _ in J.ops}
+    fixed = sum(J.recs[n]["write_s"] + (J.recs[n]["latency_s"] - J.recs[n]["write_s"]
+                - max(J.recs[n]["compute_s"], J.recs[n]["serial_s"])) for n, _ in J.ops)
+    _INTRA.update({"seatings": seatings, "compute_ref_s": comp, "fixed_s": fixed,
+                   "A": [max(s.values()) for s in seatings]})
+    return _INTRA
+
+
+def intra_die_curves(level=0.20):
+    """(B_-, B_+, B at spread = level) on the SS grid under the max model.
+    Boundaries: every op masked iff max_op ser/B <= c(s), c(s) = c_ref *
+    s_ref / s (the ops share one compute), so B_c(beta) = A(beta) / c(s).
+    The spread (T_max - T_min)/T_min over the 70 seatings is monotone in
+    B and solved by bisection per s."""
+    m = intra_die_model()
+    c_ref = max(m["compute_ref_s"].values())
+    a_min, a_max = min(m["A"]), max(m["A"])
+    c = c_ref * (S_REF / SS)
+    lo, hi = a_min / c / 1e9, a_max / c / 1e9
+    fixed = m["fixed_s"]
+
+    def spread(cs, B):
+        Ts = [fixed + sum(max(cs, v / B) for v in s.values()) for s in m["seatings"]]
+        return max(Ts) / min(Ts) - 1.0
+
+    bc = np.empty_like(SS)
+    for i, cs in enumerate(c):
+        b_lo, b_hi = lo[i] * 1e9 * 1e-3, hi[i] * 1e9 * 1.5      # bracket in words/s
+        if spread(cs, b_hi) > level:                             # cannot happen: 0 at B+
+            bc[i] = b_hi / 1e9
+            continue
+        for _ in range(60):
+            mid = math.sqrt(b_lo * b_hi)
+            if spread(cs, mid) > level:
+                b_lo = mid
+            else:
+                b_hi = mid
+        bc[i] = math.sqrt(b_lo * b_hi) / 1e9
+    return lo, hi, bc
+
+
 def _angle_along(ax, x0, y0, x1, y1):
     """Screen angle of the segment (x0,y0)-(x1,y1) in data coords."""
     p0 = ax.transData.transform((x0, y0))
@@ -85,8 +150,8 @@ def _angle_along(ax, x0, y0, x1, y1):
 
 
 def draw_panel(ax, a_min, a_max, n_s, f_s, ylim, quantifier, p_desc,
-               zones, env_x):
-    lo, hi = boundaries(a_min, a_max, n_s, f_s)
+               zones, env_x, curves=None):
+    lo, hi = boundaries(a_min, a_max, n_s, f_s) if curves is None else curves[:2]
     ax.fill_between(SS, hi, 1e6, color=FILL_TOP, lw=0, zorder=0)
     ax.fill_between(SS, lo, hi, color=FILL_MID, lw=0, zorder=0)
     ax.fill_between(SS, 1e-6, lo, color=FILL_BOT, lw=0, zorder=0)
@@ -96,7 +161,7 @@ def draw_panel(ax, a_min, a_max, n_s, f_s, ylim, quantifier, p_desc,
             label=r"$B_- = \min_{p\in\mathcal{P}} B_c(p)$")
     contour_labels = []
     for lev in SPREADS:
-        bc = spread_contour(lev, a_min, a_max, n_s, f_s)
+        bc = spread_contour(lev, a_min, a_max, n_s, f_s) if curves is None else curves[2]
         if bc.max() <= 0:
             continue
         ax.plot(SS, bc, ls=(0, (1.2, 2.2)), color=CONTOUR, lw=0.9, zorder=2)
@@ -169,16 +234,37 @@ def axis_only_chips(ax, chips):
                 zorder=8)
 
 
+def package_A(W, kappa):
+    """The seven rules' busiest-resource words at port ratio `kappa`.
+    kappa = 1 reads the pinned ladder (bit-identical to recomputation);
+    any other kappa recomputes through the evaluator with W.port_ratio.
+    The INTRA-die panel never sees kappa: its constants are the A3
+    enumeration's own."""
+    if kappa == 1.0:
+        lad = json.load(open(os.path.join(se.A, "ladder_v0.json")))["table_2p7b"]
+        return {n: r["d2d_busiest_words"] for n, r in lad.items()}
+    from scripts import search_baselines as sb
+    W.port_ratio = kappa
+    A = {}
+    for n in ("sequential", "clustered", "snake", "random", "least_manhattan",
+              "nmap_greedy", "heaviest_first"):
+        sc = se.score(sb.generate(n, W, seed=0), W, caliber="single", d2d_gbps=1.0)
+        A[n] = sc.per_phase["prefill"]["decomp"]["d2d_busiest_words"]
+    del W.port_ratio
+    return A
+
+
 def main():
     W = se.Workload2p7B()
     comp, wr, elw = W.layer_terms_s("prefill")
     L = W.cfg.n_layers
     n_pkg, f_pkg = comp * L, (wr + elw) * L
-    lad = json.load(open(os.path.join(se.A, "ladder_v0.json")))["table_2p7b"]
-    A = {n: r["d2d_busiest_words"] for n, r in lad.items()}
+    A = package_A(W, KAPPA)
     a_min_pkg, a_max_pkg = min(A.values()), max(A.values())
-    a_min_die, a_max_die = 3.146e6, 8.389e6        # ffn die, 70 seatings
-    n_die, f_die = 10.3834e-3, 0.36e-6
+    im = intra_die_model()                          # ffn die, 70 seatings, max model
+    a_min_die, a_max_die = min(im["A"]), max(im["A"])
+    n_die, f_die = max(im["compute_ref_s"].values()), im["fixed_s"]   # PER-OP compute
+    intra_curves = intra_die_curves(SPREADS[0])
 
     fig, axes = plt.subplots(1, 2, figsize=(12.8, 5.0))
     fig.subplots_adjust(left=0.055, right=0.985, top=0.94, bottom=0.235,
@@ -190,9 +276,11 @@ def main():
         "latency object: one die's two co-resident operators\n"
         "(a sub-problem, not the whole model)\n"
         "P = all 70 joint macro seatings, enumerated",
-        ((0.20, 0.86), 1.5, (0.80, 0.13), (0.74, 0.86), (0.015, 0.015)),
-        6.0)
+                ((0.20, 0.86), 1.5, (0.80, 0.13), (0.74, 0.86), (0.015, 0.015)),
+        6.0, curves=intra_curves)
     axes[0].set_title("(a) Intra-die placement", fontsize=9.5)
+    # (the boundaries are the per-op masking thresholds of the max model;
+    # the 20% contour is solved on the enumeration under the same model)
     # hardware-derived reference points, at the PUBLISHED per-link rate
     # (no aggregation): HERMES core-to-core link 3.2 Gbit/s = 0.4 GB/s,
     # MVM 133 ns (1-phase) / 520 ns (4-phase); ISAAC's on-chip NoC as an
@@ -218,7 +306,8 @@ def main():
         axes[1], a_min_pkg, a_max_pkg, n_pkg, f_pkg, (1e-2, 1e3),
         "observed over P: 7 named rules",
         "latency object: whole-model serial prefill (2.7B)\n"
-        "P = the seven named die-seating rules",
+        "P = the seven named die-seating rules"
+        + ("" if KAPPA == 1.0 else f"\nports at {KAPPA:g}$\\times$ the link rate"),
         ((0.22, 0.86), 3.2, (0.80, 0.13), (0.98, 0.66), (0.015, 0.015)),
         14.0)
     axes[1].set_title("(b) Inter-die placement", fontsize=9.5)
@@ -265,17 +354,27 @@ def main():
     fig.savefig(OUT_PNG, dpi=150)
     print(f"figure -> {OUT_PNG}")
 
-    data = {"note": "Isobar Fig.1 rebuild; both axes rates; regions from "
+    data = {"kappa": KAPPA, "note": "Isobar Fig.1 rebuild; both axes rates; regions from "
                     "placement extrema; R includes the non-scaling terms; "
                     "spread contours over the same P",
             "s_ref_mrows_s": S_REF, "spread_contours": list(SPREADS),
-            "within_die": {"quantifier": "certified (exhaustive, 70 seatings "
-                           "of the ffn die)", "a_min_words": a_min_die,
+                        "within_die": {"quantifier": "certified (exhaustive, 70 seatings "
+                           "of the ffn die)",
+                           "model": "per-op max(compute, serialization/B); boundaries = "
+                                    "masking thresholds against the PER-OP compute; spread "
+                                    "contour solved on the enumeration under the same model",
+                           "compute_per_op_ref_s": n_die, "a_min_words": a_min_die,
                            "a_max_words": a_max_die,
                            "ratio": a_max_die / a_min_die,
                            "n_scaling_s": n_die, "fixed_s": f_die,
-                           "B_minus_at_ref_gbps": float(np.interp(S_REF, SS, lo_d)),
-                           "B_plus_at_ref_gbps": float(np.interp(S_REF, SS, hi_d))},
+                                                      "B_minus_at_ref_gbps": float(np.interp(S_REF, SS, lo_d)),
+                           "B_plus_at_ref_gbps": float(np.interp(S_REF, SS, hi_d)),
+                           "B_spread20_at_ref_gbps": float(np.interp(S_REF, SS, intra_curves[2])),
+                           "physical_points": {str(b): ("below B- (communication dominated)"
+                                                        if b < float(np.interp(S_REF, SS, lo_d)) else
+                                                        "above B+ (compute dominated)"
+                                                        if b > float(np.interp(S_REF, SS, hi_d)) else
+                                                        "inside the band") for b in (0.4, 2.0)}},
             "package": {"quantifier": "observed over P (7 named seatings)",
                         "a_min_words": a_min_pkg, "a_max_words": a_max_pkg,
                         "a_min_rule": min(A, key=A.get),
@@ -284,8 +383,14 @@ def main():
                         "n_scaling_s": n_pkg, "fixed_s": f_pkg,
                         "B_minus_at_ref_gbps": float(np.interp(S_REF, SS, lo_p)),
                         "B_plus_at_ref_gbps": float(np.interp(S_REF, SS, hi_p))}}
+    bm, bp = data["package"]["B_minus_at_ref_gbps"], data["package"]["B_plus_at_ref_gbps"]
+    data["package"]["physical_points"] = {
+        str(b): ("below B- (communication dominated)" if b < bm else
+                 "above B+ (compute / fixed-cost dominated)" if b > bp else "inside the band")
+        for b in (0.4, 12.5)}
     json.dump(data, open(OUT_JSON, "w"), indent=1)
     print(f"data -> {OUT_JSON}")
+    print("  physical points:", data["package"]["physical_points"])
     for k in ("within_die", "package"):
         d = data[k]
         print(f"  {k:11} A ratio {d['ratio']:.3f}; at the reference rate "
