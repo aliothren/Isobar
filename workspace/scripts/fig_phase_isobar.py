@@ -48,6 +48,8 @@ from scripts import search_eval as se
 KAPPA = float(os.environ.get("ISOBAR_KAPPA", "1"))   # S9: the package panel's port ratio
 _SFX = "" if KAPPA == 1.0 else f"_k{KAPPA:g}"
 OUT_PNG = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.png")
+OUT_PDF = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.pdf")
+matplotlib.rcParams["pdf.fonttype"] = 42   # embed TrueType: text stays text in the PDF
 OUT_JSON = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.json")
 S_LO, S_HI = 0.02, 40.0                     # Mrows/s
 SS = np.geomspace(S_LO, S_HI, 256)
@@ -149,8 +151,19 @@ def _angle_along(ax, x0, y0, x1, y1):
     return float(np.degrees(np.arctan2(p1[1] - p0[1], p1[0] - p0[0])))
 
 
+# region wording per execution model: the package panel is a serial SUM,
+# so a region says which cost DOMINATES; the intra-die panel is a per-op
+# MAX, so a region says whether communication is EXPOSED or MASKED
+LABELS_SUM = ("compute / fixed-cost\ndominated",
+              "placement decides which dominates",
+              "communication dominated\n(placement sets how severe)")
+LABELS_MAX = ("communication masked",
+              "placement decides what is exposed",
+              "communication exposed\n(placement sets how severe)")
+
+
 def draw_panel(ax, a_min, a_max, n_s, f_s, ylim, quantifier, p_desc,
-               zones, env_x, curves=None):
+               zones, env_x, curves=None, labels=LABELS_SUM):
     lo, hi = boundaries(a_min, a_max, n_s, f_s) if curves is None else curves[:2]
     ax.fill_between(SS, hi, 1e6, color=FILL_TOP, lw=0, zorder=0)
     ax.fill_between(SS, lo, hi, color=FILL_MID, lw=0, zorder=0)
@@ -184,18 +197,18 @@ def draw_panel(ax, a_min, a_max, n_s, f_s, ylim, quantifier, p_desc,
     # region labels: each sits in the visual centre of ITS region; the
     # band label follows the band's own slope
     zc, zm, zk, ze, zp = zones
-    ax.text(*zc, "compute / fixed-cost\ndominated", transform=ax.transAxes,
+    ax.text(*zc, labels[0], transform=ax.transAxes,
             fontsize=8.0, ha="center", va="center", color=SLATE_TXT,
             style="italic", zorder=6)
     m = int(np.searchsorted(SS, zm))
     ym = float(np.sqrt(lo[m] * hi[m]))
     ang = _angle_along(ax, SS[m - 8], float(np.sqrt(lo[m - 8] * hi[m - 8])),
                        SS[m + 8], float(np.sqrt(lo[m + 8] * hi[m + 8])))
-    ax.text(zm, ym, "placement decides which dominates", fontsize=6.6,
+    ax.text(zm, ym, labels[1], fontsize=6.6,
             ha="center", va="center", color=BAND_TXT, style="italic",
             rotation=ang, rotation_mode="anchor", zorder=6,
             bbox=dict(fc=FILL_MID, ec="none", alpha=0.9, pad=0.3))
-    ax.text(*zk, "communication dominated\n(placement sets how severe)",
+    ax.text(*zk, labels[2],
             transform=ax.transAxes, fontsize=8.0, ha="center", va="center",
             color=BRICK_TXT, style="italic", zorder=6)
 
@@ -277,7 +290,7 @@ def main():
         "(a sub-problem, not the whole model)\n"
         "P = all 70 joint macro seatings, enumerated",
                 ((0.20, 0.86), 1.5, (0.80, 0.13), (0.74, 0.86), (0.015, 0.015)),
-        6.0, curves=intra_curves)
+        6.0, curves=intra_curves, labels=LABELS_MAX)
     axes[0].set_title("(a) Intra-die placement", fontsize=9.5)
     # (the boundaries are the per-op masking thresholds of the max model;
     # the 20% contour is solved on the enumeration under the same model)
@@ -295,12 +308,19 @@ def main():
                  "4-phase (open) / 1-phase (filled) MVM", fontsize=6.4,
                  color=CHIP_TXT, ha="center", va="top", zorder=8,
                  linespacing=1.15)
-    s_is = 1.0 / an.chip("isaac").t_mvm_s / 1e6
-    axes[0].plot([s_is], [4.8], marker="D", mfc="white", mec=CHIP, ms=6.5,
-                 mew=1.2, ls="none", zorder=8)
-    axes[0].text(s_is / 1.30, 4.8 * 1.15, "ISAAC, architecture model\n4.8 GB/s",
-                 fontsize=6.4, color=CHIP_TXT, ha="right", va="bottom",
-                 zorder=8, linespacing=1.15)
+    # ISAAC: the paper's OWN per-link figures, re-read 2026-09-18.
+    # Panel (a) = the inter-tile c-mesh link, "a 32-bit link operating at
+    # 1 GHz" (Sec. VIII-B) = 4.0 GB/s; panel (b) = the off-chip
+    # HyperTransport link of Table I, 6.4 GB/s per link and direction.
+    isaac = an.chip("isaac")
+    s_is = 1.0 / isaac.t_mvm_s / 1e6
+    b_is = isaac.ondie_gbps_per_link
+    axes[0].plot([s_is], [b_is], marker="D", mfc=CHIP, mec=CHIP_TXT, ms=6.5,
+                 mew=0.9, ls="none", zorder=8)
+    axes[0].text(s_is * 1.14, b_is / 1.35,
+                 f"ISAAC, inter-tile link\n{b_is:.1f} GB/s", fontsize=6.4,
+                 color=CHIP_TXT, ha="left", va="top", zorder=8,
+                 linespacing=1.15)
 
     lo_p, hi_p = draw_panel(
         axes[1], a_min_pkg, a_max_pkg, n_pkg, f_pkg, (1e-2, 1e3),
@@ -311,9 +331,9 @@ def main():
         ((0.22, 0.86), 3.2, (0.80, 0.13), (0.98, 0.66), (0.015, 0.015)),
         14.0)
     axes[1].set_title("(b) Inter-die placement", fontsize=9.5)
-    # the two chips with no published per-link figure share ONE assumed
-    # exploration range, drawn as thin hollow rectangles in the marker style
-    for key in ("mythic_m1076", "isaac"):
+    # Mythic has no published per-link figure: ONE assumed exploration
+    # range, drawn as a thin capped line in the marker style.
+    for key in ("mythic_m1076",):
         c = an.chip(key)
         sx = 1.0 / c.t_mvm_s / 1e6
         b0, b1 = c.ondie_band
@@ -324,6 +344,13 @@ def main():
                      c.label.split(' (')[0].replace('Mythic AMP ', ''),
                      fontsize=6.4, color=CHIP_TXT, va="top", ha="center",
                      zorder=8)
+    # ISAAC's off-chip link IS published (Table I), so it is a point here
+    axes[1].plot([s_is], [isaac.d2d_gbps], marker="D", mfc=CHIP, mec=CHIP_TXT,
+                 ms=6.5, mew=0.9, ls="none", zorder=8)
+    axes[1].text(s_is * 1.14, isaac.d2d_gbps * 1.10,
+                 f"ISAAC, off-chip link\n{isaac.d2d_gbps:g} GB/s",
+                 fontsize=6.4, color=CHIP_TXT, ha="left", va="bottom",
+                 zorder=8, linespacing=1.15)
     # the two configurations this paper's searches actually evaluated:
     # NeuRRAM's device rate with the two interconnect bandwidths
     for bw in (0.4, 12.5):
@@ -346,12 +373,13 @@ def main():
         r"placement latency spread $(T_{\max}-T_{\min})/T_{\min}$ over the same $\mathcal{P}$",
         "hardware-derived reference point (published parameters projected "
         "onto this instance)",
-        "assumed bandwidth range (no per-link figure published)",
+        "assumed bandwidth range (no per-link figure published)",   # Mythic only
         "systems evaluated in this paper: NeuRRAM device rate, the two "
         "interconnect bandwidths"],
         loc="lower center", ncol=2, fontsize=6.8, frameon=False,
         bbox_to_anchor=(0.5, -0.012))
     fig.savefig(OUT_PNG, dpi=150)
+    fig.savefig(OUT_PDF)   # vector version, same figure
     print(f"figure -> {OUT_PNG}")
 
     data = {"kappa": KAPPA, "note": "Isobar Fig.1 rebuild; both axes rates; regions from "

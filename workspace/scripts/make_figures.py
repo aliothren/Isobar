@@ -89,7 +89,8 @@ STAGES = {
     },
     "scale_tiers": {
         "cmds": [["python3", "analyze_scale_tiers.py"]],
-        "outputs": ["scale_tier_probe.png", "scale_tier_2p7b.png", "scale_combined.png", "scale_tiers.json"],
+        # scale_tier_2p7b.png and scale_combined.png withdrawn 2026-09-18 (figure audit)
+        "outputs": ["scale_tier_probe.png", "scale_tiers.json"],
     },
     "gating": {
         "cmds": [["python3", "analyze_grid_gating.py"]],

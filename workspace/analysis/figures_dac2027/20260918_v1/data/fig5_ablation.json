@@ -1,0 +1,43 @@
+{
+ "protocol": "same feasible space, solver, budget, starts and seeds; only the objective changes; every output re-scored under the system latency",
+ "reference": "median of the resource-aware objective's three endpoints",
+ "cells": {
+  "ours": {
+   "endpoints_T_s": [
+    1.910952588,
+    1.9112809480000001,
+    1.886537968
+   ],
+   "loss_avoided_by_ours_pct": 0.0,
+   "gain_vs_strongest_pct": 10.957997673530551
+  },
+  "wire_only": {
+   "endpoints_T_s": [
+    1.9111137880000002,
+    1.9027601079999996,
+    1.921767128
+   ],
+   "loss_avoided_by_ours_pct": 0.8598893992680878,
+   "gain_vs_strongest_pct": 10.1923349346292
+  },
+  "word_hops": {
+   "endpoints_T_s": [
+    2.1006730680000003,
+    2.123611268,
+    2.136717068
+   ],
+   "loss_avoided_by_ours_pct": 11.350691246729273,
+   "gain_vs_strongest_pct": 0.8511149095475123
+  },
+  "max_hops": {
+   "endpoints_T_s": [
+    2.107711788,
+    2.0980434879999996,
+    2.1101674679999998
+   ],
+   "loss_avoided_by_ours_pct": 11.211304706696446,
+   "gain_vs_strongest_pct": 0.975227475766316
+  }
+ },
+ "strongest_baseline": "random_s3"
+}

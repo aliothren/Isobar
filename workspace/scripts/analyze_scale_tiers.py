@@ -359,9 +359,12 @@ def main():
     fig.suptitle("Tier L — full 2.7B-class model: on-die anchor × seating of the "
                  "block's die-sets (inputs routed producer → consumer, O13)", fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.9])
-    p2 = os.path.join(OUT, "scale_tier_2p7b.png")
-    fig.savefig(p2, dpi=130); plt.close(fig)
-    print(f"PNG -> {p2}")
+    # WITHDRAWN 2026-09-18 (figure audit): this panel drew all three 2.7B
+    # seatings at exactly 1.00x under the pre-correction hand-off term. On
+    # the production instance the same quantity is a 1.97x spread, so the
+    # figure contradicted the current result. The numbers stay in
+    # scale_tiers.json; the PNG is no longer written.
+    plt.close(fig)
 
     # ================= combined figure =================
     sA = anch["results"]["prefill, attention on chip"]["mult"]
@@ -415,9 +418,10 @@ def main():
                  "behind compute (zero-overlap end <= 3%); the energy lever grows from "
                  "0.5% to ~1.5% as operators span dies", fontsize=10.5)
     fig.tight_layout(rect=[0, 0, 1, 0.89])
-    p3 = os.path.join(OUT, "scale_combined.png")
-    fig.savefig(p3, dpi=130); plt.close(fig)
-    print(f"PNG -> {p3}")
+    # WITHDRAWN 2026-09-18 (figure audit): its suptitle was the retired F-L1
+    # claim "every latency lever hides behind compute (zero-overlap end
+    # <= 3%)". The energy half (F-L3/F-L4) stands and lives in the JSON.
+    plt.close(fig)
 
     with open(os.path.join(OUT, "scale_tiers.json"), "w") as f:
         json.dump({"fabric": fabric_mod.provenance(fab), "tierM": tierM, "tierM_v1": tierM_v1,

@@ -199,7 +199,7 @@ def main():
         ax.set_xlim(0, max(vals) * 1.3)
         ax.grid(alpha=0.25, axis="x")
     fig.suptitle("What the layer-to-die assignment changes -- at ANY bandwidth\n"
-                 "(same 24 dies, same mesh, same traffic; only the assignment "
+                 "(same die set, same mesh, same traffic; only the assignment "
                  "differs)", fontsize=11)
     p1 = os.path.join(OUT, "d2d_assignment_impact.png")
     fig.tight_layout(rect=[0, 0, 1, 0.86]); fig.savefig(p1, dpi=130)
@@ -213,7 +213,8 @@ def main():
               "bus (shared interposer)": ("#7b2d8b", "--")}
     for ax, data, title, ylab in (
             (axes[0], single, "SINGLE PASS: one request in flight\n"
-             "transfer hides behind the stack's compute (band: O7 bracket)",
+             "on THIS small chain the transfer stays under the stack's compute;\n"
+             "on the production instance it does not (band: O7 bracket)",
              "stack latency / stall-free"),
             (axes[1], pipe, "PIPELINED: the real serving mode\n"
              "transfer races ONE stage -> the assignment is a throughput lever",

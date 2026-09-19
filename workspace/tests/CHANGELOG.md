@@ -1894,3 +1894,24 @@ optimisation adds, and the certified answer is zero. Fast suite:
 
 - 2026-09-16 test_s8_port_ratio_kappa (tests/test_search_eval.py): the port-capacity ratio kappa = 1 is bit-identical to the standing term, kappa -> inf equals wire-only, a one-flow hand-off is unchanged for any kappa, W.port_ratio threads into boundaries(). Fast suite 434 -> 435.
 - 2026-09-16 test_s8_kappa_incremental_equals_full (tests/test_search_eval.py): the incremental path (ScoreSession.update) applies the same kappa as the full path along engine moves at kappa 2 and 4 -- the bug that had rejected every move from a good start at kappa > 1. Fast suite 435 -> 436.
+
+## 2026-09-18 — ISAAC link rates pinned; two figures withdrawn at source
+
+- `test_anchor_registry.py::test_isaac_published_link_rates` (new, group 23):
+  pins the ISAAC figures as the paper states them, re-read on 2026-09-18 —
+  inter-tile link 4.0 GB/s ("a 32-bit link operating at 1 GHz", Sec. VIII-B)
+  and off-chip HyperTransport link 6.4 GB/s (Table I), plus the source
+  strings. The figures used to draw 4.8 GB/s, from the 32-bit flit times the
+  1.2 GHz TILE clock of Table I's header, and the registry used to claim no
+  per-link figure was published; both were wrong. The (0.4, 8.0) estimated
+  band is pinned as kept, because the standing device-plane figure and
+  `test_anchor_registry.py`'s band rule still use it.
+- `test_make_figures_outputs.py::test_every_declared_stage_output_exists`
+  now covers two fewer outputs: `scale_tier_2p7b.png` and
+  `scale_combined.png` were withdrawn in the figure audit (retired F-L1
+  headline; the 2.7B layout leverage they drew as 1.00x is a 1.97x spread on
+  the production instance). `analyze_scale_tiers.py` still writes
+  `scale_tiers.json`, so no number was lost. `analyze_corner_flip.py`
+  likewise stops writing its PNG (flat 1.00 everywhere, no flip in any
+  condition) and keeps `corner_flip.json`.
+- Suite: 436 -> 437 tests.

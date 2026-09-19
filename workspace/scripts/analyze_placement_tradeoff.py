@@ -191,7 +191,7 @@ def main():
     ax.set_xlim(min(d["latency_s"] for d in rows) * 1e3 * 0.82,
                 max(d["latency_s"] for d in rows) * 1e3 * 1.75)
     ax.set_xlabel("op latency (ms)   -- set by PEAK link occupancy")
-    ax.set_ylabel("system energy (mJ)   -- set by MEAN hop count")
+    ax.set_ylabel("system energy (mJ)   -- set by the routed wire volume")
     sec = ax.secondary_yaxis(
         "right", functions=(lambda y: (y * 1e-3 - res.energy + base_comm) / base_comm,
                             lambda y: (y * base_comm + res.energy - base_comm) * 1e3))
@@ -230,13 +230,14 @@ def main():
     ax.set_xticklabels([d["label"] for d in rows], fontsize=9, rotation=12)
     ax.set_ylabel("traffic on one wire  (in units of one macro's edge)")
     ax.set_ylim(-1.6, max(max(d["loads_x"]) for d in rows) * 1.22)
-    ax.set_title("Latency reads the tallest bar; energy reads the mean hop count\n"
+    ax.set_title("Latency reads the tallest bar; energy reads the total volume\n"
                  "red = the wire that sets the latency; grey = idle capacity",
                  fontsize=11)
     ax.grid(alpha=0.25, axis="y")
     plt.figtext(0.5, 0.012,
-                "Variants with the same mean hop count cost the same energy no "
-                "matter how unevenly their traffic piles up.",
+                "Two variants can pile their traffic very differently and still "
+                "route a similar total volume; the per-scheme wire models keep "
+                "their energies apart.",
                 ha="center", fontsize=8, color="0.35")
     p2 = os.path.join(OUT, "placement_link_loads.png")
     plt.tight_layout(rect=[0, 0.045, 1, 1]); plt.savefig(p2, dpi=130); plt.close()

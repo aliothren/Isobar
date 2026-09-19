@@ -318,8 +318,8 @@ def make_figure(sysd, out):
     ax.set_xticks(x); ax.set_xticklabels(SHORT, fontsize=8.5)
     ax.set_ylabel("one decode token (ms)")
     worst_dec = max(v["mult"] for v in dec_B.values())
-    ax.set_title("Decode: the write block hid the network;\n"
-                 f"offload removes it and {worst_dec:.1f}x appears",
+    ax.set_title("Decode: even with the write block removed,\n"
+                 f"the on-die network stays at {worst_dec:.1f}x",
                  fontsize=10)
     ax.legend(fontsize=8); ax.grid(alpha=0.25, axis="y")
 
@@ -360,8 +360,7 @@ def make_figure(sysd, out):
                  "network is not the bottleneck", fontsize=10)
     ax.legend(fontsize=8, loc="center right"); ax.grid(alpha=0.25, axis="y")
 
-    fig.suptitle("Offloading attention removes the two shields that kept the "
-                 "network invisible", fontsize=12)
+    fig.suptitle("What offloading attention changes, per condition", fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.92])
     path = os.path.join(OUT, "offload_contention.png")
     fig.savefig(path, dpi=130); plt.close(fig)
@@ -493,8 +492,8 @@ def make_placement_figures(sysd, out):
             ax.text(i, v + max(es) * 0.02, f"{v:.2f}", ha="center",
                     fontsize=10, fontweight="bold")
         spread = (max(es) - min(es)) / min(es) * 100
-        ax.text(1, max(es) * 1.14, f"spread: +{spread:.2f}% -- energy does "
-                "not care", ha="center", fontsize=10, color="0.35",
+        ax.text(1, max(es) * 1.14, f"spread: +{spread:.2f}% over THESE three "
+                "chain-like seatings", ha="center", fontsize=10, color="0.35",
                 fontweight="bold")
         ax.set_ylim(0, max(es) * 1.28)
         ax.set_xticks(range(3))

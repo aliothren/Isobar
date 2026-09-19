@@ -1,0 +1,1021 @@
+{
+ "run_id": "20260918_v1",
+ "generator": "scripts/plot_dac2027_v1.py",
+ "preexisting_outputs_check": {
+  "note": "figures that already existed in analysis/ at the start of this run; this generator writes only inside its own run directory, so every one of these is expected to be byte-identical after it",
+  "count": 72,
+  "files": [
+   {
+    "file": "analysis/SUMMARY.pdf",
+    "bytes": 504127,
+    "sha256": "229dc37441ff0efb"
+   },
+   {
+    "file": "analysis/a_bandwidth_slices.png",
+    "bytes": 110437,
+    "sha256": "9fa8bc0235a8c2dd"
+   },
+   {
+    "file": "analysis/anchored_band.png",
+    "bytes": 159933,
+    "sha256": "51be780c1dc99bf6"
+   },
+   {
+    "file": "analysis/anchored_sweep.png",
+    "bytes": 87106,
+    "sha256": "d4e1201a42c72a61"
+   },
+   {
+    "file": "analysis/attention_share_vs_seqlen.png",
+    "bytes": 54675,
+    "sha256": "eccf9537ceadc975"
+   },
+   {
+    "file": "analysis/b_fanout_search.png",
+    "bytes": 58356,
+    "sha256": "903e46e2925c98b6"
+   },
+   {
+    "file": "analysis/bandwidth_sweep.png",
+    "bytes": 80551,
+    "sha256": "d12aa616e0377b96"
+   },
+   {
+    "file": "analysis/bw_slice_k2.png",
+    "bytes": 70173,
+    "sha256": "8c560f783858dfe9"
+   },
+   {
+    "file": "analysis/check_c_crosstraffic.png",
+    "bytes": 87062,
+    "sha256": "5e3a18f06d57f14b"
+   },
+   {
+    "file": "analysis/cmesh_concentration.png",
+    "bytes": 81914,
+    "sha256": "59daf27282c76f74"
+   },
+   {
+    "file": "analysis/condition_axes.png",
+    "bytes": 137403,
+    "sha256": "9e6969c4f18765ff"
+   },
+   {
+    "file": "analysis/contention_by_layout.png",
+    "bytes": 85747,
+    "sha256": "4511dffc108df829"
+   },
+   {
+    "file": "analysis/contention_by_scheme.png",
+    "bytes": 89591,
+    "sha256": "4e8b1887b253fb43"
+   },
+   {
+    "file": "analysis/contention_segment_map.png",
+    "bytes": 43629,
+    "sha256": "3adc1e2a79d6f15e"
+   },
+   {
+    "file": "analysis/contention_segment_map_3x3.png",
+    "bytes": 44950,
+    "sha256": "256d9ce63e1cb805"
+   },
+   {
+    "file": "analysis/contention_system.png",
+    "bytes": 114845,
+    "sha256": "583406d6bedfa132"
+   },
+   {
+    "file": "analysis/crossbar_comm_heatmap.png",
+    "bytes": 59143,
+    "sha256": "c5d7d7aeb0119165"
+   },
+   {
+    "file": "analysis/crossbar_comm_heatmap_3x3.png",
+    "bytes": 63406,
+    "sha256": "2cfaa3f35d1a4377"
+   },
+   {
+    "file": "analysis/crossbar_value_device_compare.png",
+    "bytes": 127373,
+    "sha256": "5b4205eacb45bdc9"
+   },
+   {
+    "file": "analysis/d2d_assignment_impact.png",
+    "bytes": 64171,
+    "sha256": "16e41fdedcb8581b"
+   },
+   {
+    "file": "analysis/d2d_energy_column.png",
+    "bytes": 239825,
+    "sha256": "598eec838649b415"
+   },
+   {
+    "file": "analysis/d2d_regimes.png",
+    "bytes": 150766,
+    "sha256": "7adeedabfedb7e9e"
+   },
+   {
+    "file": "analysis/d2d_segment_map.png",
+    "bytes": 71698,
+    "sha256": "238934181d243467"
+   },
+   {
+    "file": "analysis/device_fixed_terms.png",
+    "bytes": 342027,
+    "sha256": "e8628af5095baf49"
+   },
+   {
+    "file": "analysis/device_plane.png",
+    "bytes": 362495,
+    "sha256": "ef7a6287aa8228c4"
+   },
+   {
+    "file": "analysis/device_plane_collapse.png",
+    "bytes": 137673,
+    "sha256": "8e6eab8d54fd1c55"
+   },
+   {
+    "file": "analysis/digital_sensitivity.png",
+    "bytes": 122056,
+    "sha256": "8c89b20f0b3c5e95"
+   },
+   {
+    "file": "analysis/energy_vs_latency.png",
+    "bytes": 65050,
+    "sha256": "3bad46001532a076"
+   },
+   {
+    "file": "analysis/energy_with_without_kv.png",
+    "bytes": 61582,
+    "sha256": "d5f554da1121d8ab"
+   },
+   {
+    "file": "analysis/express_price_curve.png",
+    "bytes": 69657,
+    "sha256": "3cf7f829e1b0e6fd"
+   },
+   {
+    "file": "analysis/gpt2_system_comparison_decode.png",
+    "bytes": 89726,
+    "sha256": "96949a41b79bc075"
+   },
+   {
+    "file": "analysis/gpt2_system_comparison_prefill.png",
+    "bytes": 83043,
+    "sha256": "8d0ab6016e3612ed"
+   },
+   {
+    "file": "analysis/grid_gating.png",
+    "bytes": 99016,
+    "sha256": "72d9f80c667b4286"
+   },
+   {
+    "file": "analysis/hier_wide_fidelity.png",
+    "bytes": 54924,
+    "sha256": "a74a073908b07f63"
+   },
+   {
+    "file": "analysis/kappa_geometry_sweep.png",
+    "bytes": 115952,
+    "sha256": "9a9af4b7ad66e58b"
+   },
+   {
+    "file": "analysis/kv_cache_vs_genlen.png",
+    "bytes": 60087,
+    "sha256": "5ec63051b948afc8"
+   },
+   {
+    "file": "analysis/ladder_v0.png",
+    "bytes": 128587,
+    "sha256": "187c69025071a908"
+   },
+   {
+    "file": "analysis/mechanism_ablation.png",
+    "bytes": 122328,
+    "sha256": "3f0e9e4d482c3e88"
+   },
+   {
+    "file": "analysis/offload_contention.png",
+    "bytes": 135162,
+    "sha256": "72e2a3070613f2a8"
+   },
+   {
+    "file": "analysis/offload_unit_sensitivity.png",
+    "bytes": 139440,
+    "sha256": "9fce8d8b1cab5e06"
+   },
+   {
+    "file": "analysis/phase_diagram.png",
+    "bytes": 486864,
+    "sha256": "1abe6d84998c62c2"
+   },
+   {
+    "file": "analysis/phase_diagram_gray.png",
+    "bytes": 137773,
+    "sha256": "b9e0b1346d19070a"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar.pdf",
+    "bytes": 54398,
+    "sha256": "5f3f88de802d9738"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar.png",
+    "bytes": 225750,
+    "sha256": "6b4372b2d2da01d2"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar_k2.pdf",
+    "bytes": 54549,
+    "sha256": "f9ba794fed15e66b"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar_k2.png",
+    "bytes": 229383,
+    "sha256": "efde9bc28e6462ce"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar_print.pdf",
+    "bytes": 50771,
+    "sha256": "a73b9d063b59059b"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar_print.png",
+    "bytes": 288982,
+    "sha256": "6b5f254defc75afa"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar_print_k2.pdf",
+    "bytes": 50700,
+    "sha256": "3ec5335135449cb0"
+   },
+   {
+    "file": "analysis/phase_diagram_isobar_print_k2.png",
+    "bytes": 288712,
+    "sha256": "46ba10ec8f068814"
+   },
+   {
+    "file": "analysis/placement_energy_latency.png",
+    "bytes": 106041,
+    "sha256": "c6b36ad82f390fa5"
+   },
+   {
+    "file": "analysis/placement_impact_offload.png",
+    "bytes": 128614,
+    "sha256": "ff15c4f40bef8032"
+   },
+   {
+    "file": "analysis/placement_impact_onchip.png",
+    "bytes": 129316,
+    "sha256": "1e3f4e2bb47c79eb"
+   },
+   {
+    "file": "analysis/placement_link_loads.png",
+    "bytes": 89202,
+    "sha256": "36d57009c071215c"
+   },
+   {
+    "file": "analysis/region_locality_vw.png",
+    "bytes": 73056,
+    "sha256": "ed16c0bb58997d65"
+   },
+   {
+    "file": "analysis/resnet18_settings_compare.png",
+    "bytes": 54707,
+    "sha256": "a243a54d0a1f01de"
+   },
+   {
+    "file": "analysis/routing_params.png",
+    "bytes": 56516,
+    "sha256": "719dd304c03fee8c"
+   },
+   {
+    "file": "analysis/scale_tier_probe.png",
+    "bytes": 89236,
+    "sha256": "30ae07ab2233a263"
+   },
+   {
+    "file": "analysis/scaling_law_vds.png",
+    "bytes": 114984,
+    "sha256": "2dc831f641e4ab86"
+   },
+   {
+    "file": "analysis/search_ordering.png",
+    "bytes": 80751,
+    "sha256": "6fe115d329f4f7bb"
+   },
+   {
+    "file": "analysis/search_s6.png",
+    "bytes": 95734,
+    "sha256": "0773084ddb53b333"
+   },
+   {
+    "file": "analysis/seating_seeds_k2.png",
+    "bytes": 143803,
+    "sha256": "19d59f54c4e51b53"
+   },
+   {
+    "file": "analysis/simba_validation.png",
+    "bytes": 288038,
+    "sha256": "9feda30f988e9076"
+   },
+   {
+    "file": "analysis/simba_validation_color.png",
+    "bytes": 225776,
+    "sha256": "7bcf278058a34325"
+   },
+   {
+    "file": "analysis/sweep_axis_d2d_2p7b.png",
+    "bytes": 245445,
+    "sha256": "f3fc285da85a324d"
+   },
+   {
+    "file": "analysis/sweep_axis_d2d_355m.png",
+    "bytes": 346647,
+    "sha256": "4d8fa5bcc74bccbc"
+   },
+   {
+    "file": "analysis/sweep_axis_d2d_probe.png",
+    "bytes": 100332,
+    "sha256": "fde8a750bcf68b18"
+   },
+   {
+    "file": "analysis/sweep_axis_ondie.png",
+    "bytes": 351194,
+    "sha256": "f87059d8e0b048ea"
+   },
+   {
+    "file": "analysis/sweep_axis_t1_hub.png",
+    "bytes": 134877,
+    "sha256": "9f0aadd208acf6f6"
+   },
+   {
+    "file": "analysis/sweep_axis_unit_link.png",
+    "bytes": 94355,
+    "sha256": "cfb400b92c824b33"
+   },
+   {
+    "file": "analysis/switch_ordering.png",
+    "bytes": 63585,
+    "sha256": "5ab943130f007070"
+   },
+   {
+    "file": "analysis/weave_inversion.png",
+    "bytes": 94401,
+    "sha256": "d014100590143ff1"
+   }
+  ]
+ },
+ "command": "scripts/plot_dac2027_v1.py --run-id 20260918_v1",
+ "configuration": {
+  "model": "2.7B class (d 2560, d_ff 10240, 32 layers)",
+  "phase": "prefill",
+  "sequence_length": 512,
+  "dies": "544 of 576",
+  "grid": "24x24 mesh, XY",
+  "row_time_s": 1.014e-05,
+  "kappa": 2.0,
+  "link_gbps": 0.4,
+  "contrast_link_gbps": 12.5
+ },
+ "delta_convention": "change = (value / reference - 1) x 100%",
+ "products": [
+  {
+   "name": "fig1a_intra_die_phase",
+   "kind": "panels",
+   "files": [
+    "panels/fig1a_intra_die_phase.pdf",
+    "panels/fig1a_intra_die_phase.svg",
+    "preview/fig1a_intra_die_phase.png"
+   ],
+   "sources": [
+    "scripts/fig_phase_isobar.py",
+    "analysis/phase_diagram_isobar_k2.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig1b_inter_die_phase",
+   "kind": "panels",
+   "files": [
+    "panels/fig1b_inter_die_phase.pdf",
+    "panels/fig1b_inter_die_phase.svg",
+    "preview/fig1b_inter_die_phase.png"
+   ],
+   "sources": [
+    "scripts/fig_phase_isobar.py",
+    "analysis/phase_diagram_isobar_k2.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig1_phase_diagram",
+   "kind": "composites",
+   "files": [
+    "composites/fig1_phase_diagram.pdf",
+    "composites/fig1_phase_diagram.svg",
+    "preview/fig1_phase_diagram.png"
+   ],
+   "sources": [
+    "scripts/fig_phase_isobar.py",
+    "analysis/phase_diagram_isobar_k2.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig1_boundaries",
+   "kind": "data",
+   "files": [
+    "data/fig1_boundaries.json"
+   ],
+   "sources": [
+    "scripts/fig_phase_isobar.py",
+    "analysis/phase_diagram_isobar_k2.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig2_platform_workflow",
+   "kind": "panels",
+   "files": [
+    "panels/fig2_platform_workflow.pdf",
+    "panels/fig2_platform_workflow.svg",
+    "preview/fig2_platform_workflow.png"
+   ],
+   "sources": [
+    "schematic"
+   ],
+   "note": "schematic; carries no experimental numbers"
+  },
+  {
+   "name": "fig3_external_validation",
+   "kind": "composites",
+   "files": [
+    "composites/fig3_external_validation.pdf",
+    "composites/fig3_external_validation.svg",
+    "preview/fig3_external_validation.png"
+   ],
+   "sources": [
+    "analysis/simba_t1.json",
+    "analysis/b_fanout_24x24_rerank.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig3a_silicon_placement",
+   "kind": "panels",
+   "files": [
+    "panels/fig3a_silicon_placement.pdf",
+    "panels/fig3a_silicon_placement.svg",
+    "preview/fig3a_silicon_placement.png"
+   ],
+   "sources": [
+    "analysis/simba_t1.json",
+    "analysis/b_fanout_24x24_rerank.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig3b_packet_ranking",
+   "kind": "panels",
+   "files": [
+    "panels/fig3b_packet_ranking.pdf",
+    "panels/fig3b_packet_ranking.svg",
+    "preview/fig3b_packet_ranking.png"
+   ],
+   "sources": [
+    "analysis/simba_t1.json",
+    "analysis/b_fanout_24x24_rerank.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig3_silicon_t1",
+   "kind": "data",
+   "files": [
+    "data/fig3_silicon_t1.csv"
+   ],
+   "sources": [
+    "analysis/simba_t1.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig3_packet_ranking",
+   "kind": "data",
+   "files": [
+    "data/fig3_packet_ranking.csv"
+   ],
+   "sources": [
+    "analysis/b_fanout_24x24_rerank.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig3_efficiency",
+   "kind": "data",
+   "files": [
+    "data/fig3_efficiency.json"
+   ],
+   "sources": [
+    "analysis/FIXLIST.en.md"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig4_deployment_gain",
+   "kind": "composites",
+   "files": [
+    "composites/fig4_deployment_gain.pdf",
+    "composites/fig4_deployment_gain.svg",
+    "preview/fig4_deployment_gain.png"
+   ],
+   "sources": [
+    "analysis/mechanism_table.json",
+    "analysis/energy_export.json",
+    "analysis/intra_die_integration.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig4a_latency_breakdown",
+   "kind": "panels",
+   "files": [
+    "panels/fig4a_latency_breakdown.pdf",
+    "panels/fig4a_latency_breakdown.svg",
+    "preview/fig4a_latency_breakdown.png"
+   ],
+   "sources": [
+    "analysis/mechanism_table.json",
+    "analysis/energy_export.json",
+    "analysis/intra_die_integration.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig4b_latency_energy",
+   "kind": "panels",
+   "files": [
+    "panels/fig4b_latency_energy.pdf",
+    "panels/fig4b_latency_energy.svg",
+    "preview/fig4b_latency_energy.png"
+   ],
+   "sources": [
+    "analysis/mechanism_table.json",
+    "analysis/energy_export.json",
+    "analysis/intra_die_integration.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig4c_intra_die_layer",
+   "kind": "panels",
+   "files": [
+    "panels/fig4c_intra_die_layer.pdf",
+    "panels/fig4c_intra_die_layer.svg",
+    "preview/fig4c_intra_die_layer.png"
+   ],
+   "sources": [
+    "analysis/mechanism_table.json",
+    "analysis/energy_export.json",
+    "analysis/intra_die_integration.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig4_layouts",
+   "kind": "data",
+   "files": [
+    "data/fig4_layouts.csv"
+   ],
+   "sources": [
+    "analysis/mechanism_table.json",
+    "analysis/energy_export.json",
+    "analysis/intra_die_integration.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig4_readings",
+   "kind": "data",
+   "files": [
+    "data/fig4_readings.json"
+   ],
+   "sources": [
+    "analysis/mechanism_table.json",
+    "analysis/energy_export.json",
+    "analysis/intra_die_integration.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_network_triptych",
+   "kind": "composites",
+   "files": [
+    "composites/fig5_network_triptych.pdf",
+    "composites/fig5_network_triptych.svg",
+    "preview/fig5_network_triptych.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)",
+    "analysis/kappa_geometry_sweep.json"
+   ],
+   "note": "stage ffn2@L2; illustrative hand-off, not an average stage; each bar is the busier of the adjacency's two directions"
+  },
+  {
+   "name": "fig5_network_triptych_least_manhattan",
+   "kind": "composites",
+   "files": [
+    "composites/fig5_network_triptych_least_manhattan.pdf",
+    "composites/fig5_network_triptych_least_manhattan.svg",
+    "preview/fig5_network_triptych_least_manhattan.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)",
+    "analysis/kappa_geometry_sweep.json"
+   ],
+   "note": "stage ffn2@L2; illustrative hand-off, not an average stage; each bar is the busier of the adjacency's two directions"
+  },
+  {
+   "name": "fig5_network_triptych_directed",
+   "kind": "composites",
+   "files": [
+    "composites/fig5_network_triptych_directed.pdf",
+    "composites/fig5_network_triptych_directed.svg",
+    "preview/fig5_network_triptych_directed.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)",
+    "analysis/kappa_geometry_sweep.json"
+   ],
+   "note": "stage ffn2@L2; illustrative hand-off, not an average stage; both directions of every adjacency drawn as two offset bars"
+  },
+  {
+   "name": "fig5_network_clustered",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_clustered.pdf",
+    "panels/fig5_network_clustered.svg",
+    "preview/fig5_network_clustered.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig5_network_random_s3",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_random_s3.pdf",
+    "panels/fig5_network_random_s3.svg",
+    "preview/fig5_network_random_s3.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig5_network_sa_random_s1",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_sa_random_s1.pdf",
+    "panels/fig5_network_sa_random_s1.svg",
+    "preview/fig5_network_sa_random_s1.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig5_network_least_manhattan",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_least_manhattan.pdf",
+    "panels/fig5_network_least_manhattan.svg",
+    "preview/fig5_network_least_manhattan.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig5_network_clustered_zoom",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_clustered_zoom.pdf",
+    "panels/fig5_network_clustered_zoom.svg",
+    "preview/fig5_network_clustered_zoom.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": "detail view; distances are not comparable across panels without the full grid"
+  },
+  {
+   "name": "fig5_network_random_s3_zoom",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_random_s3_zoom.pdf",
+    "panels/fig5_network_random_s3_zoom.svg",
+    "preview/fig5_network_random_s3_zoom.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": "detail view; distances are not comparable across panels without the full grid"
+  },
+  {
+   "name": "fig5_network_sa_random_s1_zoom",
+   "kind": "panels",
+   "files": [
+    "panels/fig5_network_sa_random_s1_zoom.pdf",
+    "panels/fig5_network_sa_random_s1_zoom.svg",
+    "preview/fig5_network_sa_random_s1_zoom.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": "detail view; distances are not comparable across panels without the full grid"
+  },
+  {
+   "name": "fig5d_objective_ablation",
+   "kind": "panels",
+   "files": [
+    "panels/fig5d_objective_ablation.pdf",
+    "panels/fig5d_objective_ablation.svg",
+    "preview/fig5d_objective_ablation.png"
+   ],
+   "sources": [
+    "analysis/objective_ablation_k2.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig5_network_and_ablation",
+   "kind": "composites",
+   "files": [
+    "composites/fig5_network_and_ablation.pdf",
+    "composites/fig5_network_and_ablation.svg",
+    "preview/fig5_network_and_ablation.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)",
+    "analysis/objective_ablation_k2.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig5_stage_readings",
+   "kind": "data",
+   "files": [
+    "data/fig5_stage_readings.json"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_links_clustered",
+   "kind": "data",
+   "files": [
+    "data/fig5_links_clustered.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_ports_clustered",
+   "kind": "data",
+   "files": [
+    "data/fig5_ports_clustered.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_endpoints_clustered",
+   "kind": "data",
+   "files": [
+    "data/fig5_endpoints_clustered.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_links_random_s3",
+   "kind": "data",
+   "files": [
+    "data/fig5_links_random_s3.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_ports_random_s3",
+   "kind": "data",
+   "files": [
+    "data/fig5_ports_random_s3.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_endpoints_random_s3",
+   "kind": "data",
+   "files": [
+    "data/fig5_endpoints_random_s3.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_links_sa_random_s1",
+   "kind": "data",
+   "files": [
+    "data/fig5_links_sa_random_s1.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_ports_sa_random_s1",
+   "kind": "data",
+   "files": [
+    "data/fig5_ports_sa_random_s1.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_endpoints_sa_random_s1",
+   "kind": "data",
+   "files": [
+    "data/fig5_endpoints_sa_random_s1.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_links_least_manhattan",
+   "kind": "data",
+   "files": [
+    "data/fig5_links_least_manhattan.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_ports_least_manhattan",
+   "kind": "data",
+   "files": [
+    "data/fig5_ports_least_manhattan.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_endpoints_least_manhattan",
+   "kind": "data",
+   "files": [
+    "data/fig5_endpoints_least_manhattan.csv"
+   ],
+   "sources": [],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig5_ablation",
+   "kind": "data",
+   "files": [
+    "data/fig5_ablation.json"
+   ],
+   "sources": [
+    "analysis/objective_ablation_k2.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig6_conditions",
+   "kind": "composites",
+   "files": [
+    "composites/fig6_conditions.pdf",
+    "composites/fig6_conditions.svg",
+    "preview/fig6_conditions.png"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json",
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6a_bandwidth_slice",
+   "kind": "panels",
+   "files": [
+    "panels/fig6a_bandwidth_slice.pdf",
+    "panels/fig6a_bandwidth_slice.svg",
+    "preview/fig6a_bandwidth_slice.png"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json",
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6a_bandwidth_slice_with_share",
+   "kind": "panels",
+   "files": [
+    "panels/fig6a_bandwidth_slice_with_share.pdf",
+    "panels/fig6a_bandwidth_slice_with_share.svg",
+    "preview/fig6a_bandwidth_slice_with_share.png"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json",
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6b_kappa_geometry",
+   "kind": "panels",
+   "files": [
+    "panels/fig6b_kappa_geometry.pdf",
+    "panels/fig6b_kappa_geometry.svg",
+    "preview/fig6b_kappa_geometry.png"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json",
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6b_kappa_geometry_12p5",
+   "kind": "panels",
+   "files": [
+    "panels/fig6b_kappa_geometry_12p5.pdf",
+    "panels/fig6b_kappa_geometry_12p5.svg",
+    "preview/fig6b_kappa_geometry_12p5.png"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json",
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6c_prefill_decode",
+   "kind": "panels",
+   "files": [
+    "panels/fig6c_prefill_decode.pdf",
+    "panels/fig6c_prefill_decode.svg",
+    "preview/fig6c_prefill_decode.png"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json",
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/main_config_results.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6_bandwidth_slice",
+   "kind": "data",
+   "files": [
+    "data/fig6_bandwidth_slice.csv"
+   ],
+   "sources": [
+    "analysis/bw_slice_k2.json"
+   ],
+   "note": "plotting data"
+  },
+  {
+   "name": "fig6_kappa_geometry",
+   "kind": "data",
+   "files": [
+    "data/fig6_kappa_geometry.csv"
+   ],
+   "sources": [
+    "analysis/kappa_geometry_sweep.json"
+   ],
+   "note": "plotting data"
+  }
+ ]
+}

@@ -219,8 +219,8 @@ def main():
     sweep_fig(B, "The floorplan decides it too, once contention is modelled\n"
                  "(identical traffic, identical mesh NoC -- only the layout differs)",
               os.path.join(OUT, "contention_by_layout.png"),
-              "Moving the glb to a corner, or stretching the die to 2x4, funnels "
-              "more macros' traffic onto one wire.")
+              "On the 2x4 production grid corner and centre are identical (1.00x):\n"
+              "a 2-wide grid keeps half the macros in the hub's column either way.")
 
     # ------------------------------------------------ C: segment load maps
     draw_segment_maps()

@@ -685,11 +685,19 @@ regression-checked after all the recent plumbing: spreads reproduce at
 unseeded random CNN sample inputs, not from code).
 
 Scale-study figures: `anchored_sweep.png` (tier S), `scale_tier_probe.png`
-(tier M), `scale_tier_2p7b.png` (tier L), `scale_combined.png` (all three).
+(tier M).
 
 ![tier M](scale_tier_probe.png)
-![tier L](scale_tier_2p7b.png)
-![layout leverage vs scale](scale_combined.png)
+
+**Withdrawn 2026-09-18.** `scale_tier_2p7b.png` and `scale_combined.png`
+were deleted in the figure audit. Both drew the 2.7B layout leverage as
+1.00x under the pre-correction hand-off term, and both carried the retired
+F-L1 headline "every latency lever hides behind compute". On the
+production instance the same quantity is now a 1.97x spread (4192.5 ms for
+the default stacked fill against 2118.7 ms for the strongest baseline), so
+the figures contradicted the current result rather than dating it. The
+paragraph above them is kept for the record; the current statement of
+layout leverage across scale lives in the main-configuration results.
 
 ### 6.2 Ratio two: per-die compute time ÷ hand-off time
 

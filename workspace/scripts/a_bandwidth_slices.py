@@ -142,8 +142,9 @@ def main():
     ax.set_xscale("log")
     ax.set_xlabel("link bandwidth per direction (GB/s)")
     ax.set_ylabel("whole-model latency reduction (%)")
-    ax.set_title("Instance A across bandwidth: achieved gain = the port-floor "
-                 "ceiling at every point", fontsize=9)
+    ax.set_title("Instance A (the port-floor instance, ports at the link rate, "
+                 "kappa = 1):\nthe achieved gain IS the port-floor ceiling at every "
+                 "bandwidth", fontsize=9)
     ax.grid(alpha=0.2, which="both")
     ax.legend(fontsize=6.5)
     fig.tight_layout()

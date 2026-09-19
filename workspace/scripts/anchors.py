@@ -265,7 +265,19 @@ CHIPS = [
               "mesh", "Shafiee et al., ISCA 2016",
               t_mvm_s=16 * 100e-9, t_mvm_status="design-point",
               t_mvm_derivation="16 one-bit input slices x 100 ns per crossbar read",
-              ondie_band=(0.4, 8.0), ondie_status="estimated (the paper sizes a 32 nm c-mesh, no per-link figure)"),
+              ondie_gbps_per_link=4.0,
+              ondie_band=(0.4, 8.0),
+              ondie_status="estimated band at OUR per-macro granularity, kept for the standing "
+                           "device-plane figure; the paper DOES publish a per-link figure and it is "
+                           "recorded in ondie_gbps_per_link: 'we estimate that the inter-tile link "
+                           "bandwidth requirement never exceeds 3.2 GB/s. We therefore conservatively "
+                           "assume a 32-bit link operating at 1 GHz' (Sec. VIII-B) = 4.0 GB/s, with "
+                           "the c-mesh flit width set to 32 bits (Sec. VIII-A). The earlier note "
+                           "'no per-link figure' was wrong (re-read of the paper, 2026-09-18)",
+              d2d_gbps=6.4,
+              d2d_status="design-point (published, Table I): 'Hyper Tr links/freq 4/1.6GHz, link bw "
+                         "6.4 GB/s' -- the off-chip HyperTransport link model adopted from DaDianNao, "
+                         "per link and per direction; chip-to-chip on a board, not in-package D2D"),
     ChipPoint("mx100", "TetraMem MX100",
               "10 NPUs + RISC-V + DMA engine + shared SRAM (512 KB + 1 MB), 65 nm; shared medium, no per-link bandwidth",
               "bus-T1", "TetraMem, arXiv:2410.14882",

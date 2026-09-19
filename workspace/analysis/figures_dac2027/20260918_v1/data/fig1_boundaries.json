@@ -1,0 +1,29 @@
+{
+ "kappa": 2.0,
+ "reference_row_time_s": 1.014e-05,
+ "intra_die": {
+  "A_min_words": 3145728.0,
+  "A_max_words": 8388608.0,
+  "envelope": 2.6666666666666665,
+  "B_minus_gbps_at_ref": 0.6144581493980674,
+  "B_plus_gbps_at_ref": 1.6385550650615135,
+  "per_op_compute_s": 0.00519168,
+  "n_placements": 70
+ },
+ "inter_die": {
+  "A_min_words": 492765184.0,
+  "A_max_words": 1308557312.0,
+  "envelope": 2.655539300438888,
+  "B_minus_gbps_at_ref": 0.5414470338446646,
+  "B_plus_gbps_at_ref": 1.437833877480572,
+  "A_by_rule_words": {
+   "sequential": 1308557312.0,
+   "clustered": 651689984.0,
+   "snake": 1274216448.0,
+   "random": 492765184.0,
+   "least_manhattan": 494206976.0,
+   "nmap_greedy": 512622592.0,
+   "heaviest_first": 595460096.0
+  }
+ }
+}

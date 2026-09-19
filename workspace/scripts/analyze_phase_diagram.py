@@ -146,7 +146,16 @@ def main():
             continue
         x = c.t_mvm_s * 1e6
         short = c.label.split(" (")[0].replace("Mythic AMP M1076", "Mythic M1076")
-        if c.ondie_gbps is not None:                 # HERMES, normalized to our granularity (C37)
+        if c.key == "isaac" and c.ondie_gbps_per_link:
+            # published inter-tile link, re-read from the paper 2026-09-18
+            ax.plot([x], [c.ondie_gbps_per_link], marker="s", color="0.1",
+                    mfc="0.1", ms=6, zorder=5)
+            ax.text(x * 1.22, c.ondie_gbps_per_link * 0.72,
+                    f"{short}\n[inter-tile link {c.ondie_gbps_per_link:g} GB/s published;\n"
+                    f"off-chip link {c.d2d_gbps:g} GB/s (Table I)]",
+                    fontsize=5.8, va="top", color="0.1", zorder=6,
+                    bbox=dict(fc="white", ec="none", alpha=0.8, pad=0.6))
+        elif c.ondie_gbps is not None:               # HERMES, normalized to our granularity (C37)
             ax.plot([x], [c.ondie_gbps], marker="s", color="0.1", mfc="0.1", ms=6, zorder=5)
             ax.text(x * 1.22, c.ondie_gbps * 0.72,
                     f"{short}\n[supply ~{c.ondie_gbps:.0f} GB/s per 32-array group\n"

@@ -33,12 +33,21 @@ from scripts.fig_phase_isobar import (boundaries, spread_contour, _angle_along,
 
 from scripts.fig_phase_isobar import KAPPA, package_A, _SFX
 OUT_PNG = os.path.join(se.A, f"phase_diagram_isobar_print{_SFX}.png")
+OUT_PDF = os.path.join(se.A, f"phase_diagram_isobar_print{_SFX}.pdf")
+matplotlib.rcParams["pdf.fonttype"] = 42   # embed TrueType: text stays text in the PDF
 WIDTH_IN, HEIGHT_IN = 7.16, 3.35             # double column
 FS = dict(title=8.5, axis=8.0, tick=7.0, text=7.0, legend=7.0, ratio=7.5)
 SPREAD = 0.20
 
 
-def panel(ax, a_min, a_max, n_s, f_s, ylim, zones, env_x, short, curves=None):
+LABELS_SUM = ("compute / fixed-cost\ndominated", "placement decides",
+              "communication\ndominated")
+LABELS_MAX = ("communication\nmasked", "placement decides",
+              "communication\nexposed")
+
+
+def panel(ax, a_min, a_max, n_s, f_s, ylim, zones, env_x, short, curves=None,
+          labels=LABELS_SUM):
     lo, hi = boundaries(a_min, a_max, n_s, f_s) if curves is None else curves[:2]
     ax.fill_between(SS, hi, 1e6, color=FILL_TOP, lw=0, zorder=0)
     ax.fill_between(SS, lo, hi, color=FILL_MID, lw=0, zorder=0)
@@ -60,17 +69,17 @@ def panel(ax, a_min, a_max, n_s, f_s, ylim, zones, env_x, short, curves=None):
             rotation=_angle_along(ax, SS[j - 6], bc[j - 6], SS[j + 6], bc[j + 6]),
             bbox=dict(fc=FILL_TOP, ec="none", pad=0.5))
     zc, zm, zk, zs = zones
-    ax.text(*zc, "compute / fixed-cost\ndominated", transform=ax.transAxes,
+    ax.text(*zc, labels[0], transform=ax.transAxes,
             fontsize=FS["text"], ha="center", va="center", color=SLATE_TXT,
             style="italic", zorder=6, linespacing=1.1)
     m = int(np.searchsorted(SS, zm))
-    ax.text(zm, float(np.sqrt(lo[m] * hi[m])), "placement decides",
+    ax.text(zm, float(np.sqrt(lo[m] * hi[m])), labels[1],
             fontsize=FS["text"], ha="center", va="center", color=BAND_TXT,
             style="italic", zorder=6, rotation_mode="anchor",
             rotation=_angle_along(ax, SS[m - 8], float(np.sqrt(lo[m - 8] * hi[m - 8])),
                                   SS[m + 8], float(np.sqrt(lo[m + 8] * hi[m + 8]))),
             bbox=dict(fc=FILL_MID, ec="none", alpha=0.9, pad=0.3))
-    ax.text(*zk, "communication\ndominated", transform=ax.transAxes,
+    ax.text(*zk, labels[2], transform=ax.transAxes,
             fontsize=FS["text"], ha="center", va="center", color=BRICK_TXT,
             style="italic", zorder=6, linespacing=1.1)
     i = int(np.searchsorted(SS, env_x)) - 1
@@ -108,7 +117,7 @@ def main():
 
     panel(axes[0], a_min_die, a_max_die, n_die, f_die, (1e-2, 1e3),
                     ((0.22, 0.85), 1.5, (0.82, 0.10), (0.02, 0.02)), 6.0,
-          "70 placements", curves=intra_curves)
+          "70 placements", curves=intra_curves, labels=LABELS_MAX)
     axes[0].set_title("(a) Intra-die placement", fontsize=FS["title"], pad=4)
     axes[0].set_ylabel("link bandwidth per direction (GB/s)",
                        fontsize=FS["axis"], labelpad=2)
@@ -121,18 +130,20 @@ def main():
     axes[0].text(np.sqrt(h1 * h4), 0.4 / 1.6, "HERMES\n4-phase (open) / "
                  "1-phase (filled)", fontsize=FS["text"], color=CHIP_TXT,
                  ha="center", va="top", zorder=8, linespacing=1.1)
-    s_is = 1.0 / an.chip("isaac").t_mvm_s / 1e6
-    axes[0].plot([s_is], [4.8], marker="D", mfc="white", mec=CHIP, ms=5,
-                 mew=1.0, ls="none", zorder=8)
-    axes[0].text(s_is / 1.3, 4.8 * 1.15, "ISAAC", fontsize=FS["text"],
-                 color=CHIP_TXT, ha="right", va="bottom", zorder=8)
+    isaac = an.chip("isaac")
+    s_is = 1.0 / isaac.t_mvm_s / 1e6
+    b_is = isaac.ondie_gbps_per_link          # inter-tile c-mesh link, 4.0 GB/s
+    axes[0].plot([s_is], [b_is], marker="D", mfc=CHIP, mec=CHIP_TXT, ms=5,
+                 mew=0.7, ls="none", zorder=8)
+    axes[0].text(s_is * 1.15, b_is / 1.35, "ISAAC", fontsize=FS["text"],
+                 color=CHIP_TXT, ha="left", va="top", zorder=8)
 
     panel(axes[1], a_min_pkg, a_max_pkg, n_pkg, f_pkg, (1e-2, 1e3),
           ((0.22, 0.85), 3.2, (0.80, 0.15), (0.02, 0.02)), 14.0,
           "7 placement rules")
     axes[1].set_title("(b) Inter-die placement", fontsize=FS["title"], pad=4)
     axes[1].tick_params(labelleft=False)
-    for key in ("mythic_m1076", "isaac"):
+    for key in ("mythic_m1076",):
         c = an.chip(key)
         sx = 1.0 / c.t_mvm_s / 1e6
         b0, b1 = c.ondie_band
@@ -143,6 +154,12 @@ def main():
                      c.label.split(' (')[0].replace('Mythic AMP ', ''),
                      fontsize=FS["text"], color=CHIP_TXT, va="top",
                      ha="center", zorder=8)
+    # ISAAC's off-chip HyperTransport link is published (Table I)
+    axes[1].plot([s_is], [isaac.d2d_gbps], marker="D", mfc=CHIP, mec=CHIP_TXT,
+                 ms=5, mew=0.7, ls="none", zorder=8)
+    axes[1].text(s_is * 1.15, isaac.d2d_gbps * 1.10, "ISAAC",
+                 fontsize=FS["text"], color=CHIP_TXT, ha="left", va="bottom",
+                 zorder=8)
     for bw in (0.4, 12.5):
         axes[1].plot([S_REF], [bw], marker="o", mfc="white", mec=CHIP, ms=5.5,
                      mew=1.2, ls="none", zorder=9)
@@ -164,6 +181,7 @@ def main():
                frameon=False, bbox_to_anchor=(0.5, -0.005),
                handlelength=2.0, columnspacing=1.6)
     fig.savefig(OUT_PNG, dpi=300)
+    fig.savefig(OUT_PDF)   # vector version, same figure
     print(f"figure -> {OUT_PNG}  ({WIDTH_IN} x {HEIGHT_IN} in, text 7-8 pt)")
 
 

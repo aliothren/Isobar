@@ -6181,3 +6181,247 @@ family. (3) A3's 9.02% layer latency gain has NO modelled energy
 counterpart: the macro link carries no pJ/word and the d = 1024 per-op
 records carry no energy, so intra-die energy is 'not modelled', never
 'zero'; what it would need is stated in the export.
+
+CORRECTION 2026-09-17 to the S10 task A1 text above: the per-seed
+best-over-starts values at the main configuration are 1914.07 (s0,
+random start) / 1908.82 (s1) / 1904.24 (s2) ms, as main_config_results.json
+records; the '1928.63' written in the A1 paragraph was a transcription
+error (the exported table and the headline 9.91% were never affected).
+The range against the strongest baseline stays 9.66 to 10.12%.
+
+PROGRESS REPORT (5) 2026-09-17: analysis/phase_diagram_report.tex
+rewritten in full to the DAC outline v2 (the writer's instruction names
+the tex explicitly). Baseline replaced: Progress Report (4) of 09/15.
+Content: the phase diagram at the main configuration with both panels on
+their own execution models, the platform with its energy model and
+validation table, the deployment optimisation with the unified main
+table, the mechanism, the intra-die layer result, the energy table, the
+objective ablation, the bandwidth slice, the kappa / geometry / decode
+sensitivity, the baseline provenance, and four open items. New figures
+for it: seating_seeds_k2.png (the main search's budget-quality curves,
+the same nine runs as the main configuration's endpoints) and
+mechanism_ablation.png (path length vs bottleneck load; the same-budget
+ablation). No LaTeX toolchain is available here; the file passed a
+structural check (balanced environments, every figure file present,
+every tabular row matching its column count, no dash characters).
+PROGRESS REPORT (5), FORM CLARIFIED 2026-09-17: the tex is a PROGRESS
+REPORT in the previous reports' manner (what was done in the period,
+what was found, what it means, what remains), written in the stance of
+the DAC outline v2; the outline served to align narrative, data and
+conclusions, not as the document's structure. Sections: the hand-off
+term and the port ratio; the phase diagram redrawn; the main
+configuration (choice of kappa, protocol, unified results); the
+mechanism and the baseline provenance; the intra-die level; the
+objective ablation; sensitivity incl. the pipeline caliber as a
+project-record item; dynamic energy; validation and efficiency; the map
+of results into the paper and the open items. 7 figures, 8 tables, no
+dash characters, structural checks passed; no LaTeX toolchain here.
+NUMBERING CORRECTION 2026-09-17: the compiled report that precedes this
+one is Report (2) (the 09/15 tex; the '(4)' in that file's own title was
+wrong), so the new tex is PROGRESS REPORT (3). It reports the progress
+since 09/15: the hand-off term with ports and the port ratio, the
+certified region classification and the soft-lever ceiling, the
+enumerated solver check, the phase diagram rebuilt, the main
+configuration and its statistics, the mechanism, the intra-die layer
+result, the objective ablation, the sensitivity set, dynamic energy, and
+the validation and efficiency rows. Title and cross-references updated.BASELINE CORRECTION AND FULL REWRITE 2026-09-17: the compiled report that
+precedes this one is Progress Report (2) dated 08/20/2026 (the PDF the
+writer supplied: platform, system model, two perspectives, two ratios,
+"placement-aware search the natural next step"). The 09/15 tex was a
+working draft and never a report; the note above that called it Report
+(2) is withdrawn. analysis/phase_diagram_report.tex is therefore
+rewritten as PROGRESS REPORT (3) covering 08/20 to 09/17 in full:
+(1) the phase diagram (one cost model for both perspectives, the device
+axis and the fast edge with the fixed-terms figure, the measured width
+family with its flip and the boundary table, the diagram at kappa = 2
+with per-panel execution models, the certified / observed quantifiers,
+hardware references incl. the HERMES headroom, G = eta r); (2) the
+evaluator and solver (hand-off term with ports, the port floor,
+incremental scoring, the annealer, the partition DP and the exact B5
+check, the exhaustive intra-die solver, run time); (3) validation (Simba
+silicon, the HERMES accounting check, the BookSim bridge and its
+conversion table, the ranking checks incl. the referee rerank and the
+24x24 fan-out task, the scope sentence); (4) the search (the kappa = 1
+ladder table and figure, the referee experiment with the three condition
+axes, the choice of kappa from the geometry sweep, the frozen protocol and
+budget curves, the unified table, statistics and decode, the mechanism
+and the provenance table); (5) the intra-die layer result and the
+separability of the two levels; (6) the objective ablation; (7) the
+bandwidth slice, geometry, port ratio, decode, and the pipeline caliber
+as a project-record item; (8) dynamic energy; (9) the map into the paper
+and four open items. 11 figures (device_fixed_terms, scaling_law_vds,
+phase_diagram_isobar_k2, simba_validation, ladder_v0, search_s6,
+kappa_geometry_sweep, seating_seeds_k2, mechanism_ablation, bw_slice_k2,
+the TikZ workflow), 10 tables. Every number re-read from
+main_config_results.md, mechanism_table.md, energy_export.md,
+bw_slice_k2.json, ladder_v0.json, kappa_geometry_sweep.json,
+b5_joint_exact.json, b7_s6_rerank.json, scaling_law_summary.json and the
+FIXLIST entries C31 / C32 / S6 / S8 / S9 / S10; the ladder and kappa
+captions were checked against the rendered images. Structural check
+passed: 0 dash characters (no em, en or double hyphen), environments
+balanced, every figure file present, every tabular row matching its
+column count, every reference resolved. No LaTeX toolchain here; not
+compiled.
+REPORT (3) REVISION 2026-09-18 (four writer items): (1) the parameter
+table (tab:params) and the other text-heavy tables set on p-columns with
+tabcolsep 4pt so that every table sits inside the 15.9 cm text width
+(sums 15.55 cm); the main table, the intra-die table and the energy
+table given shorter headers and labels with the meanings in the
+captions. (2) The Simba validation figure in colour for the report:
+scripts/fig_simba_validation_color.py, same live data as
+analyze_simba_validation.py, repository palette (slate measured bars,
+green optimistic rail, brick pessimistic rail, navy / amber / green per
+layer on T3), titles and annotations without the internal record tags;
+output analysis/simba_validation_color.png; the greyscale figure and its
+script untouched. (3) The objective-ablation panel of
+mechanism_ablation.png redrawn: three seed bars per objective in the
+objective's colour with the best value labelled, replacing the
+best-seed bar with seed dots; data unchanged. (4) The closing section
+now states the next steps (the paper, further refinement of the
+simulator and search, measured calibration) in place of the list of
+open technical items; abstract and introduction pointers updated.
+Structural checks passed again (0 dashes, environments balanced, figures
+present, tabular rows matching, references resolved). Not compiled here.
+VECTOR MAIN FIGURE 2026-09-18: scripts/fig_phase_isobar.py and
+scripts/fig_phase_isobar_print.py now also write a PDF next to the PNG
+(phase_diagram_isobar{_SFX}.pdf, phase_diagram_isobar_print{_SFX}.pdf),
+from the same figure object, with pdf.fonttype 42 so the text is
+embedded TrueType and stays selectable. Regenerated at ISOBAR_KAPPA=2:
+the PNGs and the JSON came out byte-identical to the committed ones
+(git reports no change); the PDFs contain no raster objects (0 image
+XObjects, 3 embedded fonts, no Type 3), page boxes 12.8 x 5.0 in (large)
+and 7.16 x 3.35 in (print). The PDFs fall under the analysis/* ignore
+rule and are not whitelisted; add them to .gitignore's whitelist if they
+are to be committed.
+FIG. 1 REGION LABELS 2026-09-18 (review item 4): panel (a) is a per-op
+max model, so its in-figure region labels now say exposed / masked
+instead of dominated: "communication masked" above B+, "placement
+decides what is exposed" in the band, "communication exposed (placement
+sets how severe)" below B- (the words "for every placement" dropped on
+review as redundant); the
+print version uses "communication masked" / "placement decides" /
+"communication exposed". Panel (b), a serial sum, keeps the dominated
+wording. Implemented as a labels argument of draw_panel / panel
+(LABELS_SUM default, LABELS_MAX for panel (a)) in fig_phase_isobar.py
+and fig_phase_isobar_print.py; all four PNGs and both PDFs regenerated
+at kappa 1 and 2; JSON unchanged. phase_diagram_isobar_caption.md
+records the wording.
+ISAAC LINK RATES CORRECTED 2026-09-18 (reviewer item, verified against
+the paper). The reviewer stated that ISAAC publishes a 32-bit, 1 GHz
+on-chip link (4.0 GB/s) and a 6.4 GB/s off-chip link in Table I. VERIFIED
+by re-reading Shafiee et al., ISCA 2016 (users.cs.utah.edu/~rajeev/pubs/
+isca16.pdf, text extracted here): Sec. VIII-B says "we estimate that the
+inter-tile link bandwidth requirement never exceeds 3.2 GB/s. We
+therefore conservatively assume a 32-bit link operating at 1 GHz" = 4.0
+GB/s; Sec. VIII-A says "the c-mesh flit width is set to 32 bits"; Table I
+lists "Router flit size 32, num port 8 (shared by 4 tiles)" and "Hyper Tr
+links/freq 4/1.6GHz ... link bw 6.4 GB/s". The figure's 4.8 GB/s came
+from multiplying the 32-bit flit by 1.2 GHz, which is the TILE clock
+("ISAAC Tile at 1.2 GHz", Table I header), not the link clock; the C36
+note "no per-link figure published" was also wrong. Both were flagged as
+un-re-read in the 2026-09-16 entry above, and are now closed.
+APPLIED: anchors.py ISAAC gains ondie_gbps_per_link 4.0 and d2d_gbps 6.4
+with sourced status strings (the 0.4-8 band is kept, and its status still
+starts with "estimated", for the standing device-plane figure and its
+test). fig_phase_isobar.py and fig_phase_isobar_print.py: panel (a) ISAAC
+moves 4.8 -> 4.0 GB/s and becomes a FILLED (published) marker; panel (b)
+ISAAC leaves the shared assumed range and becomes a published point at
+6.4 GB/s, so Mythic M1076 is now the only assumed range there. All four
+PNGs and both PDFs regenerated at kappa 1 and 2; JSON unchanged.
+READINGS: at ISAAC's row rate panel (a)'s band is 3.90-10.40 GB/s, so the
+point stays inside the band and no argument changes; panel (b)'s band is
+1.94-5.14 GB/s, so the published 6.4 GB/s sits just ABOVE B+ where the
+old assumed range had spanned the band. Suite 436 passed after the
+anchors change. Docs synced: ANCHORS.md row, phase_diagram_isobar_
+caption.md (marker paragraph + a correction note), and the report tex
+(Table 2 now has two ISAAC link rows, and the reference paragraph).
+PAPER FIGURE SET v1 2026-09-18: six candidate figure groups and their
+standalone panels built into a NEW tree,
+analysis/figures_dac2027/20260918_v1/{panels,composites,data,preview},
+by a new generator scripts/plot_dac2027_v1.py (--run-id selects the
+directory; --only re-runs one group). No existing figure path is written:
+the manifest carries a sha256 inventory of the 77 figures already in
+analysis/ so a later run can show they are unchanged. Every panel ships as
+PDF (vector, fonttype 42) + SVG (text kept as text) + PNG preview; every
+panel's numbers ship as JSON/CSV in data/.
+GROUPS: Fig. 1 the two-level phase diagram (redrawn from the isobar
+module's own data functions into new files, plus separate (a)/(b)
+panels); Fig. 2 the platform workflow, schematic, with a two-producer
+worked example; Fig. 3 external references (Simba T1 ladder; the 13-
+candidate fan-out ranking against BookSim, rho 0.962); Fig. 4 deployment
+gain (latency split into R and H for eight layouts, the latency/energy
+scatter over all 21 frozen layouts, the A3 layer bars); Fig. 5 the
+mechanism on the real fabric (three layouts' directed link loads for the
+SAME stage ffn2@L2 on the real 24x24 grid, one shared colour scale in
+required link service time at 0.4 GB/s, ports reported separately as
+readings, plus the objective ablation); Fig. 6 the conditions (bandwidth
+slice, kappa x geometry, prefill vs decode).
+DATA: Fig. 5's loads are extracted live through search_eval.resource_loads
+on rebuilt layouts (clustered / random_s3 / sa_random_s1 /
+least_manhattan) and reproduce the mechanism table exactly at that stage
+(busiest link 10.49 / 8.39 / 5.24 / 6.29 M words); links, ports and
+endpoints are exported per layout as CSV with coordinates.
+STATISTICS: the ablation panel uses the recorded denominator (each arm's
+best endpoint over the resource-aware objective's best, 1886.5 ms),
+reproducing +11.4% / +11.2%; the kappa panel recomputes one statistic for
+every cell (median over 3 seeds of best-over-starts vs that cell's
+strongest evaluated baseline).
+ALSO CORRECTED: the report tex said the fan-out ranking covered 14
+candidates; the JSON has 13 (sequential, snake, clustered, dispersed,
+5 randoms, 4 search endpoints) and rho 0.9615 is the n = 13 value.
+FIGURE AUDIT OF analysis/ 2026-09-18 (77 figures reviewed against the
+current frozen conclusions; four parallel reviews, each required to quote
+its evidence from FIXLIST / SUMMARY / METRICS / MATERIALS / the live tex).
+DELETED (6; all six were git-tracked, so `git checkout` restores them):
+ - seating_seeds.png: kappa = 1 budget curves from the 3.53% era, with no
+   kappa in the title; superseded by seating_seeds_k2.png, which is the
+   figure the report uses.
+ - bw_slice_pair.png: the kappa = 1 fixed-pair slice (eta 5.874%,
+   G 3.53% at 0.4); superseded by bw_slice_k2.png.
+ - scale_combined.png: its own suptitle is the retired F-L1 claim, "every
+   latency lever hides behind compute (zero-overlap end <= 3%)", against
+   today's 1.97x spread on the production instance and F-L5's 6.8%.
+ - scale_tier_2p7b.png: drew all three 2.7B seatings at exactly 1.00x,
+   the sentence the 09-15 rerun ordered rewritten or withdrawn.
+ - phase_diagram_gray.png: deleted as an unreferenced twin, then
+   RECREATED by analyze_phase_diagram.py in the same run (that script
+   writes both files); it now carries the corrected ISAAC markers, so it
+   is kept.
+ - corner_flip.png: re-run under the current model it is three flat lines
+   at exactly 1.00 (corner_flip.json: flips_gbps empty for all three
+   conditions), i.e. an empty exhibit; the measurement stays in the JSON.
+REDRAWN after correcting hard-coded on-figure text that asserted a retired
+claim (data was current; only the caption lagged):
+ - contention_by_layout.png: "moving the glb to a corner funnels more
+   macros' traffic onto one wire" -> the measured 1.00x on the 2x4
+   production grid, with the 3x3 comparison named.
+ - d2d_regimes.png: the single-pass panel's "transfer hides behind the
+   stack's compute" now says it holds on THIS small chain and not on the
+   production instance.
+ - d2d_assignment_impact.png: suptitle said "same 24 dies" while the data
+   is the 48-die configuration (a leftover of the 24-to-48 change).
+ - offload_contention.png: the "removes the two shields" framing and the
+   self-refuting decode panel title (the 2.26x/4.35x reading was the C25
+   unit error and is retired).
+ - placement_energy_latency.png, placement_link_loads.png: the O8
+   artifact text "energy set by MEAN hop count" / "variants with the same
+   mean hop count cost the same energy", retired at C59 when the
+   per-scheme wire models broke the tie.
+ - placement_impact_onchip.png, placement_impact_offload.png: "energy
+   does not care" -> the spread named as over those three chain-like
+   seatings only (S10 measures up to ~7% compact vs dispersed).
+ - a_bandwidth_slices.png: title now names its cell (the port-floor
+   instance at kappa = 1), which is what makes "achieved gain = the
+   port-floor ceiling" true.
+ - phase_diagram.png (+ its gray twin): analyze_phase_diagram.py now
+   draws ISAAC as a published point (inter-tile 4.0 GB/s, off-chip
+   6.4 GB/s) instead of the 0.4-8 GB/s assumed band; anchors.py keeps the
+   band for the device-plane figure and its test.
+KEPT AS IS: the remaining figures, including the deliberately declared
+ones (device_plane's HERMES C37 aggregate; ladder_v0 at kappa = 1, which
+the report labels as such). NOT ACTED ON, reported instead: SUMMARY.pdf is
+a 2026-07-01 render of a document rewritten on 09-17 with no generator and
+no citation, and it is untracked, so deleting it would be unrecoverable;
+sweep_axis_d2d_probe.png and resnet18_settings_compare.png have no record
+either way. analysis/ladder_v0.md still describes the pre-port version of
+its own PNG (ppm panel, F-L1/F-L2) and needs rewriting.

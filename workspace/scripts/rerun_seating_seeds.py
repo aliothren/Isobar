@@ -29,8 +29,10 @@ from scripts import search_eval as se
 from scripts import search_linkage as sl
 from scripts import search_sa as sa
 
-OUT = os.path.join(se.A, "seating_seeds.json")
-PNG = os.path.join(se.A, "seating_seeds.png")
+KAPPA = float(os.environ.get("SEAT_KAPPA", "1"))
+_SFX = "" if KAPPA == 1.0 else f"_k{KAPPA:g}"
+OUT = os.path.join(se.A, f"seating_seeds{_SFX}.json")
+PNG = os.path.join(se.A, f"seating_seeds{_SFX}.png")
 CELLS = {"grs": sl.GRS, "weak": sl.WEAK}
 SA_SEEDS = (0, 1, 2)
 RANDOM_SEEDS = (0, 1, 2, 3, 4)
@@ -54,6 +56,8 @@ class Traced:
 
 def main():
     W = se.Workload2p7B()
+    if KAPPA != 1.0:
+        W.port_ratio = KAPPA
     n_slots = W.fab.level("die").per_parent
     lad = json.load(open(os.path.join(se.A, "ladder_v0.json")))["table_2p7b"]
     starts = {n: sb.generate(n, W, seed=0) for n in sl.SEATING_SEEDS}
@@ -133,7 +137,7 @@ def main():
         rb = c["random_baseline"]
         ax.axhspan(rb["min_s"] * 1e3, rb["max_s"] * 1e3, color="#2a7d4f",
                    alpha=0.12, lw=0, label="random baseline, seeds 0-4")
-        ax.set_title(f"{cell}: {c['d2d_gbps']} GB/s -- 3 starts x 3 SA seeds",
+        ax.set_title(f"{cell}: {c['d2d_gbps']} GB/s, κ = {KAPPA:g}; 3 starts × 3 SA seeds",
                      fontsize=9)
         ax.set_xlabel("objective evaluations")
         ax.set_ylabel("best-so-far latency (ms)")

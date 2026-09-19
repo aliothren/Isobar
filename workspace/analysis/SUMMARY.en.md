@@ -634,7 +634,11 @@ the mechanism; the d family per width tier with model names (d = 1024 the
 production base); three shaded layers (on die: everything contends / the
 organisation decides / placement-free); digital anchors as horizontal
 lines with statuses, the estimated bands and chip bandwidths marked as
-estimates; HERMES / ISAAC as error-bar points, NeuRRAM with its t
+estimates; HERMES as an error-bar point and, since 2026-09-18, ISAAC as a
+PUBLISHED point (its paper states a 32-bit inter-tile link at 1 GHz =
+4.0 GB/s in Sec. VIII-B and an off-chip HyperTransport link of 6.4 GB/s in
+Table I; the earlier 0.4-8 GB/s assumed band and the derived 4.8 GB/s came
+from reading the 1.2 GHz TILE clock as the link clock); NeuRRAM with its t
 coordinate only (hub-IO); the two trend arrows; the collapse inset; and
 validation points classed by measured / closed-form with colour AND shape
 (grayscale-safe): the 17c probes on the left (ffn2's tiler step gets its
@@ -2146,6 +2150,9 @@ direction only: **toward underestimation**.
 | `simba_workload.py` | the Simba reproduction workload (C42): ResNet-50 conv layers as closed-form ops, touched-extent volumes (anti-im2col), conv→TrafficStructure on the existing dim tables (§2.6) |
 | `simba_targets.py` | the three reproduction targets (C44–C47): T1 seatings, T2 baseline/greedy placement, T3 scaling points; the packet bracket (A3); `simba_t1/t2/t3.json` (§2.6) |
 | `analyze_simba_validation.py` | the per-target measured-vs-bracket figure; `simba_validation.png` (§2.6) |
+| `fig_simba_validation_color.py` | the same three targets in the repository palette for the report, same live data, no internal record tags; `simba_validation_color.png` (§2.6) |
+| `fig_mechanism_ablation.py` | path length vs bottleneck load for the frozen layouts, beside the same-budget objective ablation; `mechanism_ablation.png` (§3.5) |
+| `plot_dac2027_v1.py` | the paper figure set: six candidate groups and their standalone panels, each as PDF + SVG + PNG with its plotting data, written into a new `analysis/figures_dac2027/<run_id>/` tree (nothing outside it is touched); `figure_index.md` + `manifest.json` carry the per-figure sources, denominators and gaps |
 | `sweep_axes.py` | per-axis bandwidth sweeps: on-die / die-to-die (48-die, 2.7B chain, 4-die probe) / unit link / partial-sum width, both overlap ends, read at the digital anchors + the band ends; plus the T1 hub axis (value units, C34) and the (t_MVM × bandwidth) device plane (C31/C33: closed-form boundaries + the d family + collapse + fixed-term decomposition); `phase_sweep.json` + `sweep_axis_*.png` + `device_plane*.png` + `device_fixed_terms.png` (§2.5) |
 | `analyze_anchored_sweep.py` | anchor-column readout: on-chip / offloaded × scheme × five columns (three digital anchors + the band ends), the offloaded column end to end with the external unit (§2.3.1c/e) |
 | `analyze_scale_tiers.py` | 2.7B tier: operators spanning dies × assignment × anchor (§3.5) |

@@ -288,3 +288,27 @@ def test_partial_sum_width_thresholds_order():
         assert one[label]["thresholds_gbps"]["max_1pct"] < two[label]["thresholds_gbps"]["max_1pct"]
         assert one[label]["thresholds_gbps"]["max_2x"] < two[label]["thresholds_gbps"]["max_2x"]
     approx(two["bus (shared medium)"]["thresholds_gbps"]["max_1pct"], 1.89, 2e-2)
+
+
+def test_isaac_published_link_rates():
+    """The ISAAC link rates as the paper states them, re-read 2026-09-18.
+
+    Sec. VIII-B: "we estimate that the inter-tile link bandwidth requirement
+    never exceeds 3.2 GB/s. We therefore conservatively assume a 32-bit link
+    operating at 1 GHz" = 4.0 GB/s, with the c-mesh flit width 32 bits
+    (Sec. VIII-A). Table I: "Hyper Tr links/freq 4/1.6GHz ... link bw
+    6.4 GB/s", per link and per direction, off chip.
+
+    The figure used to draw 4.8 GB/s, from the 32-bit flit times the 1.2 GHz
+    TILE clock of Table I's header, and the registry used to say no per-link
+    figure was published. Both were wrong; moving these two numbers means
+    the source was re-read, not that a model changed.
+    """
+    c = an.chip("isaac")
+    approx(c.ondie_gbps_per_link, 4.0, 1e-9)
+    approx(c.d2d_gbps, 6.4, 1e-9)
+    assert "32-bit link operating at 1 GHz" in c.ondie_status
+    assert "6.4 GB/s" in c.d2d_status
+    # the estimated band is kept ONLY for the standing device-plane figure
+    assert c.ondie_band == (0.4, 8.0)
+    assert c.ondie_status.startswith("estimated")

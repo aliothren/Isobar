@@ -1,0 +1,11 @@
+node,x,y,role
+7,7.0,0.0,producer
+8,8.0,0.0,producer
+30,6.0,1.0,producer
+32,8.0,1.0,producer
+33,9.0,1.0,producer
+6,6.0,0.0,consumer
+9,9.0,0.0,consumer
+34,10.0,1.0,consumer
+57,9.0,2.0,consumer
+80,8.0,3.0,consumer

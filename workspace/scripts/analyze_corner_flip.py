@@ -99,14 +99,17 @@ def main():
     ax.set_xscale("log")
     ax.set_xlabel("per-link bandwidth (GB/s)")
     ax.set_ylabel("stack latency: corner / centre  (<1 = corner WINS)")
-    ax.set_title("The best buffer position flips along the bandwidth axis\n"
-                 "(dashed lines: sign flips; green: digital anchors, gold: analog-reality band)",
-                 fontsize=11)
+    ax.set_title("The buffer position never flips along the bandwidth axis:\n"
+                 "the centre always wins, and the penalty vanishes above ~1 GB/s\n"
+                 "(green: digital anchors, gold: analog-reality band)",
+                 fontsize=10.5)
     ax.grid(alpha=0.3, which="both")
     ax.legend(fontsize=9)
-    p = os.path.join(OUT, "corner_flip.png")
-    plt.tight_layout(); plt.savefig(p, dpi=130); plt.close()
-    print(f"PNG -> {p}")
+    # WITHDRAWN 2026-09-18 (figure audit): under the current model the three
+    # curves are flat at exactly 1.00 (corner_flip.json records no flip in
+    # any condition), so the figure carried no information. The measurement
+    # stays in the JSON; the PNG is no longer written.
+    plt.close()
 
     with open(os.path.join(OUT, "corner_flip.json"), "w") as f:
         json.dump({"band_gbps": BAND, "flips_gbps": flips}, f, indent=1)
