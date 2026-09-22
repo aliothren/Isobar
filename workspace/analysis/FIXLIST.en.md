@@ -6514,3 +6514,298 @@ align. Synced: v2 figure set Fig. 1 (fig1_phase_diagram and panels,
 caption), the report tex (reference paragraph + a "Mythic M1076 I/O" row
 replacing "Assumed package range"), phase_diagram_isobar_caption.md,
 ANCHORS.md, SUMMARY.en.md / SUMMARY.md. Not committed.
+FIG. 2 REDESIGNED 2026-09-22 (writer's discussion): (a) four coloured
+regions with distinct roles: Given inputs (workload; mapping, tiling and
+dependencies, given, not generated here; hardware and execution
+configuration), the Simulation core as ONE evaluation (logical flows ->
+routed paths under the fixed XY rule, not optimised -> link and port
+loads per hand-off -> latency and dynamic energy, with the compute /
+write / digital-unit costs entering the aggregation separately and the
+placement drawn as an INPUT box), Phase analysis (calls the same
+evaluation, double arrow) and Deployment search (receives the candidate's
+latency; returns a revised placement into the placement box and a revised
+partition into the flows, which are regenerated). (b) "how two flows
+become resource costs" with a symbolic payload V: two independent flows
+routed under XY share one directed link (2V), link service bound 2V/B,
+endpoint port bound V/(kappa B) = V/(2B), cumulative traffic 4V byte-hops;
+peak demand enters timing, cumulative traffic enters energy; illustrative.
+Drawn in inch coordinates at the 7.16 in column width, 6-8 pt text, arrows
+above the region fills. Files fig2_platform_workflow (composite),
+fig2a_platform, fig2b_two_flows in the v2 tree; caption updated.
+FIG. 2, SECOND REDESIGN 2026-09-22 (writer's review of the first): 70/30
+split. (a) the flow as four tinted regions without borders: Given inputs
+(workload; operator tiling and tensor dependencies, given; hardware and
+execution configuration entering routing, accounting and aggregation
+through ONE configuration line); Evaluation of one candidate, top to
+bottom, with the candidate deployment (gamma, alpha, beta) as a dashed
+INPUT box, logical communication from gamma, routing under alpha and
+beta by the fixed XY rule, link and port loads per hand-off, "resource
+bounds and execution-aware aggregation", latency and dynamic energy;
+Phase analysis calling the evaluation (double arrow); Deployment search
+with block partition and die-group sizing (DP) and die / macro placement
+(annealing / enumeration), latency in and the next candidate back to the
+candidate box. (b) replaces the step-by-step single-layout example with
+the contrast "equal hop cost, different contention": the same two flows
+(3 + 1 hops, 4V byte-hops, port bound V/(2B)) placed so that they share a
+directed link (max load 2V, bound 2V/B) or do not (V, V/B), which is why
+the evaluator keeps per-resource loads and why distance or word-hop
+proxies cannot separate the two. Restrained palette (warm grey, slate,
+sand, sage), hairline node edges, 5.5-6.8 pt text at the column width.
+FIG. 2(b), THIRD FORM 2026-09-22 (writer's review of the two-layout
+contrast: a classroom example that only says "a shared link adds up"):
+panel (b) is now one complete evaluation profile of a real hand-off,
+"From placement to resource costs", in three layers at the same 30% width.
+(1) The source of the traffic in one line: the ffn1 -> ffn2 hand-off of
+the 2.7B mapping, 5 producers x 5 consumers, 25 transfers of 1.05 M words.
+(2) The Fig. 5 instance's compact fill on the 4x4 die mesh, evaluated live
+by the evaluator's own flow and load code (_one_boundary_flows,
+resource_loads, Mesh xy): every link direction coloured and widened by its
+cumulative load after all 25 transfers are routed, empty slots faint, the
+busiest link ringed and labelled once (8 flows, 8.4 M words, 21.0 ms at
+0.4 GB/s), and the five routes of one producer (P4, the longest routed
+fan-out) as dotted lines so the logical fan-out is seen entering the
+network. (3) A low bar profile of the service time L_e / B of all 15 used
+link directions, busiest first, in the same colour scale, against the port
+bound max L_p / (kappa B) = 6.6 ms; the tallest bar carries the same ring
+as the hotspot and the label "-> latency term"; the 64.0 M word-hops of the
+same evaluation stand beside it as "-> dynamic energy". Reads: the load
+concentrates on a few links, the hand-off is link-bound, the evaluator
+extracts its latency term from that link. Numbers in
+data/fig2b_placement_to_costs.json; panel fig2b_placement_to_costs; the
+fig2b_two_flows and fig2b_contention_contrast panels are withdrawn.
+Caption updated. Note: a --only fig2 run rewrites captions.md and
+manifest.json with only this figure's entries; the full set is regenerated
+before the next commit.
+FIG. 2(b) STYLE PASS 2026-09-22 (author's review): producers and consumers
+share one colour and differ by shape only (square / round); link loads on
+a blue -> violet -> red ramp (light to heavy) shared by the bars; every
+segment carries a pale base band so idle links are a background, not a
+line; loaded lanes 1.6-3.4 pt; the bar profile is aligned to the mesh's
+left and right edges; the hotspot label is reduced to "8 flows / 8.4 M
+words" (the service time is read from the bar profile); the fan-out routes
+are white dotted lanes.
+DOCUMENTATION FREEZE 2026-09-22 (markdown only, by instruction). The
+results stand frozen at the main configuration (S9 / S10, the ISAAC and
+M1076 corrections of 09-18 / 09-21 included). Rewritten for readers: the
+root README (what cimsim is, the frozen results table, what one evaluation
+computes, how to run, the repository map), formulation.md (now the cost
+model as frozen: objects, the hand-off term over links and ports, the
+port floor, R + H, the intra-die overlap model, dynamic energy, the phase
+diagram's boundaries, G = eta r, the search) and workspace/README.md (the
+workspace map). New folder guides: analysis/README.md,
+analysis/figures_dac2027/README.md, scripts/README.md (every module by
+role), tests/README.md, models/README.md, models/fabric/README.md,
+tools/README.md, tutorials/README.md, outputs/README.md. Removed as
+superseded reports: analysis/PROGRESS.md (its conclusions 1 and 5 were the
+retired F-L1 position) and analysis/SUMMARY.Extn.md (the pre-platform I/O
+cost model on BERT-100M); both remain in git history. SUMMARY.en.md and
+SUMMARY.md carry a status block naming the frozen documents as the
+authority; METRICS.md's old 1.4-2x envelope row is replaced by the two
+frozen bands and its kappa = 1 rows are labelled as sensitivity cells;
+SEARCH_SPEC.en.md carries a status line. Non-markdown changes needed for
+this freeze are listed for approval in the session, not applied.
+FIG. 2(b) FOURTH FORM 2026-09-22 (writer's review, Gemini heat-map idiom):
+"Resource accounting". Only the occupied rows of the 4x4 instance are
+drawn (3x4; the code asserts that no XY route enters the idle top row, so
+the 15 used directions, the 8-flow hotspot and the 64.0 M word-hops are
+unchanged). Each physical link is two lanes, one per direction: a thin
+dark line when idle, a bar coloured by cumulative load when used, fixed
+lane width, blue -> violet -> red shared with the bar profile. The fan-out
+routes and the ring are gone; the hotspot is marked e* with "8 flows /
+8.4 M words" and the tallest bar with "e* 21.0 ms" (its link service
+bound). The bar profile takes the freed height (1.02 in), the port bound
+is labelled beside its line, the x axis reads "Directed links, sorted",
+the cumulative traffic is the bare "64.0 M word-hops" and its relation to
+the communication dynamic energy is in the caption. The title block is
+"RESOURCE ACCOUNTING / FFN1 -> FFN2 . 5->5 dies . 25 transfers"; the
+mapping and the per-transfer payload moved to the caption. Text 5.0-6.2 pt
+at the drawn 2.06 in width.
+FREEZE, APPROVED NON-MARKDOWN CHANGES 2026-09-22: .gitignore whitelists
+analysis/README.md, outputs/README.md and tools/README.md (the tools rule
+changed from a directory pattern to `workspace/tools/*` so a file inside
+can be re-included; booksim2 stays ignored); analysis/SUMMARY.pdf (a
+2026-07-01 render of a document rewritten since) and the two old report
+sources company_report.tex and settings_and_assumptions.tex deleted;
+phase_diagram_report.tex (Progress Report 3) kept. Local work notes
+removed as superseded: DIRECTION.en.md (a 09-01 direction memo, never
+referenced) and frozen_v6.md (the v6 citation snapshot of 09-05, whose
+numbers the S9 freeze replaced). The script-written readout tables
+(a2_row_split, a4_full_model, the weave and price readouts, soft_lever,
+robustness, phase_diagram_table, SIMBA_PREREG, ROBUSTNESS_CRITERIA) are
+current inputs of standing analyses and stay.
+FIG. 2(b) STYLE PASS 2 2026-09-22 (author's review): one type scale (title
+6.2 pt bold, node labels 5.2 pt bold, every other text 5.6 pt, ticks
+5.2 pt, one text colour); nodes white with a dark edge and black labels;
+each lane drawn as a road (dark rim, white inside when idle, load colour
+inside when used) running centre to centre under the nodes so no gap is
+left at round nodes; the bar profile back to 0.60 in high.
+FIG. 2(b) STYLE PASS 3 2026-09-22 (author's review): node pitch 0.38 in,
+node edge 1.0 pt (heavier than the 0.5 pt road rim), node labels 6.0 pt
+centred on the cap height; e* set in plain text (mathtext had switched
+the font); the hand-off line aligned to the mesh's left edge and the
+vertical whitespace tightened; the load ramp is blue -> red with the
+violet interval narrowed so the hotspot is the only saturated red.
+FIG. 2(b) STYLE PASS 4 2026-09-22 (author's review): the load ramp runs
+from a true blue (#2a7de1) to the hotspot red (#c41e1e) with a short
+lavender middle; the hotspot reading "e* 8 flows . 8.4 M words" sits under
+the mesh and a bare e* marks the lane, which frees the left margin; the
+bar profile spans the full mesh width with the port-bound label lifted
+above the short bars; the mesh is centred in the panel.
+FIG. 2(b) STYLE PASS 5 2026-09-22 (author's review): the load colours are
+the ten-step RdBu ramp (16,70,128 ... 109,1,31). Used as a plain
+sequential ramp its white middle fell on the 10.5 ms lanes (7 of 15) and
+made them vanish against the idle white lanes, so the ramp is centred on
+the port bound (TwoSlopeNorm, white = 6.6 ms): lanes below the port bound
+are blue and cannot bind, lanes above are red, the hotspot is the deepest
+red; the caption says so. Lanes 3.4 pt at +-0.040 in, empty slots drawn at
+full node size with the thin rim, node pitch 0.42 in, mesh and bar profile
+enlarged to fill the panel (bars 0.78 in high, full mesh width).
+FIG. 2(b) STYLE PASS 6 2026-09-22 (author's review): the cumulative
+traffic reads "Total routed traffic / 64.0 M word-hops"; producer nodes
+are rounded squares at 0.92 of the circle radius (a square reads larger
+than a circle of the same size); node pitch 0.40 in; the e* mark sits on
+the left of the hot lane, the side the lane itself is on.
+FIG. 2(b) STYLE PASS 7 2026-09-22 (author's review): node labels 6.4 pt,
+node edge 0.85 pt, node pitch 0.38 in (shorter links), the bar profile
+raised to 0.38 in so the two plots sit closer.
+FIG. 2(b) COMPARISON VARIANT 2026-09-22 (author's request, the standing
+panel untouched): fig2b_placement_to_costs_alt with node radius 0.105 in,
+node edge 0.70 pt, node pitch 0.34 in, and idle lanes filled with the
+ramp's zero colour (dark blue) instead of white; the bar profile follows
+the narrower mesh and its e* reading is set on two lines to stay clear of
+the traffic label. Drawn by _fig2b(alt=True).
+FIG. 2(b) VARIANT, PASS 2 2026-09-22: node labels in regular weight, idle
+lanes in a light desaturated blue (#b4c3d3) instead of the ramp's dark
+end, no lane rims (plain colour bars), a short colour bar to the right of
+the mesh with ticks at 0, the port bound and the hotspot (ms). The
+standing panel is unchanged.
+FIG. 2(b) VARIANT, PASS 3 2026-09-22: the idle lanes are the zero colour
+of a variant ramp (LOAD_BR_ALT) whose blue end is lightened and
+desaturated to (62,104,150) yet stays the darkest blue, so idle < 2.6 ms
+< ... on one scale; node labels 6.8 pt regular (the regular weight read
+smaller than the standing panel's 6.4 pt bold); the colour bar is 0.46 in
+high and bottom-aligned with the mesh; the bar profile spans the mesh plus
+the colour bar. The standing panel is unchanged.
+FIG. 2(b) VARIANT, PASS 4 2026-09-22: the variant ramp's blue end moved
+to #2D75A5 = (45,117,165) (the author's choice), still the
+darkest blue on the scale.
+FIG. 2(b) VARIANT, PASS 5 2026-09-22: the variant ramp's first peach stop
+deepened to (247,203,180) so the 7.9 ms lanes read as pink rather than
+near-white; lanes 3.9 pt at +-0.044 in.
+USER GUIDE 2026-09-22: a reader-facing integration guide added at the
+repository root, docs/ (README plus ten pages: setup, concepts, hardware,
+workload, evaluate, search, phase diagram, external checks, results and
+figures, scope and FAQ). Every command and Python snippet in it was run
+in the container on the frozen tree and reproduces the frozen readings
+(438 tests; clustered 2550.35 ms; strongest baseline random_s3 2118.71 ms;
+headline 9.91 percent, best of nine 10.12 percent; package band 0.535 to
+1.421 GB/s; BookSim gate ratio 1.001). No code changed. Gaps the guide
+states rather than hides: the evaluator has no command-line entry (the
+snippets are the entry), Workload2p7B reads one fixed account file (the
+guide gives a subclass that reads another), and the D2D energy and
+propagation constants of the evaluator are module constants.
+FIG. 2(b) VARIANT, PASS 6 2026-09-22: the variant ramp's blue end is the
+midpoint of #2D75A5 and the next stop, (47,120,174). The colour bar is
+drawn by hand (one 512-sample raster strip through the same TwoSlopeNorm
+inside a framed inset axes) because matplotlib's colorbar mesh under a
+TwoSlopeNorm left its fill and outline misaligned in the PDF and SVG;
+checked by rasterising both at 12x (fill and frame coincide).
+FIG. 2(b) VARIANT, PASS 7 2026-09-22: node edge 0.85 pt, empty-slot edge
+0.4 pt, node labels 6.5 pt. Regenerated with the host's latency-bench
+environment (the plotting script needs only matplotlib and numpy; the
+container was unresponsive under a load average of ~40).
+FIG. 2(b) VARIANT, PASS 8 2026-09-22: node labels 6.0 pt bold; the dark
+lane rims are back on in the variant (for comparison against the rimless
+pass).
+COMMAND LINE 2026-09-22 (author's request, after the user guide): a
+unified entry, scripts/cimsim_cli.py, with the subcommands baseline
+(the seven rules to a deployment JSON), evaluate (score, decomposition
+and a per-hand-off table with the binding resource), search (the
+annealer with the frozen protocol as defaults: starts, seeds, 1200
+steps, alpha 0.996, the per-bandwidth temperature; headline statistic
+and strongest-baseline comparison as in main_config_export), phase (the
+package band B-, B+ at the fabric's device rate and the classification
+of given bandwidths, JSON and a one-panel figure) and booksim (one
+hand-off of a deployment through the bridge at a volume scale). Common
+options: --fabric, --workload (any per-operator account), --kappa,
+--phases, --caliber, --device-scale, --d2d-pj-per-word, --d2d-ns-per-hop
+(the last two override search_eval's module constants). The CLI wraps
+the platform's functions and adds no model. Fabric schema: a level may
+declare `ports: {ratio: kappa}` (Level.port_ratio, validated >= 1);
+mlx300_multidie576.yaml declares 2.0 on the die level, read only by the
+CLI as its default kappa (the experiment scripts set W.port_ratio, so no
+frozen number moves). Tests: tests/test_cli.py (group 56) pins the CLI
+against the frozen readings (clustered 2550.352 ms at kappa 2 and 0.4
+GB/s; band 0.535 to 1.421 GB/s) and the port-ratio field. The guide's
+pages 03 to 08 now give the commands, with their outputs as run.
+FIG. 2(b) VARIANT, PASS 9 2026-09-22: lane rim 0.4 pt, lane width 3.65 pt.
+FIG. 2(b) FINAL FORM 2026-09-22: the comparison variant becomes the
+standing panel and the variant switch is removed. Node pitch 0.34 in,
+node radius 0.105 in, node edge 0.85 pt (empty slots 0.4 pt), node labels
+6.0 pt bold; lanes 3.65 pt at +-0.044 in with a 0.4 pt rim; one ramp,
+the RdBu ten-step with the blue end at (47,120,174) as the idle-lane
+colour and the first peach stop at (247,203,180), centred on the port
+bound; a hand-drawn 0.46 in colour bar bottom-aligned with the mesh; the
+bar profile spans mesh plus colour bar; the e* reading on the tallest bar
+lifted by 1.2 ms. The fig2b_placement_to_costs_alt files are withdrawn.
+captions.md and manifest.json: the other figures' entries, wiped by the
+--only fig2 runs, restored from HEAD; only the fig2 entries are new.
+FIG. 2(a) REDESIGN 2026-09-22 (writer's label review + author's style
+brief): drawn in the reference flowchart idiom, four tinted zones with
+dashed borders and centred bold titles, filled step boxes with white text,
+white data boxes, one blue -> teal palette (the author's colour card: deep
+72,80,152 for titles, blue 70,96,173 for the core steps, mid 90,150,204
+for phase analysis, teal 128,205,187 for search, sky 104,180,206 for the
+input edges; no red, orange or green). Labels as reviewed: Inputs =
+Workload / Model, sequence length; Operator tiling & dependencies;
+Hardware & execution settings with the routing rule, capacities, device
+speed and execution mode as small type inside the box. Isobar evaluation
+core = Deployment configuration (Partition & placement, dashed input) ->
+Extract logical transfers (Sources, destinations, volumes) -> Route &
+accumulate loads (Fixed routing; link & port loads) -> Evaluate
+communication costs (Service time from loads; traffic energy) ->
+Aggregate execution costs (Overlap on chip; serial hand-offs) -> Latency
+& dynamic energy, with a side box "Compute, write & digital costs" fed by
+the hardware settings and entering the aggregation. Phase analysis =
+Sweep device rate & bandwidth -> Extract phase boundaries, a two-headed
+arrow to the core labelled configurations / cost estimates. Deployment
+search = Partition & group sizing (DP) -> Die placement (SA) / Macro
+assignment (enumeration), latency in, "updated deployment" back to the
+configuration box. The gamma/alpha/beta symbols and "not optimised" are
+gone from the figure. Caption (a) rewritten to match; (b)'s title colour
+follows the same palette.
+SUMMARY REWRITE 2026-09-22 (author's request): SUMMARY.en.md and the
+local SUMMARY.md rewritten whole to the paper's stance instead of the
+stage-by-stage account: the question and the stance (placement is a
+phase), the instrument, the phase diagram (boundaries, device axis and
+fast edge, width family, the diagram at kappa 2, G = eta r), the
+deployment search (port floor, evaluator and solver, the named rules and
+the referee, the port-ratio choice, the frozen protocol), the results at
+the main configuration (headline table, mechanism, intra-die level,
+objective ablation, bandwidth slice and cells, dynamic energy), the
+validation table, the earlier findings the diagram rests on (energy
+denominators, the on-die network at the NeuRRAM tier, scheme dependence,
+the K/V write, offload, die-to-die, the mapping as the third hand, value
+energy, regime tags), scope, platform inputs, running the platform
+(the command line) and the document index. Stage codes and correction
+history are left to this record; superseded readings are not restated.
+The two files carry the same content. Previous versions are in git.
+FIG. 2(a) SECOND PASS 2026-09-22 (writer's arrow review + author's colour
+note): palette without the purple-leaning blue: inputs green (165,197,130)
+on the left, core steps mid blue (90,150,204), phase analysis teal
+(128,205,187), search olive (214,207,103), titles dark slate. Arrows:
+configurations / cost estimates run between the phase-analysis zone and
+the core zone's boundary at the header level (module to module, not to
+the configuration box); latency runs from the output box into the
+search zone; "updated deployment" leaves the search zone's boundary and
+ends on the Deployment configuration box; the compute, write and digital
+costs box now takes a branch from the operator tiling as well as the
+hardware settings (collected at one junction), and the hardware line to
+routing and communication costing runs under that box and up the core's
+left margin, with a bridge where it crosses the side box's arrow. Small
+type: "Service bounds & communication energy", "Compute-communication
+overlap; serial hand-offs". The panel is now built from one layout spec
+(_fig2a_spec) with two renderers: matplotlib and an editable draw.io
+export, panels/fig2a_platform.drawio (mxGraph XML, 192 px per inch,
+fonts scaled the same way, line jumps on the crossed edge). captions.md
+and manifest.json restored around the fig2 entries after the --only run.

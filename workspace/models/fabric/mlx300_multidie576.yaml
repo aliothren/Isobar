@@ -68,6 +68,11 @@ fabric:
                             # readout's sensitivity to the aspect ratio is out
                             # of this round's scope (an S4 search question).
       mesh: [24, 24]
+      # ports (S9 main configuration): each die's injection and ejection
+      # port at kappa = 2 x the link rate. Read by scripts/cimsim_cli.py as
+      # the default port ratio; the experiment scripts set W.port_ratio
+      # themselves, so this declaration moves no frozen number.
+      ports: {ratio: 2.0}
       # D2D: routed like the on-die NoC, one level up. pj_per_word = 10.0 is
       # the midpoint of the MEASURED band of Simba's package GRS links
       # (0.82-1.75 pJ/bit = 6.6-14 pJ / 8-bit word; Zimmer et al., JSSC 2020

@@ -1923,3 +1923,12 @@ optimisation adds, and the certified answer is zero. Fast suite:
   page), and its phase-diagram projection kappa x B = B_IO (1.0 GB/s at
   kappa = 2); the estimated 0.4-8 GB/s band stays for the device-plane
   figure. Suite: 437 -> 438.
+
+
+## Group 56 added (the command line), 2026-09-22
+
+**What changed:** no golden moved. `test_cli.py` pins `scripts/cimsim_cli.py`
+against the frozen readings (clustered seed 0 at kappa 2 and 0.4 GB/s:
+2550.352 ms prefill; the package band 0.535 to 1.421 GB/s; sequential at
+kappa 1 and 12.5 GB/s: 1026.325 ms) and the fabric's `ports: {ratio}`
+field. The suite is 443 tests.

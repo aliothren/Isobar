@@ -1,122 +1,36 @@
-## This fork: the system-level CIM study (workspace/)
+# workspace: the simulator and its results
 
-This fork carries a system-level study of communication on analog CIM LLM
-inference on top of CiMLoop. Start here:
+Everything cimsim adds on top of CiMLoop lives here. The folders:
 
-- `workspace/analysis/SUMMARY.en.md` — features & results, level by level
-  (the reading-position section §2.5 carries the device axis, the measured
-  scaling law, the T1 axis and the phase diagram).
-- `workspace/analysis/PROGRESS.md` — the narrative progress report.
-- `workspace/analysis/ANCHORS.md` — the bandwidth-anchor registry rendering
-  (published link specs with provenance and statuses; chip points).
-- `workspace/analysis/FIXLIST.en.md` — every known modeling gap, its status,
-  and the worklist (the single authority on what is done and what remains).
-- `workspace/tests/` — the guardrail suite (`python3 tests/run_tests.py`
-  inside the container); `tests/CHANGELOG.md` logs every numbered change
-  (C1..C40) with what moved.
+| folder | content | guide |
+|---|---|---|
+| `analysis/` | results, records and figures: the frozen tables, the documents, the figure sets, and the JSON artifacts the scripts write | [analysis/README.md](analysis/README.md) |
+| `scripts/` | the platform (fabric, placement, interconnect, workload, evaluator, search) and the analysis scripts that produce every result | [scripts/README.md](scripts/README.md) |
+| `models/` | CiMLoop's device, circuit, architecture and workload models, and the fabric descriptions of this work in `models/fabric/` | [models/README.md](models/README.md) |
+| `tests/` | the guardrail suite; every published number is pinned here | [tests/README.md](tests/README.md) |
+| `tools/` | BookSim, the cycle-level router simulator used as an external reference | [tools/README.md](tools/README.md) |
+| `tutorials/` | CiMLoop's tutorial notebooks | [tutorials/README.md](tutorials/README.md) |
+| `outputs/` | Timeloop mapper output directories, one per run | [outputs/README.md](outputs/README.md) |
 
-Key scripts (run inside the container, from `workspace/`): the anchor
-registry `scripts/anchors.py`; the per-axis sweeps + the (t_MVM x
-bandwidth) device plane `scripts/sweep_axes.py`; the scaling-law probes
-`scripts/run_scaling_probes.py` (+ `analyze_scaling_law.py`); the phase
-diagram `scripts/analyze_phase_diagram.py`; the Simba reproduction
-`scripts/simba_workload.py` + `scripts/simba_targets.py` (+ the
-validation figure `scripts/analyze_simba_validation.py`); the anchored
-soft-placement lever table `scripts/analyze_soft_lever.py`; the whole-model regeneration
-list `analysis/regen_v6.sh`. Figures land in `workspace/analysis/*.png`.
+## Running
 
-## Tutorials and Examples
+All scripts run inside the container, from `/home/workspace`:
 
-Prior to running any tutorials or examples, please complete the [Timeloop and
-Accelergy tutorial
-exercises](https://github.com/Accelergy-Project/timeloop-accelergy-exercises).
+```bash
+docker exec cimloop-tutorial-1 bash -c "cd /home/workspace && python3 tests/run_tests.py"
+docker exec cimloop-tutorial-1 bash -c "cd /home/workspace && python3 scripts/main_config_export.py"
+```
 
-First, navigate to the `tutorials` directory and complete the tutorial Jupyter
-notebooks. These tutorials will guide you through CiMLoop system specifications.
-Note that the `demo_speed_accuracy.ipynb` notebook is not a tutorial to run, but
-an artifact to show the speed and accuracy of the CiMLoop tool compared to prior
-work.
+Two practical rules. Files the container writes are owned by root, so
+change their ownership before editing them on the host. Python caches
+bytecode; clear `__pycache__` inside the container before running a script
+you edited on the host.
 
-After completing the tutorials, you may go explore example designs! The models
-directory contains many examples of devices, circuits, architectures, and
-workloads to play with. Navigate to the `models/arch/1_macro` directory and open
-the `_guide.ipynb` file to play with the example designs.
+## Where to read
 
-Each `_guide.ipynb` file provides a guide to the macro in the given directory.
-It also shows multiple experiments that both validate CiMLoop's model against
-published results and explore the design space. When building your own
-experiments, we recommend using these guides as a reference.
-
-# File Guide
-
-CiMLoop models are complex, as they allow for modification of every level of the
-stack. To explore the design space, we recommend using an example design as a
-starting point. We also recommend modifying only one level at first. To perform
-more advanced explorations, you should familiarize yourself with all included
-files and directories so you can modify them as needed.
-
-### The `tutorials` Directory
-The `tutorials` directory contains helpful tutorials to use the models.
-
-- [Introduction](tutorials/1_cim_macro_intro.ipynb) 
-- [Editing Variables](tutorials/2_editing_variables.ipynb) 
-- [Components, Data Movement, and Reuse](tutorials/3_components_reuse.ipynb)
-- More tutorials in progress!
-
-### The `models` Directory
-
-The models directory contains subdirectories covering the device, circuit,
-architecture, and workload levels. The `top.yaml.jinja2` file gathers all the
-files from the other points in this directory.
-
-#### The `models/arch` directory: architecture
-This directory is sub-divided into four levels: macro, tile, chip, and system.
-Each of these may be composed to create a user-defined system. Users may mix and
-match different options at each level to create different systems.
-
-Of particular interest is the `1_macro` directory, which contains models of
-published CiM macros. The `_guide.ipynb` file in each macro directory provides a
-guide to the macro in the given directory.
-
-All provided macros are CiM macros with the exception of
-[albireo_isca_2021](models/arch/1_macro/albireo_isca_2021), which is a photonic
-accelerator.
-
-The `1_macro` directory contains several other important files:
-
-- `_guide.ipynb`: A guide to the macro in the given directory. **Go here 
-  first!** This guide includes validation and exploration experiments.
-- `_tests.py`: The tests for the macro that are used in the guide. If you're
-  creating new experiments, you can use these tests as a reference.
-- `arch.yaml`: The architecture specification.
-- `variables_iso.yaml`: Variables that should be kept constant when comparing
-  different architectures for a fair comparison. These include data precision,
-  technology node, and other parameters. Across different macros, we keep the
-  same structure for the iso variables file such that we can mix and match
-  different iso variables files and different macros.
-- `variables_free.yaml`: Variables that do not need to be kept constant when
-  comparing different architectures. These include clock frequency, numbers of
-  components, and architecture-specific parameters.
-
-#### The `models/components` directory: circuits and other components
-This directory contains compound components and plug-ins that can be used in the
-architecture.
-
-#### The `models/memory_cells` directory: devices
-This directory contains devices (memory cells) to be used in the architecture.
-
-#### The `models/workloads` directory: workloads
-This directory contains DNN workload layers.
-
-#### The `models/include` directory: macros, defines, and helpful functions
-This directory contains files that are included at various other points in the
-system specification.
-
-- defines.yaml: Includes various directives that can be used elsewhere.
-- mapper.yaml: The Timeloop mapper settings.
-- slicing_encoding.py: Contains functions for slicing and encoding operands.
-- variables_common.yaml: Variables that are common across all architectures.
-
-#### The `models/scripts` directory: supporting scripts
-This directory contains scripts that make it easier to run models and visualize
-results.
+Start with [`analysis/SUMMARY.en.md`](analysis/SUMMARY.en.md) for the
+platform and its results, [`analysis/main_config_results.md`](analysis/main_config_results.md)
+for the frozen main-configuration numbers with their denominators, and
+[`analysis/FIXLIST.en.md`](analysis/FIXLIST.en.md) for the chronological
+record of every change. The cost model is written out in
+[`../formulation.md`](../formulation.md).

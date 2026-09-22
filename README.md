@@ -1,257 +1,126 @@
-# cimsim — System-Level CIM Simulator for LLM Inference (fork of CiMLoop)
+# cimsim: a placement-aware system-level simulator for LLM inference on ReRAM compute-in-memory
 
-This is a **fork of [CiMLoop](https://github.com/mit-emze/cimloop)** used as the
-baseline for a system-level Compute-In-Memory (CIM) simulator targeting LLM
-inference. We keep CiMLoop's per-op mapping / macro modeling untouched as the
-lower layer, and add decoupled **overlays** on top for what CiMLoop abstracts
-away: physical **placement / distance**, **latency** (incl. ReRAM write),
-**crossbar-level** stats + per-pair communication, an **LLM workload** model
-(sequence scaling + attention K/V write + KV-cache), and **value-dependent**
-energy correction — plus a corrected **resident multi-die** hardware hierarchy.
+cimsim models an LLM inference machine built from ReRAM compute-in-memory
+(CIM) dies as a **system**: package, die, macro, core, crossbar, with the
+weights resident in the crossbars and only activations and partial sums
+moving at run time. Its central object is the **physical placement** of the
+mapped operators on that hierarchy, the level that macro-level CIM modelling
+stops short of. The simulator prices what placement changes, the loads on
+shared links and ports, and combines them with the compute, write and
+digital costs into whole-model latency and dynamic energy. A phase diagram
+says under which device and link conditions placement decides the cost, and
+a deployment search chooses a placement when it does.
 
-> **Start here:** [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md)
-> is the full feature/results writeup (with charts). This section is a code map.
+The simulator is built on [CiMLoop](https://github.com/mit-emze/cimloop)
+(Timeloop + Accelergy + CIM extensions), whose per-operator mapping and
+calibrated macro model are used unchanged as the lower layer. Everything
+above it is an overlay in `workspace/`.
 
-### What this fork adds
+## Results, frozen 2026-09-22
 
-**Hardware model — resident multi-die `package → die → macro → core → crossbar`:**
+Main configuration: a 2.7B-class model (d 2560, 32 layers), 512-token
+serial prefill, 544 of 576 dies on a 24x24 mesh with XY routing, the
+NeuRRAM row time of 10.14 us, ports at twice the link rate (kappa = 2),
+0.4 GB/s per link direction (12.5 GB/s as the contrast).
 
-- **`models/arch/3_chip/mlx_die.yaml`** — a DIE: 8 MB on-chip SRAM (`glb`) +
-  8 macros + inter-macro `router` + 4 cores/macro.
-- **`models/arch/2_tile/mlx_core.yaml`** — a CORE: local I/O buffers +
-  8 crossbars (≈ 2 Mbit/core). Crossbar = the 256×256 4-bit ReRAM macro
-  `wan_nature_2022` (reused) → 256 crossbars/die.
-- **Weights are RESIDENT** (ReRAM is non-volatile / weight-stationary): the top
-  level is `4_system/ws_chip2chip_link` (dies + die-to-die link, weights
-  programmed once), **not** `fetch_weights_lpddr4` (which re-streams weights every
-  inference — correct for volatile SRAM CiM, WRONG for ReRAM). GPT-2 medium is
-  resident across ~18–36 dies. The only per-inference writes are attention K/V.
+| quantity | value | against |
+|---|---|---|
+| placement-search latency reduction, prefill | **9.91 %** (range over seeds 9.66 to 10.12 %) | the strongest evaluated baseline, a random fill at 2118.71 ms |
+| the same, against the default stacked fill | 54.5 % | 4192.54 ms |
+| the same at 12.5 GB/s | 0.70 % | strongest baseline at that bandwidth |
+| decode, re-scored, no separate search | 1.57 % | strongest baseline |
+| dynamic energy of the selected layout | -0.26 % | strongest baseline, 2.5229 J |
+| objective ablation: distance and hop proxies select layouts | 11.4 % / 11.2 % slower | the resource-aware objective's best endpoint |
+| intra-die assignment, GPT-2-medium class layer | 9.02 % lower layer latency | the contiguous assignment |
+| placement-dependent bandwidth band, package level | 0.535 to 1.421 GB/s (2.66x) | seven named seating rules at the NeuRRAM rate |
+| placement-dependent band, intra-die level | 0.606 to 1.616 GB/s (2.67x) | all 70 macro seatings, exhaustive |
 
-**Scripts (`workspace/scripts/`):**
+Every number has a ledger row with its numerator, denominator and
+statistic in [`workspace/analysis/main_config_results.md`](workspace/analysis/main_config_results.md)
+and a one-line entry in [`workspace/analysis/paper_numbers.md`](workspace/analysis/paper_numbers.md).
+The test suite pins them (443 tests).
 
-- **`fabric.py`** + **`models/fabric/*.yaml`** — the physical fabric config:
-  N-level generic (per-level counts, grid meshes, link params with DR
-  calibration tags), the single source of truth for physical structure; stats
-  parsing is demoted to a consistency sentinel. `CIMSIM_FABRIC=<yaml>` selects a
-  variant for a whole run (e.g. the 2x4 macro-layout study first ran as a variant with zero code
-  changes; since C27 the fill-exact 2x4 macro / 4x2 crossbar grids ARE the default and
-  `mlx300_3x3.yaml` keeps the earlier 3x3 grids for comparison).
-- **`placement.py`** — the explicit, JSON-serializable Placement (per-level slot
-  tables + verify()); `sequential_fill` reproduces the legacy floorplan bit for
-  bit; `run_op(op, placement=p)` swaps a whole layout.
-- **`traffic.py`** — TrafficExtraction: real multicast/reduction structure from
-  the mapping (multicast trunks counted once, idle instances zero), tied to
-  Timeloop's own counters by a divisibility guard. `build_flows` uses it by
-  default; the uniform model survives only as the v0 comparison baseline.
-- **`make_figures.py`** — one driver for every figure (7 stages); `--tag` runs
-  config variants without clobbering canonical outputs.
+## What the platform computes
 
-- **`mlx_system.py`** — hardware config + physical `LAYOUT` / `HOP_LATENCY_NS`.
-  `MLX_DIE_CONFIG`/`mlx_die_callfunc` (resident die hierarchy),
-  `MLX_DIE_STREAMING_CONFIG` (old weight-streaming, kept for A/B only),
-  `run_mlx_layer()` / `run_mlx_dnn()`, `n_dies_for_weights()`.
-- **`placement_aware.py`** — topology overlay: `perceive → placement prior →
-  distance model → re-aggregate`, for **energy** (`position_aware_cost`) and
-  **latency** (`position_aware_latency`). Priors (`place_grid`/`place_linear`) and
-  patterns (`to_center`/`tree`/`all_to_all`/`neighbor`) are pluggable. Key
-  explicit assumption `reference_hops`; **relative** comparisons are robust.
-- **`crossbar_stats.py`** — per-crossbar compute/weight/I-O (avg), per-level bus
-  traffic, communication STRUCTURE (multicast/reduction/bit-slice) + `hierarchy()`.
-- **`crossbar_comm.py`** — per-PAIR (node↔node) flows on a nested floorplan:
-  `(src→dst, volume, distance)`, per-crossbar cost that **varies by position**,
-  floorplan heatmap, geometry `level_max_hops`, and **`save_flows()`** which
-  auto-dumps the detailed per-pair CSV+JSON to `analysis/comm/` on every run.
-- **`llm_workload.py`** — GPT workload generator: sequence/phase scaling,
-  attention **write cost + write latency** (ReRAM SET), **KV-cache**,
-  **die-to-die** activation, and model-matched **histogram injection**.
-  `run_op` returns energy + latency breakdown; `report_block` prints both tables.
-- **`value_stats.py`** — general operand value-distribution loader (per model /
-  layer type) for CiMLoop's data-value-dependent energy.
-- **`crossbar_value.py`** — per-crossbar value-dependent energy MODE
-  (`run_op(value_mode="uniform"|"per_crossbar")`): splits energy into a fixed
-  floor + a value-dependent part, then scales the value part by each crossbar's
-  own distribution activity (total conserved). Distribution source is pluggable
-  (`synthetic` placeholder now, `weights` interface for real weight tiles).
-- **`crossbar_value_real.py`** — the REAL per-crossbar value pipeline: real
-  weights + real forward activations, tiled onto crossbars, each tile re-simulated
-  with its own distributions (two stages — torch-only extract, cimloop-only
-  simulate — to avoid an OpenMP segfault).
-- **`analyze_system_gpt2.py`** — whole GPT-2 system-level three-way comparison
-  (baseline / +overlays / offload) for a given `[S] [phase]`; dumps searched
-  mappings + comparison chart.
-- **`analyze_energy_vs_latency.py`** / **`analyze_seqlen_kv.py`** /
-  **`analyze_region_locality.py`** / **`analyze_position_aware.py`** /
-  **`analyze_crossbar_value_compare.py`** — the energy-vs-latency,
-  sequence-scaling + KV-cache, region-placement (17.8%), placement×pattern, and
-  device×workload per-crossbar-value case studies (charts to `analysis/`; every
-  figure in the writeup has one of these as its committed source, and
-  `make_figures.py` drives them all).
-- **`analyze_grid_gating.py`** / **`figstyle.py`** — what gates the hub-position
-  lever (grid x hub x filling on the same traffic; the corner rule) and the
-  figure rule that merges identical series instead of stacking them.
-- **`anchors.py`** / **`sweep_axes.py`** — the anchor registry (digital anchors
-  with a status, the estimated analog-reality band, chip points for the phase
-  diagram, one device-cycle constant) and the closed-form per-axis bandwidth
-  sweeps read at both paradigms' columns (`analysis/sweep_axis_*.png`,
-  `analysis/phase_sweep.json`).
-- **`analyze_contention_system.py`** / **`analyze_anchored_sweep.py`** /
-  **`analyze_d2d.py`** / **`analyze_offload_contention.py`** /
-  **`analyze_scale_tiers.py`** — the system-level contention study (whole-stack
-  multipliers vs link bandwidth, both overlap ends, four wire accountings),
-  its readout at published NoC bandwidths (digital accelerators' links, read
-  as the upper bound; `analysis/ANCHORS.md`), the die-to-die single-pass /
-  pipelined modes on the 48-die configuration, the attention-offloaded
-  condition, and the 355M → 2.7B scale tiers.
-- **`analyze_digital_sensitivity.py`** — how much of the model's time the
-  digital vector unit (softmax / GELU / LayerNorm / residual) takes, swept over
-  lanes × clock.
-- **`analyze_offload_unit_sensitivity.py`** — the external attention unit as
-  an interface (O9): prefill dividend vs unit rate × unit count, decode
-  ms and mJ per token vs context × K/V memory bandwidth; outputs
-  `analysis/offload_unit_sensitivity.{png,json}`.
-- **`op_breakdown.py`** — the per-operator cost ledger: one entry point, every
-  cost item on its own row (all CiMLoop components, re-pricing, writes,
-  die-to-die, digital unit), operator-type shares of the whole model under both
-  conditions; outputs under `analysis/op_breakdown/`.
-- **`utils.py`** — one-line change so `run_mapper` exposes its Timeloop output dir.
+- **Inputs.** The workload, the operator tiling with its tensor
+  dependencies (produced by CiMLoop's mapper, taken as given), and the
+  hardware and execution configuration (fabric geometry, link and port
+  capacities, device row time, execution mode).
+- **One evaluation of a candidate deployment.** The block partition fixes
+  the logical communication; the die and macro placements fix the routed
+  paths under the fixed XY rule; the loads on every link direction and every
+  die port are accumulated per hand-off; the busiest resource of each
+  hand-off, in link-time units with ports at the declared ratio, is
+  combined with the execution relation (maximum within a stage, sum over
+  stages for the package; overlap with compute inside a die) and with the
+  compute, write and digital-unit costs into latency and dynamic energy.
+  The cost model is written out in [`formulation.md`](formulation.md).
+- **Phase analysis.** The same evaluation swept over device rate and link
+  bandwidth over a set of placements gives the placement phase diagram,
+  whose boundaries are the placement extrema of the communication cost.
+- **Deployment search.** A dynamic program over block cuts, simulated
+  annealing over die placement, and enumeration inside a die, all scoring
+  candidates with the same evaluation, incrementally.
+- **External references.** Published silicon placement measurements
+  (Simba), a cycle-level router simulator (BookSim) on the same candidate
+  placements, and the published link rates of HERMES and ISAAC projected
+  onto the instance.
 
-- **`EXTERNAL_DEPENDENCIES.md`** — pinned versions of external tools (e.g. the
-  standalone NeuroSim) that are intentionally not committed.
+## Getting started
 
-Progress and per-fix details (motivation / what was done / result) are tracked
-in [`workspace/analysis/FIXLIST.en.md`](workspace/analysis/FIXLIST.en.md).
-
-### Local setup notes (differ from upstream)
-
-- Use **`docker compose`** (v2 plugin), not the obsolete `docker-compose`.
-- UID/GID are overridable via a local `.env` (`USER_UID` / `USER_GID` /
-  `DOCKER_ARCH`); `.env` is git-ignored.
-- Upstream CiMLoop is kept as the `upstream` git remote for pulling updates.
-- ⚠️ The analysis scripts run mappers; keep them **sequential / 1 core**
-  (`run_mlx_dnn` already does) so they don't starve other workloads.
-
-### Quick examples (run inside the container)
-
-```python
-from scripts import mlx_system as mlx
-from scripts import placement_aware as pa
-from scripts import crossbar_stats as cbs
-from scripts import crossbar_comm as cc
-from scripts import llm_workload as lw
-
-# 1) one layer on the resident die hierarchy, with position-aware cost
-layer = mlx.list_layers("resnet18")[0]
-r = mlx.run_mlx_layer(layer, config=mlx.MLX_DIE_CONFIG, callfunc=mlx.mlx_die_callfunc)
-pa.print_report(r["analysis"], title="die / grid / to_center")
-
-# 2) per-crossbar stats + per-pair (node↔node) flows + heatmap
-cbs.report(r["result"].output_dir)
-cc.summarize_and_plot(r["result"].output_dir, layer_name="00")
-
-# 3) an LLM transformer block: energy + latency tables (prefill or decode).
-#    every run auto-saves per-pair comm to analysis/comm/<op>_<phase>_comm.{csv,json}
-res = lw.run_block(lw.GptConfig(), S=512, phase="prefill")
-lw.report_block(res, title="prefill S=512")
-```
-
-Whole-model / whole-DNN studies (charts + CSV to `analysis/`):
+The simulator runs inside the CiMLoop container.
 
 ```bash
-python3 scripts/analyze_system_gpt2.py 512 prefill   # GPT-2 system-level (or: 512 decode)
-python3 scripts/analyze_position_aware.py resnet18    # placement × pattern comparison
-python3 scripts/analyze_contention_system.py 512 --shares   # contention at the system denominator
-python3 scripts/analyze_anchored_sweep.py && python3 scripts/analyze_d2d.py \
-  && python3 scripts/analyze_offload_contention.py && python3 scripts/analyze_scale_tiers.py
-python3 scripts/sweep_axes.py                        # per-axis bandwidth sweeps (both anchor columns)
-CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml python3 scripts/op_breakdown.py   # per-operator ledger
-python3 scripts/analyze_offload_unit_sensitivity.py   # external attention unit interface sweep
+docker compose up -d                       # container cimloop-tutorial-1
+docker exec cimloop-tutorial-1 bash -c "cd /home/workspace && python3 tests/run_tests.py"
 ```
 
-### Tests
+Regenerating the frozen results, from `/home/workspace` inside the container:
 
 ```bash
-python3 tests/run_tests.py            # fast guardrail suite (223 tests, ~4 min)
-python3 tests/run_tests.py --slow     # plus one real mapper run
+python3 scripts/kappa_geometry_sweep.py     # the search per port ratio and geometry
+python3 scripts/main_config_export.py       # the main-configuration table and ledger
+python3 scripts/mechanism_table.py          # resource loads behind the ranking
+python3 scripts/energy_export.py            # dynamic energy of the frozen layouts
+ISOBAR_KAPPA=2 python3 scripts/fig_phase_isobar.py        # the phase diagram
+python3 scripts/plot_dac2027_v2.py --run-id 20260921_v2   # the paper figure set
 ```
 
-The suite checks that the code matches the documented model (stats parsing
-against an independent extraction, write/distance geometry against hand-derived
-formulas, frozen goldens against silent changes) — it does not claim physical
-accuracy, which waits for calibration data. `xfail_*` tests are the known-gap
-list: each turns green when its gap (lower-level link energy, placement-aware
-propagation, D2D) is closed. See `workspace/analysis/SUMMARY.en.md` §10.
+Container-written files are owned by root; change ownership before editing
+them on the host. Clear `__pycache__` in the container before running a
+script edited on the host.
 
-See [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md) for the full
-results, charts, and the modeling-assumptions / limitations writeup.
+## Repository map
 
----
+| path | what it holds | guide |
+|---|---|---|
+| `workspace/analysis/` | results, records, figures and the documents that carry them | [README](workspace/analysis/README.md) |
+| `workspace/scripts/` | the platform (fabric, placement, interconnect, workload, evaluator, search) and every analysis script | [README](workspace/scripts/README.md) |
+| `workspace/models/` | CiMLoop's device, circuit, architecture and workload models, plus the fabric descriptions of this work | [README](workspace/models/README.md) |
+| `workspace/tests/` | the guardrail suite that pins every published number | [README](workspace/tests/README.md) |
+| `workspace/tools/` | BookSim, the router simulator used as an external reference | [README](workspace/tools/README.md) |
+| `workspace/tutorials/` | CiMLoop's tutorial notebooks | [README](workspace/tutorials/README.md) |
+| `workspace/outputs/` | Timeloop mapper output directories, regenerated by the runs | [README](workspace/outputs/README.md) |
+| `io_study/` | the upstream CiMLoop tree kept for reference | [README](io_study/README.md) |
+| `formulation.md` | the cost model as frozen | |
+| `EXTERNAL_DEPENDENCIES.md` | external tools pinned by version, not committed | |
 
-The original CiMLoop README follows.
+## Documents
 
-# CiMLoop (Timeloop+Accelergy v4)
+- [`docs/`](docs/README.md): the user guide: setup, the fabric file, the workload account, evaluating a deployment, running the search, the phase diagram, BookSim checks, regenerating results.
+- [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md): the account of the platform and its results, written to the stance the paper takes.
+- [`workspace/analysis/main_config_results.md`](workspace/analysis/main_config_results.md), [`paper_numbers.md`](workspace/analysis/paper_numbers.md), [`METRICS.md`](workspace/analysis/METRICS.md): the frozen numbers, their denominators and statistics.
+- [`workspace/analysis/ANCHORS.md`](workspace/analysis/ANCHORS.md): every published bandwidth and device figure used as a reference, with its source and status.
+- [`workspace/analysis/SEARCH_SPEC.en.md`](workspace/analysis/SEARCH_SPEC.en.md): the search's specification as implemented.
+- [`workspace/analysis/FIXLIST.en.md`](workspace/analysis/FIXLIST.en.md): the chronological record of every model change and correction.
+- [`workspace/analysis/figures_dac2027/`](workspace/analysis/figures_dac2027/README.md): the paper figure sets with their data and captions.
 
-Welcome to the repository for "CiMLoop: A Flexible, Accurate, and Fast
-Compute-In-Memory Modeling Tool" by Tanner Andrulis, Vivienne Sze, and Joel S.
-Emer. CiMLoop is a full-stack CiM modeling tool with flexible user-defined
-systems and fast, accurate statistical energy modeling.
+## Relation to CiMLoop, dependencies, license
 
-This repository contains tutorials, examples, documentation, and an artifact for
-the CiMLoop paper. All are accessible through the Docker container.
-
-For the paper or presentations relating to CiMLoop, please visit the [project website](https://emze.csail.mit.edu/cimloop).
-
-## Quick Start
-
-```bash
-git clone https://github.com/mit-emze/cimloop.git
-cd cimloop
-export DOCKER_ARCH=<your processor architecture. supported: amd64>
-# arm64 is also supported, BUT IS NOT STABLE. Use at your own risk.
-# It is recommended to build Timeloop and Accelergy from source if you're
-# using an ARM machine.
-docker-compose pull
-docker-compose up
-# Connect to the container and explore CiMLoop! The README.md file
-# in the workspace directory contains more information.
-
-# If you have permission issues, please see the instructions in the
-# docker-compose.yaml file on how to set the UID and GID.
-```
-
-The [README.md in the workspace](workspace/README.md) directory contains more
-information on how to use CiMLoop.
-
-## Tutorials
-The [Timeloop and Accelergy tutorials]
-(https://github.com/Accelergy-Project/timeloop-accelergy-exercises) are a
-prerequisite for using CiMLoop as well, so please complete those first. CiMLoop
-tutorials are available in the `workspace/tutorials` directory.
-
-## CiMLoop Artifact
-CiMLoop published results can be reproduced by running the
-`models/arch/1_macro/*/_guide.ipynb` notebooks and the
-`tutorials/demo_speed_accuracy.ipynb` notebook in the workspace.
-
-## CiMLoop for Photonic Accelerators
-CiMLoop includes a model of the [Albireo silicon photonic
-accelerator](workspace/models/arch/1_macro/albireo_isca_2021) as described in
-"Architecture-Level Modeling of Photonic Deep Neural Network Accelerators"
-(Andrulis et al., ISPASS 2024).
-
-## Documentation
-Documentation can be found at the following locations:
-
-- [CiMLoop Paper](CiMLoop.pdf)
-- [Timeloop+Accelergy Documentation](https://timeloop.csail.mit.edu/)
-- [Timeloop+Accelergy Exercises](https://github.com/Accelergy-Project/timeloop-accelergy-exercises)
-- [Timeloop Front-End Documentation](https://accelergy-project.github.io/timeloopfe/)
-
-## Contributing
-If you would like to contribute models of memory cells, components,
-architectures, workloads, or anything else, please submit a pull request. We
-welcome contributions!
-
-## Citation
-If you use CiMLoop in your research, please cite the papers in
-[citations.bib](citations.bib).
-
+cimsim is a fork of CiMLoop and keeps its structure, models and license.
+CiMLoop's own tutorials and model guides remain under `workspace/tutorials/`
+and `workspace/models/`. External tools that are not committed (NeuroSim,
+BookSim sources) are listed with pinned versions in
+[`EXTERNAL_DEPENDENCIES.md`](EXTERNAL_DEPENDENCIES.md). The license is in
+[`LICENSE`](LICENSE); the upstream citations are in
+[`citations.bib`](citations.bib).

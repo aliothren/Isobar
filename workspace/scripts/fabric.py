@@ -127,6 +127,14 @@ class Level:
     # DERIVED (delay ~ length or length^2, energy ~ wire capacitance ~ length)
     # instead of hand-filled per level. None = not stated.
     slot_pitch_um: Optional[float] = None
+    # The level's PORT RATIO kappa = C_port / C_link: each instance's one
+    # injection and one ejection port run at kappa x the level's link rate
+    # (S8). Declared in the YAML as `ports: {ratio: kappa}` on the level;
+    # None = not declared. The deployment evaluator reads the ratio from
+    # the workload object (W.port_ratio); the command line
+    # (scripts/cimsim_cli.py) takes this field as its default when no
+    # --kappa is given, so a fabric file can carry its own port model.
+    port_ratio: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -321,6 +329,8 @@ class Fabric:
         for lv in self.levels:
             if lv.idle_power_w is not None and lv.idle_power_w < 0:
                 raise ValueError(f"{lv.name}: idle_power_w must be >= 0")
+            if lv.port_ratio is not None and lv.port_ratio < 1.0:
+                raise ValueError(f"{lv.name}: ports.ratio must be >= 1 (1 = ports at the link rate), got {lv.port_ratio}")
         # physical slot pitch: positive, and non-decreasing toward the top
         # (a parent level's grid step spans at least its child's)
         pitched = [lv for lv in self.levels if lv.slot_pitch_um is not None]
@@ -438,6 +448,8 @@ def from_yaml(path: str = _DEFAULT_YAML) -> Fabric:
                           else float(lv["idle_power_w"])),
             slot_pitch_um=(None if lv.get("slot_pitch_um") is None
                            else float(lv.get("slot_pitch_um"))),
+            port_ratio=(None if (lv.get("ports") or {}).get("ratio") is None
+                        else float(lv["ports"]["ratio"])),
         ))
     dg = raw.get("digital") or {}
     digital = DigitalUnit(

@@ -1,5 +1,7 @@
 # SEARCH_SPEC v1 — the search milestone's founding specification
 
+> **Status (2026-09-22):** implemented and frozen. The results of the search on the main configuration are in `main_config_results.md`; the protocol actually run (three start families, three seeds, 1200 steps, alpha 0.996, t0 = 20 ms, best over starts per seed, median seed as representative) is recorded there and in `FIXLIST.en.md` (S9).
+
 > Repo-resident revision of `SYNC_search_v1` (2026-09-10), the semantic
 > authority for worklist step 7 (S1–S6). Dual identity: the implementation
 > spec AND the paper's search-chapter method draft. All rulings are final;

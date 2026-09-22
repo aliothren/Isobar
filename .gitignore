@@ -32,6 +32,7 @@ workspace/tutorials/DNN_NeuroSim_V1.3/
 # working copy (not pushed); bulk CSV/JSON, per-pair comm dumps, and the mapper
 # output dirs stay ignored too.
 workspace/analysis/*
+!workspace/analysis/README.md
 !workspace/analysis/SUMMARY.en.md
 !workspace/analysis/SUMMARY.Extn.md
 !workspace/analysis/FIXLIST.en.md
@@ -75,4 +76,8 @@ io_study/.jupyter/
 io_study/.local/
 
 # vendored third-party tools (BookSim2 etc.), built locally -- not part of the repo
-workspace/tools/
+workspace/tools/*
+
+# folder guides inside otherwise ignored trees
+!workspace/outputs/README.md
+!workspace/tools/README.md

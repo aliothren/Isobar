@@ -1,5 +1,7 @@
 # Published-quantity registry
 
+> Frozen 2026-09-22. The main-result rows are the paper's numbers; rows marked κ = 1 or named after an earlier instance are sensitivity cells or earlier-stage exhibits and are kept with their own denominators.
+
 Every ratio this project publishes, with its DENOMINATOR, its
 instance semantics, and its envelope quantifier. Two numbers may not
 be compared, added, or printed side by side unless their rows agree on
@@ -17,19 +19,20 @@ matrix (`observed`); the exhaustive within-die instance is the
 
 | quantity | denominator | semantics | quantifier |
 |---|---|---|---|
-| bandwidth-equivalent envelope ratio (1.4–2×) | the bandwidth needed to hold the operating point | how much link speed the software band is worth at a fixed operating point | observed (the anchor set) |
+| placement-dependent bandwidth band, package level (B− 0.535 / B+ 1.421 GB/s, 2.66×) | the placement extrema of the bottleneck load over the seven named rules, at the NeuRRAM rate, κ = 2 | the band in which the placement decides which cost leads; κ = 1: 0.603 / 1.427, 2.37× | observed (7 rules) |
+| placement-dependent band, intra-die level (B− 0.606 / B+ 1.616 GB/s, 2.67×) | the per-operator masking thresholds over all 70 macro seatings of the ffn die | the same band one level down, under the overlap model | **certified** (exhaustive) |
 | ordering latency spread (6.55× / 12.26× / 3.57×) | that weave's BEST ordering latency | 48-die pipelined orderings on one weave; adversarial configurations marked in place | observed (enumerated orderings per weave) |
 | weave energy spread (ring / torus / mesh) | the mesh ladder's energy per rung | the SAME seven seatings re-priced under another weave — an ENERGY column quantity, named apart from the ordering spread above | observed (7 named seatings) |
 | MAIN RESULT: seating-search gain, main configuration (prefill 9.91%; decode 1.57%) | the strongest baseline's whole-model latency at the same configuration (κ = 2, 0.4 GB/s, 24×24, NeuRRAM rate; random_s3) | median over three SA seeds of best-over-three-starts; range 9.66–10.12%, best-of-nine 10.12% labelled apart | observed (9 runs) |
 | gain vs the default fill, main configuration (54.5%) | the A4 default (stacked) fill's latency | the cost of the deployment choice, not the search's margin | observed |
-| κ sensitivity of the search gain (κ 1: 1.86%, κ 2: 9.91%, κ 4: 9.92%) | that cell's strongest baseline | κ = 2 and 4 coincide (ports never bind); κ raises the hardware itself by 6.7% apart | observed |
+| κ sensitivity of the search gain (κ 1: 1.86%, κ 2: 9.91%, κ 4: 9.92%) | that cell's strongest baseline | at κ = 2 and 4 every baseline reads the same (ports never bind) and the search gains agree within the seed range; κ raises the hardware itself by 6.7% apart | observed |
 | objective ablation, main configuration (loss avoided 11.4% / 11.2%) | the resource-aware endpoint's latency | how much worse the distance / hop proxies' selections are under the true cost | observed (3 seeds) |
 | A3 intra-die β gain incl. package hand-offs (9.02% at 0.4 GB/s) | the shipped seating's layer time incl. the chain's two hand-offs | layer-level, 355M-class instance; 9.52% without the package term | certified (exhaustive) |
 | dynamic energy change of the headline layout (+0.26%) | the strongest latency baseline's system dynamic energy (random_s3, 2.5229 J) | E = per-op CiMLoop energy + elementwise + payload words × max(hops,1) × 10 pJ; static not modelled; B- and κ-independent | observed (same layouts as the headline G) |
 | communication share of dynamic energy (9.0% random_s3, 1.8% distance rules) | system dynamic energy of that layout | how much of E the seating can move at all | observed |
 | energy edge of the compact rules (+7.33% clustered vs random_s3) | random_s3's dynamic energy | the compact-vs-dispersed trade-off; latency cost 20.4% | observed |
 | fan-out busiest-link reduction (11.3% vs random seed 0 / 8.6% vs strongest draw) | the reference's busiest-link words on instance B (V = 1e6, 82 pairs, merged batch) | the communication-term gain of the fan-out search; NOT a whole-model gain (B carries no R) | observed (3 SA seeds from the random start) |
-| seating gain vs strongest baseline (weak 1.86% / GRS 0.13%) | min over the seven named rules (seed 0) and five random fills (seeds 0–4), scored under the evaluator | the 544-die seating search's endpoint against the best baseline the evaluator can name; the earlier 3.53% / 0.24% are the same endpoints against random seed 0 alone (kept, labelled) | observed (3 start families × 3 SA seeds) |
+| seating gain vs strongest baseline at κ = 1 (weak 1.86% / GRS 0.13%; a sensitivity cell, not the main result) | min over the seven named rules (seed 0) and five random fills (seeds 0–4), scored under the evaluator | the 544-die seating search's endpoint against the best baseline the evaluator can name; the earlier 3.53% / 0.24% are the same endpoints against random seed 0 alone (kept, labelled) | observed (3 start families × 3 SA seeds) |
 | within-die band ratio (1.51× attn / 2.00× ffn) | the exhaustive best joint per-die cost | A3 co-residency space, 280 / 70 seatings, 0.4 GB/s cell | **certified** (exhaustive) |
 | within-die shipped headroom (+17.8% / +20.0%) | the exhaustive optimum | the shipped contiguous mapping's distance from it, same cell | **certified** |
 

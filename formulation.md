@@ -1,67 +1,98 @@
-# Problem Formulation
+# The cost model, as frozen (2026-09-22)
 
-The die is a set of crossbar slots $\mathcal{P} = \{(a,c,x)\}$ organized as $A=8$ macros
-× $N_c=4$ cores × $N_x=8$ crossbars ($|\mathcal{P}|=256$), with capacities
-$\kappa_{\mathrm{core}}=8$ and $\kappa_{\mathrm{macro}}=32$. Each crossbar holds an
-$R \times K = 256 \times 128$ weight tile. Each projection $\ell \in \mathcal{L}$ is
-tiled onto $m_\ell = \lceil M_\ell / K \rceil$ M-blocks ×
-$n_\ell = \lceil C_\ell / R \rceil$ C-tiles, giving tiles $t = (\ell, i, j) \in T$.
-Since all inter-projection traffic routes through the host, the only on-die
-communication is the intra-matmul partial-sum reduction: for each M-block $i$, its
-$n_\ell$ C-tiles form one reduction hyperedge
-$e_{\ell,i} = \{(\ell,i,j)\}_{j=1}^{n_\ell}$ feeding a single reduction tree.
+This is the model every result in the repository is computed with. It is
+implemented in `workspace/scripts/search_eval.py` (package level) and
+`workspace/scripts/search_withindie.py` (intra-die level); the phase
+diagram in `workspace/scripts/fig_phase_isobar.py` draws its boundaries
+from the same functions.
 
-We seek a time-invariant (weight-stationary) injective placement $\pi : T \to \mathcal{P}$,
-encoded by $x_{t,p} = \mathbb{1}[\pi(t) = p]$, subject to
+## Objects
+
+A deployment of a layer stack on the package is a triple $(\gamma, \alpha, \beta)$:
+$\gamma$ the partition of the operator chain into contiguous blocks with
+their die groups, $\alpha$ the placement of every operator's dies on the
+die mesh, $\beta$ the assignment of an operator's macros inside a die. The
+operator tiling comes from CiMLoop's mapper and is taken as given.
+
+The hardware is a fabric of levels (package, die, macro, core, crossbar).
+At the package level the die mesh has a link bandwidth $B$ per direction
+and each die has one injection and one ejection port of capacity $\kappa B$;
+routing is the fixed XY rule. The device is characterised by its row
+processing rate $s = 1/t_{\mathrm{row}}$.
+
+## Communication
+
+Every boundary $k$ between consecutive operators is an R-split multicast:
+each producer die holds one piece of the output and ships it to every
+consumer die, so a hand-off from $n_p$ to $n_c$ dies is $n_p n_c$ flows and
+every consumer receives the whole tensor $V_k$. Each flow is routed on the
+mesh; its volume is added to every link direction on its path and to the
+producer's injection port and the consumer's ejection port. The service
+time of the boundary is its busiest resource,
+$$
+L_k(\alpha) = \max\Big\{\max_e \frac{Q_{k,e}}{B},\;
+\max_v \frac{Q^{\mathrm{inj}}_{k,v}}{\kappa B},\;
+\max_v \frac{Q^{\mathrm{ej}}_{k,v}}{\kappa B}\Big\},
+$$
+with port loads in link-time units. Because every consumer must receive
+$V_k$ through its own ejection port, $L_k \ge V_k/(\kappa B)$: the port
+floor, a property of the mapping that no placement can go below.
+
+## Latency
+
+The non-communication cost separates from the communication cost,
+$$
+R(s) = \frac{N}{s} + F, \qquad H(\alpha; B, \kappa) = \sum_k L_k(\alpha) + P(\alpha),
+$$
+with $N$ the compute that scales with the device, $F$ the weight-write and
+digital-unit terms that do not, and $P$ the propagation of each
+boundary's longest path (20 ns per hop). A batch-one serial prefill
+executes the boundaries one after another, so the package latency is the sum
+$$
+T_{\mathrm{pkg}} = R(s) + H(\alpha; B, \kappa).
+$$
+Inside a die each operator overlaps its serialization with its own compute,
+$$
+T_{\mathrm{die}}(\beta) = \sum_j \big[D_j + \max\{C_j(s),\, H_j(\beta; B)\}\big],
+$$
+with $D_j$ the write and propagation terms that do not overlap. The two
+levels are separable in the frozen model: a die placement moves only the
+propagation term of the intra-die instance, and no term couples a die's
+macro seating to the hand-offs entering it.
+
+## Dynamic energy
 
 $$
-\sum_{p} x_{t,p} = 1 \ \ \forall t, \qquad
-\sum_{t} x_{t,p} \le 1 \ \ \forall p, \qquad
-\sum_{t,\, p \in c} x_{t,p} \le \kappa_{\mathrm{core}} \ \ \forall c, \qquad
-\sum_{t,\, p \in a} x_{t,p} \le \kappa_{\mathrm{macro}} \ \ \forall a .
+E = E_{\mathrm{ops}} + E_{\mathrm{elem}} + \sum_{\mathrm{flows}} \mathrm{words} \times \max(\mathrm{hops}, 1) \times 10\ \mathrm{pJ},
+$$
+the per-operator CiMLoop energy, the digital-unit energy, and every
+delivered payload word charged once per link hop at the midpoint of the
+measured Simba GRS band. Static power is not modelled; the energy does not
+depend on $B$ or $\kappa$. Only the surplus hops depend on the placement.
+
+## The phase diagram
+
+For a comparison object that separates, a boundary is the cost equality
+$B_c(\alpha; s) = A(\alpha)/R(s)$ with $A$ the aggregate bottleneck load in
+words. Over a declared placement set $\mathcal{P}$ the extrema
+$B_-(s) = \min_{\mathcal{P}} B_c$ and $B_+(s) = \max_{\mathcal{P}} B_c$
+bound the band in which the placement decides which cost leads; above $B_+$
+every placement is compute-dominated, below $B_-$ communication dominates
+for every placement and the placement sets how severe. Under the intra-die
+overlap model the boundaries are the per-operator masking thresholds
+$A_{\min}/C$ and $A_{\max}/C$. For two placements with the same $R$ the
+whole-model gain factorises as
+$$
+G = \eta\, r, \qquad \eta = 1 - \frac{H_{\mathrm{sel}}}{H_{\mathrm{ref}}}, \qquad r = \frac{H_{\mathrm{ref}}}{T_{\mathrm{ref}}}.
 $$
 
-Partial sums reduce for free within a core (analog bitline + local shift-add), and the
-reduction tree pays once per additional core or macro it spans. With
-$\lambda_{\mathrm{core}}(e)$ and $\lambda_{\mathrm{macro}}(e)$ the number of distinct
-cores and macros hyperedge $e$ touches under $\pi$, and boundary energy weights
-$0 = w_{\text{within-core}} \ll w_{\mathrm{core}} \ll w_{\mathrm{macro}}$ (pJ/byte), the
-reduction cost is the hierarchical connectivity ($\lambda{-}1$) metric
+## The search
 
-$$
-\mathrm{Red}(e) =
-\Big( w_{\mathrm{core}} \big( \lambda_{\mathrm{core}}(e) - 1 \big)
-    + w_{\mathrm{macro}} \big( \lambda_{\mathrm{macro}}(e) - 1 \big) \Big)
-\cdot K P \, b_{\mathrm{out}},
-$$
-
-which counts exactly the cross-boundary merges in the tree — unlike a pairwise distance
-sum, which overcounts by charging co-resident tiles. The placement problem is
-
-$$
-\min_{\pi} \;
-\alpha \sum_{\ell} \sum_{i} \mathrm{Red}(e_{\ell,i})
-\; + \;
-\beta \cdot \mathrm{Frag}(\pi),
-$$
-
-where $\mathrm{Frag}(\pi)$ is the allocated-but-unused crossbar count at core
-granularity (touched cores × $\kappa_{\mathrm{core}} - |T|$). Since projections exchange
-no on-die traffic, the first term separates per matmul; only fragmentation couples them.
-This is a capacity-constrained, hierarchically weighted $(\lambda{-}1)$-connectivity
-hypergraph partitioning problem: assigning a tile to a core is simultaneously a
-partition decision (which tiles co-reside) and a placement decision (which boundary a
-merge crosses).
-
-Capacity gives a per-M-block lower bound,
-
-$$
-\mathrm{Red}(e_{\ell,i}) \;\ge\;
-w_{\mathrm{core}} \big( \lceil n_\ell / \kappa_{\mathrm{core}} \rceil - 1 \big)
-\cdot K P \, b_{\mathrm{out}} ,
-$$
-
-which is $0$ for the depth-3 projections ($n_\ell = 3 \le 8$: each reduction fits one
-core) and $w_{\mathrm{core}} K P b_{\mathrm{out}}$ — one cross-core merge — for ffn2
-($n_\ell = 12$). The $8{+}4$ split with paired tail cores (9 cores, zero fragmentation)
-attains this bound, certifying it optimal.
+The objective is $T_{\mathrm{pkg}}$ at the main bandwidth. A dynamic
+program over cut positions and group sizes prices the blocks with the
+evaluator's own per-layer costs; simulated annealing with exchange, migrate
+and whole-set swap moves searches the die placement, re-scoring only the
+boundaries a move touches; the macro assignment inside a die is enumerated.
+The frozen protocol is three start families times three seeds, 1200 steps,
+$\alpha = 0.996$, $t_0 = 20$ ms, the best of the starts per seed, and the
+median seed as the representative.
