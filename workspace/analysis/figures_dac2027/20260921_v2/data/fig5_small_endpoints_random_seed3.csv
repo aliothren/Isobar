@@ -1,0 +1,11 @@
+id,node,x,y,role
+P1,7,3.0,1.0,producer
+P2,9,1.0,2.0,producer
+P3,8,0.0,2.0,producer
+P4,2,2.0,0.0,producer
+P5,5,1.0,1.0,producer
+C1,14,2.0,3.0,consumer
+C2,15,3.0,3.0,consumer
+C3,1,1.0,0.0,consumer
+C4,0,0.0,0.0,consumer
+C5,6,2.0,1.0,consumer

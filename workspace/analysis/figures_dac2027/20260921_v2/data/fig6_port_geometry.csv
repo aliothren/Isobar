@@ -1,0 +1,7 @@
+grid,kappa,gain_median_pct,gain_min_pct,gain_max_pct,strongest_baseline_ms,endpoint_binding,statistic
+12x48,1.0,2.68891196030272,2.6032671673945407,2.6890446576567584,2290.9273680000006,mixed,"per seed the best of 3 starts, then median and min-max over 3 seeds; denominator = the cell's strongest evaluated baseline"
+12x48,2.0,9.785405155021465,9.598762511088477,9.808651479806919,2106.999728,link/mixed,"per seed the best of 3 starts, then median and min-max over 3 seeds; denominator = the cell's strongest evaluated baseline"
+12x48,4.0,9.808651479806919,9.637642440170257,9.824285084103268,2106.999728,link,"per seed the best of 3 starts, then median and min-max over 3 seeds; denominator = the cell's strongest evaluated baseline"
+24x24,1.0,1.832588880347108,1.8325818347228795,1.861329742995932,2270.9130480000003,mixed/port,"per seed the best of 3 starts, then median and min-max over 3 seeds; denominator = the cell's strongest evaluated baseline"
+24x24,2.0,9.906344292591495,9.658741238060953,10.12263955370093,2118.7056879999996,link/mixed,"per seed the best of 3 starts, then median and min-max over 3 seeds; denominator = the cell's strongest evaluated baseline"
+24x24,4.0,9.674266754505433,9.480809965145065,9.921613048503763,2118.7056879999996,link,"per seed the best of 3 starts, then median and min-max over 3 seeds; denominator = the cell's strongest evaluated baseline"

@@ -6425,3 +6425,92 @@ no citation, and it is untracked, so deleting it would be unrecoverable;
 sweep_axis_d2d_probe.png and resnet18_settings_compare.png have no record
 either way. analysis/ladder_v0.md still describes the pre-port version of
 its own PNG (ppm panel, F-L1/F-L2) and needs rewriting.
+PAPER FIGURE SET v2 2026-09-21 (review notes v2 of 09-19), a NEW tree
+analysis/figures_dac2027/20260921_v2 from a new generator
+scripts/plot_dac2027_v2.py; v1 and every pre-existing figure untouched.
+FIG. 5 REPLACED: the 24x24 single hand-off (10 endpoints on 576 slots) is
+dropped as the mechanism figure. New controlled instance: the real
+ffn1 -> ffn2 hand-off of the 2.7B mapping (5 producer dies, 5 consumer
+dies, 25 flows of 1.05 M words, 26.2 M words) placed on a 4x4 die mesh
+(ic.Mesh, xy, hub centre) with 6 empty slots, flows built by
+search_eval._one_boundary_flows and loads by resource_loads at kappa = 2,
+0.4 GB/s. Layouts: compact fill (row-major consecutive slots), random
+seeds 0-4 (best = seed 3), and the annealer (swap / migrate, Metropolis,
+1200 steps, alpha 0.996, t0 = 10% of the start's cost, starts = compact
+and random seed 0, seeds 0-2, best over starts per seed, median seed
+shown). Readings: busiest resource 20.97 / 15.73 / 10.49 ms, all
+link-bound (8 / 6 / 4 flows on one link); the port floor is 6.55 ms and
+never binds; every search run reached 10.49 ms. These are hand-off
+service costs on this instance and are NOT the 24x24 stage readings of v1
+(26.2 / 21.0 / 13.1 ms), which belong to the 544-die layouts. Drawn as a
+node graph (P1-P5 / C1-C5, both directions as offset lines, unused links
+faint, busiest resource ringed with flows and ms). (d) the main-config
+objective ablation as a dot plot from zero: excess over the best
+resource-aware endpoint (1886.5 ms); best proxy +11.4% / +11.2%.
+FIG. 2 now carries a real fragment of that instance (8 flows x 1.05 M
+words on one link = 21.0 ms; a consumer port 5.24 M words / 2 = 6.55 ms)
+and the three aggregation rules. FIG. 3: titles state what each panel
+validates; rho recomputed on the 13 candidates drawn WITH average ranks =
+0.953 (the recorded 0.962 used ordinal ranks over two tied analytic
+values); 154,037 packets is one candidate's batch. FIG. 4: (a) legend
+"Non-communication / Package communication", tick strips for the 5
+random fills and 9 endpoints, 9.91% between the two bars, 54.5% vs
+4192.54 ms; (b) per-rule attribution (Least Manhattan -7.3% energy /
++1.8% latency; Clustered +20.4% latency), families stacked / heuristics
+/ random / search, snake named; (c) "Whole-layer impact of intra-die
+assignment", "Contiguous assignment", 9.02% as a vertical bracket, the
+fixed rest incl. package transfers kept. FIG. 6: (a) "Bandwidth response
+of fixed placements" with r, eta and G on one percent axis and ticks at
+0.4 / 0.872 / 12.5; (b) "Port capacity and mesh geometry", the port-floor
+sentence replaced by "port capacity limits the remaining gain", statistic
+recomputed per cell from the runs (per seed best of 3 starts, then median
+and min-max over seeds). Formal captions in captions.md, author notes in
+figure_index.md, nothing of either inside a figure. Not committed.
+PHASE DIAGRAM, REFERENCE-LINE VARIANT 2026-09-21 (writer's request after
+the anchor discussion): fig_phase_isobar.py gains ISOBAR_REFS=lines,
+writing phase_diagram_isobar{_kN}_refs.{png,pdf,json} as SEPARATE files;
+the standing figures are unchanged. Panel (b) changes: (1) the two
+evaluated bandwidths 0.4 and 12.5 GB/s are horizontal dashed reference
+lines across device speeds, since they are bandwidth tiers and not a
+NeuRRAM property; (2) the two NeuRRAM-based circles stay at the NeuRRAM
+row rate and are joined by a vertical line, the two configurations
+evaluated at one device rate; (3) the M1076 assumed 0.4-8 GB/s range is
+replaced by ONE hollow diamond at (0.157 Mrows/s, 1.0 GB/s): the
+product page's PCIe interface capability of 2 GB/s (io_gbps, new
+registry field with its status) matched to the model's port capacity,
+kappa x B = B_IO, so B = 1.0 GB/s at kappa = 2. A projection, labelled
+"M1076-derived, I/O-matched"; not a published link rate. Legend rewritten
+accordingly. The ISAAC label moves left of its marker in this variant to
+clear the 12.5 GB/s line.
+REFERENCE-LINE VARIANT, REVISED 2026-09-21 (same file names): the two tier
+lines are muted purple-grey (0.9 pt, 75% opacity, dashed), run a little
+past the right frame and are bracketed OUTSIDE it by a vertical
+double-headed arrow with "12.5 GB/s" above and "0.4 GB/s" below, so no
+number sits inside the plot; the ISAAC label is back at its standing
+position; the two NeuRRAM circles keep their per-point labels plus the
+joining line; the M1076 label sits below-right of its marker, clear of
+the solid boundaries.
+PHASE DIAGRAM FINAL FORM 2026-09-21: the reference-tier treatment is now
+the DEFAULT of fig_phase_isobar.py and fig_phase_isobar_print.py (the
+previous form is reachable with ISOBAR_REFS=old into *_old files, for
+comparison only); all four standing files regenerated at kappa 1 and 2,
+the *_refs trial files removed. Final decisions, all writer's: the two
+evaluated bandwidths 0.4 / 12.5 GB/s as muted purple-grey dashed tiers
+across device speeds, values inside the frame, a slate double-headed
+arrow (the envelope arrow's style) just outside the right frame touching
+both lines, labelled "Reference bandwidth span"; the two NeuRRAM circles
+joined vertically, labels straight above / below; M1076 as ONE hollow
+diamond at (0.157 Mrows/s, 1.0 GB/s), its published 2 GB/s PCIe I/O
+capability matched to kappa x B (io_gbps in anchors.py, pinned by
+test_m1076_io_capability_and_projection; suite 438); the ISAAC label a
+little lower; the 20% contour label without a backing box; legend
+rewritten as marker SEMANTICS with no chip names: lines on the left
+(boundaries B-/B+ merged into one entry, 20% spread, the two tiers),
+markers on the right (filled diamond = published parameter projected
+onto this instance; hollow diamond = derived or alternative-mode value,
+i.e. HERMES 4-phase and the M1076 projection; circle + line =
+configurations evaluated here), six single-height rows so the columns
+align. Synced: v2 figure set Fig. 1 (fig1_phase_diagram and panels,
+caption), the report tex (reference paragraph + a "Mythic M1076 I/O" row
+replacing "Assumed package range"), phase_diagram_isobar_caption.md,
+ANCHORS.md, SUMMARY.en.md / SUMMARY.md. Not committed.

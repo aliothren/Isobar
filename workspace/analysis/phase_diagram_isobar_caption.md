@@ -54,10 +54,18 @@ Table I ("Hyper Tr links/freq 4/1.6GHz, link bw 6.4 GB/s", the
 HyperTransport model taken from DaDianNao), so it is a point here at
 6.4 GB/s per link and direction; that link is chip-to-chip on a board
 rather than in-package die-to-die, and at ISAAC's row rate it sits just
-above B₊. Mythic M1076 keeps the assumed exploration range of
-0.4–8 GB/s, the only entry with no published per-link figure; NeuRRAM
-publishes a row rate but no link bandwidth and is marked on the axis
-only.
+above B₊. Mythic M1076 publishes no link rate; its hollow diamond is a
+projection (2026-09-21): the product page's PCIe I/O capability of
+2 GB/s matched to the model's port capacity, κB = B_IO, so B = 1.0 GB/s
+at κ = 2, inside the band near B₋. The two evaluated bandwidths, 0.4 and
+12.5 GB/s, are drawn as muted horizontal tiers across device speeds with
+a "reference bandwidth span" bracket outside the frame, because they are
+bandwidth tiers and not a NeuRRAM property; the two circles at the
+NeuRRAM row rate, joined by a vertical line, are the two configurations
+evaluated in this paper. Legend semantics: filled diamond = published
+parameter projected onto this instance; hollow diamond = derived or
+alternative-mode value projected the same way (HERMES 4-phase MVM,
+M1076 I/O-matched); circle = configuration evaluated here.
 
 **Legend terms.** *Hardware-derived reference*: a chip's published
 parameters projected onto this instance's axes, the row rate from its

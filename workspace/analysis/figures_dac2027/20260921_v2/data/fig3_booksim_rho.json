@@ -1,0 +1,29 @@
+{
+ "n_candidates": 13,
+ "candidates": [
+  "sequential",
+  "snake",
+  "clustered",
+  "dispersed",
+  "random_s0",
+  "random_s1",
+  "random_s2",
+  "random_s3",
+  "random_s4",
+  "sa_from_random_s0_s0",
+  "sa_from_random_s0_s1",
+  "sa_from_random_s0_s2",
+  "sa_from_clustered_s0"
+ ],
+ "spearman_rho_average_ranks": 0.9531716609121619,
+ "recorded_rho_in_source": 0.9615384615384616,
+ "note": "the recorded 0.962 assigned ordinal ranks to the two tied analytic values; with average ranks (the standard Spearman with ties) the same 13 candidates give this value, and it is what the figure prints",
+ "reference": "random_s4",
+ "packets_per_candidate_batch": 154037,
+ "search_endpoint_gain_booksim_pct": {
+  "sa_from_random_s0_s0": 30.94623468785954,
+  "sa_from_random_s0_s1": 30.859220156432787,
+  "sa_from_random_s0_s2": 17.117691987895313,
+  "sa_from_clustered_s0": 11.968365383685741
+ }
+}

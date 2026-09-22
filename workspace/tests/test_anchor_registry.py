@@ -312,3 +312,16 @@ def test_isaac_published_link_rates():
     # the estimated band is kept ONLY for the standing device-plane figure
     assert c.ondie_band == (0.4, 8.0)
     assert c.ondie_status.startswith("estimated")
+
+
+def test_m1076_io_capability_and_projection():
+    """The M1076 publishes no link rate. Its phase-diagram marker (2026-09-21)
+    is the product page's PCIe I/O capability, 2 GB/s, matched to the model's
+    port capacity: kappa x B = B_IO, so B = 1.0 GB/s at kappa = 2. The estimated
+    0.4-8 GB/s band stays for the device-plane figure."""
+    c = an.chip("mythic_m1076")
+    approx(c.io_gbps, 2.0, 1e-9)
+    assert c.io_status.startswith("published")
+    assert "projection" in c.io_status
+    approx(c.io_gbps / 2.0, 1.0, 1e-9)
+    assert c.ondie_band == (0.4, 8.0) and c.ondie_status.startswith("estimated")

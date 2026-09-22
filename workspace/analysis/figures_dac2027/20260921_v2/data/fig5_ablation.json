@@ -1,0 +1,34 @@
+{
+ "protocol": "same feasible space, solver, budget, starts and seeds; only the objective changes; every output re-scored under the system latency",
+ "denominator": "the best endpoint of the resource-aware objective, 1886.54 ms",
+ "excess_pct_by_objective": [
+  {
+   "objective": "ours",
+   "excess_pct": [
+    0.0,
+    1.2941494109383278,
+    1.311554838529494
+   ]
+  },
+  {
+   "objective": "word_hops",
+   "excess_pct": [
+    11.350691246729273,
+    12.56657984208669,
+    13.261280941259045
+   ]
+  },
+  {
+   "objective": "max_hops",
+   "excess_pct": [
+    11.211304706696446,
+    11.723793729657928,
+    11.853962326402524
+   ]
+  }
+ ],
+ "recorded_loss_avoided_pct": {
+  "word_hops": 11.350691246729273,
+  "max_hops": 11.211304706696446
+ }
+}

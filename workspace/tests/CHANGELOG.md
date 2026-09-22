@@ -1915,3 +1915,11 @@ optimisation adds, and the certified answer is zero. Fast suite:
   likewise stops writing its PNG (flat 1.00 everywhere, no flip in any
   condition) and keeps `corner_flip.json`.
 - Suite: 436 -> 437 tests.
+
+## 2026-09-21 — M1076 I/O capability pinned
+
+- `test_anchor_registry.py::test_m1076_io_capability_and_projection` (new):
+  the M1076's published PCIe I/O capability, 2 GB/s (`io_gbps`, product
+  page), and its phase-diagram projection kappa x B = B_IO (1.0 GB/s at
+  kappa = 2); the estimated 0.4-8 GB/s band stays for the device-plane
+  figure. Suite: 437 -> 438.

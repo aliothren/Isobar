@@ -639,7 +639,7 @@ PUBLISHED point (its paper states a 32-bit inter-tile link at 1 GHz =
 4.0 GB/s in Sec. VIII-B and an off-chip HyperTransport link of 6.4 GB/s in
 Table I; the earlier 0.4-8 GB/s assumed band and the derived 4.8 GB/s came
 from reading the 1.2 GHz TILE clock as the link clock); NeuRRAM with its t
-coordinate only (hub-IO); the two trend arrows; the collapse inset; and
+coordinate only (hub-IO); on the isobar phase diagram (final form 2026-09-21) the M1076 is one projected point, its published 2 GB/s PCIe I/O capability matched to the model's port capacity (1.0 GB/s at kappa = 2), the two evaluated bandwidths are horizontal tiers across device speeds, and the two evaluated configurations are circles joined at the NeuRRAM row rate; the two trend arrows; the collapse inset; and
 validation points classed by measured / closed-form with colour AND shape
 (grayscale-safe): the 17c probes on the left (ffn2's tiler step gets its
 own “known step — expected” marker class, never conflated with genuine

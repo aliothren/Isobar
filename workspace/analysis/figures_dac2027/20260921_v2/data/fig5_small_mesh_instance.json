@@ -1,0 +1,1384 @@
+{
+ "grid": "4x4",
+ "kappa": 2.0,
+ "bw_gbps": 0.4,
+ "handoff": {
+  "from": "ffn1",
+  "to": "ffn2",
+  "n_flows": 25,
+  "words_per_flow": 1048576.0,
+  "words_total": 26214400.0,
+  "split_of_producer": "M",
+  "port_floor_words_over_kappa": 2621440.0
+ },
+ "search_protocol": {
+  "steps": 1200,
+  "alpha": 0.996,
+  "t0": "10% of the start's cost",
+  "starts": [
+   "compact fill",
+   "random seed 0"
+  ],
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "statistic": "best over the 2 starts per seed; the representative is the median seed"
+ },
+ "representative": {
+  "compact": "compact_fill",
+  "random": "random_seed3",
+  "search": "search_seed0"
+ },
+ "layouts": {
+  "compact_fill": {
+   "prod": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "cons": [
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "label": "Compact fill",
+   "family": "stacked",
+   "rule": "stages in consecutive row-major slots",
+   "t_s": 0.02097162,
+   "busiest_words": 8388608.0,
+   "max_link_words": 8388608.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 63963136.0,
+   "words": 26214400.0,
+   "mean_hops": 2.44,
+   "max_hops": 5.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 0,
+     "x": 0.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 2,
+     "x": 2.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 3,
+     "x": 3.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 5,
+     "x": 1.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 6,
+     "x": 2.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 7,
+     "x": 3.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 20.97152,
+   "max_link_service_ms": 20.97152,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "random_seed0": {
+   "prod": [
+    12,
+    15,
+    6,
+    0,
+    4
+   ],
+   "cons": [
+    8,
+    7,
+    13,
+    11,
+    3
+   ],
+   "label": "Random, seed 0",
+   "family": "random",
+   "rule": "uniform choice of 10 of the 16 slots",
+   "t_s": 0.015728759999999998,
+   "busiest_words": 6291456.0,
+   "max_link_words": 6291456.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 76546048.0,
+   "words": 26214400.0,
+   "mean_hops": 2.92,
+   "max_hops": 6.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 12,
+     "x": 0.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 6,
+     "x": 2.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 0,
+     "x": 0.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 7,
+     "x": 3.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 13,
+     "x": 1.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 11,
+     "x": 3.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 3,
+     "x": 3.0,
+     "y": 0.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 15.728639999999999,
+   "max_link_service_ms": 15.728639999999999,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "random_seed1": {
+   "prod": [
+    4,
+    9,
+    13,
+    12,
+    1
+   ],
+   "cons": [
+    15,
+    11,
+    7,
+    8,
+    3
+   ],
+   "label": "Random, seed 1",
+   "family": "random",
+   "rule": "uniform choice of 10 of the 16 slots",
+   "t_s": 0.02097164,
+   "busiest_words": 8388608.0,
+   "max_link_words": 8388608.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 85983232.0,
+   "words": 26214400.0,
+   "mean_hops": 3.28,
+   "max_hops": 6.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 13,
+     "x": 1.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 12,
+     "x": 0.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 11,
+     "x": 3.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 7,
+     "x": 3.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 3,
+     "x": 3.0,
+     "y": 0.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 20.97152,
+   "max_link_service_ms": 20.97152,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "random_seed2": {
+   "prod": [
+    1,
+    15,
+    14,
+    5,
+    2
+   ],
+   "cons": [
+    10,
+    4,
+    9,
+    3,
+    8
+   ],
+   "label": "Random, seed 2",
+   "family": "random",
+   "rule": "uniform choice of 10 of the 16 slots",
+   "t_s": 0.015728739999999998,
+   "busiest_words": 6291456.0,
+   "max_link_words": 6291456.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 68157440.0,
+   "words": 26214400.0,
+   "mean_hops": 2.6,
+   "max_hops": 5.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 14,
+     "x": 2.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 5,
+     "x": 1.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 2,
+     "x": 2.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 10,
+     "x": 2.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 3,
+     "x": 3.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 15.728639999999999,
+   "max_link_service_ms": 15.728639999999999,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "random_seed3": {
+   "prod": [
+    7,
+    9,
+    8,
+    2,
+    5
+   ],
+   "cons": [
+    14,
+    15,
+    1,
+    0,
+    6
+   ],
+   "label": "Random, seed 3",
+   "family": "random",
+   "rule": "uniform choice of 10 of the 16 slots",
+   "t_s": 0.015728719999999998,
+   "busiest_words": 6291456.0,
+   "max_link_words": 6291456.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 65011712.0,
+   "words": 26214400.0,
+   "mean_hops": 2.48,
+   "max_hops": 4.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 7,
+     "x": 3.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 2,
+     "x": 2.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 5,
+     "x": 1.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 14,
+     "x": 2.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 0,
+     "x": 0.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 6,
+     "x": 2.0,
+     "y": 1.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 15.728639999999999,
+   "max_link_service_ms": 15.728639999999999,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "random_seed4": {
+   "prod": [
+    7,
+    4,
+    1,
+    11,
+    6
+   ],
+   "cons": [
+    15,
+    2,
+    13,
+    8,
+    0
+   ],
+   "label": "Random, seed 4",
+   "family": "random",
+   "rule": "uniform choice of 10 of the 16 slots",
+   "t_s": 0.015728739999999998,
+   "busiest_words": 6291456.0,
+   "max_link_words": 6291456.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 73400320.0,
+   "words": 26214400.0,
+   "mean_hops": 2.8,
+   "max_hops": 5.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 7,
+     "x": 3.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 11,
+     "x": 3.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 6,
+     "x": 2.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 2,
+     "x": 2.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 13,
+     "x": 1.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 0,
+     "x": 0.0,
+     "y": 0.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 15.728639999999999,
+   "max_link_service_ms": 15.728639999999999,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "search_seed0": {
+   "prod": [
+    6,
+    10,
+    13,
+    3,
+    5
+   ],
+   "cons": [
+    2,
+    0,
+    4,
+    9,
+    15
+   ],
+   "label": "Search, seed 0",
+   "family": "search",
+   "rule": "best of 2 starts (compact)",
+   "run": "sa_compact_seed0",
+   "t_s": 0.01048584,
+   "busiest_words": 4194304.0,
+   "max_link_words": 4194304.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 65011712.0,
+   "words": 26214400.0,
+   "mean_hops": 2.48,
+   "max_hops": 4.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 6,
+     "x": 2.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 10,
+     "x": 2.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 13,
+     "x": 1.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 3,
+     "x": 3.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 5,
+     "x": 1.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 2,
+     "x": 2.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 0,
+     "x": 0.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 10.48576,
+   "max_link_service_ms": 10.48576,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "search_seed1": {
+   "prod": [
+    4,
+    1,
+    9,
+    14,
+    10
+   ],
+   "cons": [
+    7,
+    6,
+    5,
+    13,
+    8
+   ],
+   "label": "Search, seed 1",
+   "family": "search",
+   "rule": "best of 2 starts (compact)",
+   "run": "sa_compact_seed1",
+   "t_s": 0.01048582,
+   "busiest_words": 4194304.0,
+   "max_link_words": 4194304.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 53477376.0,
+   "words": 26214400.0,
+   "mean_hops": 2.04,
+   "max_hops": 3.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 4,
+     "x": 0.0,
+     "y": 1.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 14,
+     "x": 2.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 10,
+     "x": 2.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 7,
+     "x": 3.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 6,
+     "x": 2.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 5,
+     "x": 1.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 13,
+     "x": 1.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 10.48576,
+   "max_link_service_ms": 10.48576,
+   "max_port_service_ms": 6.553599999999999
+  },
+  "search_seed2": {
+   "prod": [
+    15,
+    11,
+    0,
+    1,
+    9
+   ],
+   "cons": [
+    8,
+    5,
+    3,
+    13,
+    2
+   ],
+   "label": "Search, seed 2",
+   "family": "search",
+   "rule": "best of 2 starts (compact)",
+   "run": "sa_compact_seed2",
+   "t_s": 0.01048584,
+   "busiest_words": 4194304.0,
+   "max_link_words": 4194304.0,
+   "max_port_words_over_kappa": 2621440.0,
+   "binding": "link",
+   "word_hops": 67108864.0,
+   "words": 26214400.0,
+   "mean_hops": 2.56,
+   "max_hops": 4.0,
+   "endpoints": [
+    {
+     "id": "P1",
+     "node": 15,
+     "x": 3.0,
+     "y": 3.0,
+     "role": "producer"
+    },
+    {
+     "id": "P2",
+     "node": 11,
+     "x": 3.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "P3",
+     "node": 0,
+     "x": 0.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P4",
+     "node": 1,
+     "x": 1.0,
+     "y": 0.0,
+     "role": "producer"
+    },
+    {
+     "id": "P5",
+     "node": 9,
+     "x": 1.0,
+     "y": 2.0,
+     "role": "producer"
+    },
+    {
+     "id": "C1",
+     "node": 8,
+     "x": 0.0,
+     "y": 2.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C2",
+     "node": 5,
+     "x": 1.0,
+     "y": 1.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C3",
+     "node": 3,
+     "x": 3.0,
+     "y": 0.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C4",
+     "node": 13,
+     "x": 1.0,
+     "y": 3.0,
+     "role": "consumer"
+    },
+    {
+     "id": "C5",
+     "node": 2,
+     "x": 2.0,
+     "y": 0.0,
+     "role": "consumer"
+    }
+   ],
+   "busiest_service_ms": 10.48576,
+   "max_link_service_ms": 10.48576,
+   "max_port_service_ms": 6.553599999999999
+  }
+ },
+ "search_runs": {
+  "sa_compact_seed0": {
+   "t_s": 0.01048584,
+   "prod": [
+    6,
+    10,
+    13,
+    3,
+    5
+   ],
+   "cons": [
+    2,
+    0,
+    4,
+    9,
+    15
+   ],
+   "start": "compact",
+   "seed": 0
+  },
+  "sa_random0_seed0": {
+   "t_s": 0.01048584,
+   "prod": [
+    10,
+    5,
+    15,
+    7,
+    2
+   ],
+   "cons": [
+    11,
+    13,
+    14,
+    8,
+    3
+   ],
+   "start": "random0",
+   "seed": 0
+  },
+  "sa_compact_seed1": {
+   "t_s": 0.01048582,
+   "prod": [
+    4,
+    1,
+    9,
+    14,
+    10
+   ],
+   "cons": [
+    7,
+    6,
+    5,
+    13,
+    8
+   ],
+   "start": "compact",
+   "seed": 1
+  },
+  "sa_random0_seed1": {
+   "t_s": 0.01048584,
+   "prod": [
+    14,
+    13,
+    0,
+    2,
+    5
+   ],
+   "cons": [
+    1,
+    7,
+    6,
+    8,
+    9
+   ],
+   "start": "random0",
+   "seed": 1
+  },
+  "sa_compact_seed2": {
+   "t_s": 0.01048584,
+   "prod": [
+    15,
+    11,
+    0,
+    1,
+    9
+   ],
+   "cons": [
+    8,
+    5,
+    3,
+    13,
+    2
+   ],
+   "start": "compact",
+   "seed": 2
+  },
+  "sa_random0_seed2": {
+   "t_s": 0.01048584,
+   "prod": [
+    0,
+    15,
+    10,
+    1,
+    6
+   ],
+   "cons": [
+    8,
+    7,
+    13,
+    5,
+    3
+   ],
+   "start": "random0",
+   "seed": 2
+  }
+ },
+ "search_curves": {
+  "sa_compact_seed0": [
+   [
+    100,
+    0.01048584
+   ],
+   [
+    200,
+    0.01048584
+   ],
+   [
+    300,
+    0.01048584
+   ],
+   [
+    400,
+    0.01048584
+   ],
+   [
+    500,
+    0.01048584
+   ],
+   [
+    600,
+    0.01048584
+   ],
+   [
+    700,
+    0.01048584
+   ],
+   [
+    800,
+    0.01048584
+   ],
+   [
+    900,
+    0.01048584
+   ],
+   [
+    1000,
+    0.01048584
+   ],
+   [
+    1100,
+    0.01048584
+   ],
+   [
+    1200,
+    0.01048584
+   ]
+  ],
+  "sa_random0_seed0": [
+   [
+    100,
+    0.01048584
+   ],
+   [
+    200,
+    0.01048584
+   ],
+   [
+    300,
+    0.01048584
+   ],
+   [
+    400,
+    0.01048584
+   ],
+   [
+    500,
+    0.01048584
+   ],
+   [
+    600,
+    0.01048584
+   ],
+   [
+    700,
+    0.01048584
+   ],
+   [
+    800,
+    0.01048584
+   ],
+   [
+    900,
+    0.01048584
+   ],
+   [
+    1000,
+    0.01048584
+   ],
+   [
+    1100,
+    0.01048584
+   ],
+   [
+    1200,
+    0.01048584
+   ]
+  ],
+  "sa_compact_seed1": [
+   [
+    100,
+    0.01048584
+   ],
+   [
+    200,
+    0.01048584
+   ],
+   [
+    300,
+    0.01048584
+   ],
+   [
+    400,
+    0.01048584
+   ],
+   [
+    500,
+    0.01048584
+   ],
+   [
+    600,
+    0.01048584
+   ],
+   [
+    700,
+    0.01048584
+   ],
+   [
+    800,
+    0.01048584
+   ],
+   [
+    900,
+    0.01048584
+   ],
+   [
+    1000,
+    0.01048584
+   ],
+   [
+    1100,
+    0.01048584
+   ],
+   [
+    1200,
+    0.01048582
+   ]
+  ],
+  "sa_random0_seed1": [
+   [
+    100,
+    0.01048586
+   ],
+   [
+    200,
+    0.01048584
+   ],
+   [
+    300,
+    0.01048584
+   ],
+   [
+    400,
+    0.01048584
+   ],
+   [
+    500,
+    0.01048584
+   ],
+   [
+    600,
+    0.01048584
+   ],
+   [
+    700,
+    0.01048584
+   ],
+   [
+    800,
+    0.01048584
+   ],
+   [
+    900,
+    0.01048584
+   ],
+   [
+    1000,
+    0.01048584
+   ],
+   [
+    1100,
+    0.01048584
+   ],
+   [
+    1200,
+    0.01048584
+   ]
+  ],
+  "sa_compact_seed2": [
+   [
+    100,
+    0.01048584
+   ],
+   [
+    200,
+    0.01048584
+   ],
+   [
+    300,
+    0.01048584
+   ],
+   [
+    400,
+    0.01048584
+   ],
+   [
+    500,
+    0.01048584
+   ],
+   [
+    600,
+    0.01048584
+   ],
+   [
+    700,
+    0.01048584
+   ],
+   [
+    800,
+    0.01048584
+   ],
+   [
+    900,
+    0.01048584
+   ],
+   [
+    1000,
+    0.01048584
+   ],
+   [
+    1100,
+    0.01048584
+   ],
+   [
+    1200,
+    0.01048584
+   ]
+  ],
+  "sa_random0_seed2": [
+   [
+    100,
+    0.01048584
+   ],
+   [
+    200,
+    0.01048584
+   ],
+   [
+    300,
+    0.01048584
+   ],
+   [
+    400,
+    0.01048584
+   ],
+   [
+    500,
+    0.01048584
+   ],
+   [
+    600,
+    0.01048584
+   ],
+   [
+    700,
+    0.01048584
+   ],
+   [
+    800,
+    0.01048584
+   ],
+   [
+    900,
+    0.01048584
+   ],
+   [
+    1000,
+    0.01048584
+   ],
+   [
+    1100,
+    0.01048584
+   ],
+   [
+    1200,
+    0.01048584
+   ]
+  ]
+ }
+}

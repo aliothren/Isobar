@@ -31,7 +31,7 @@ from scripts.fig_phase_isobar import (boundaries, spread_contour, _angle_along,
                                       FILL_BOT, BAND_TXT, CHIP, CHIP_TXT,
                                       CONTOUR)
 
-from scripts.fig_phase_isobar import KAPPA, package_A, _SFX
+from scripts.fig_phase_isobar import KAPPA, package_A, _SFX, REF_LINE, REF_TXT
 OUT_PNG = os.path.join(se.A, f"phase_diagram_isobar_print{_SFX}.png")
 OUT_PDF = os.path.join(se.A, f"phase_diagram_isobar_print{_SFX}.pdf")
 matplotlib.rcParams["pdf.fonttype"] = 42   # embed TrueType: text stays text in the PDF
@@ -112,7 +112,7 @@ def main():
     intra_curves = intra_die_curves(SPREAD)
 
     fig, axes = plt.subplots(1, 2, figsize=(WIDTH_IN, HEIGHT_IN))
-    fig.subplots_adjust(left=0.075, right=0.99, top=0.92, bottom=0.30,
+    fig.subplots_adjust(left=0.075, right=0.955, top=0.92, bottom=0.30,
                         wspace=0.14)
 
     panel(axes[0], a_min_die, a_max_die, n_die, f_die, (1e-2, 1e3),
@@ -143,17 +143,28 @@ def main():
           "7 placement rules")
     axes[1].set_title("(b) Inter-die placement", fontsize=FS["title"], pad=4)
     axes[1].tick_params(labelleft=False)
-    for key in ("mythic_m1076",):
-        c = an.chip(key)
-        sx = 1.0 / c.t_mvm_s / 1e6
-        b0, b1 = c.ondie_band
-        axes[1].plot([sx, sx], [b0, b1], "-", color=CHIP, lw=0.8, zorder=7)
-        axes[1].plot([sx, sx], [b0, b1], marker="D", mfc="white", mec=CHIP,
-                     ms=5, mew=1.0, ls="none", zorder=8)
-        axes[1].text(sx, b0 * 0.70,
-                     c.label.split(' (')[0].replace('Mythic AMP ', ''),
-                     fontsize=FS["text"], color=CHIP_TXT, va="top",
-                     ha="center", zorder=8)
+    # M1076: its published 2 GB/s I/O capability matched to kappa x B
+    c = an.chip("mythic_m1076")
+    sx, b_io = 1.0 / c.t_mvm_s / 1e6, c.io_gbps / KAPPA
+    axes[1].plot([sx], [b_io], marker="D", mfc="white", mec=CHIP, ms=5, mew=1.0,
+                 ls="none", zorder=8)
+    axes[1].text(sx * 1.10, b_io / 1.75, "M1076", fontsize=FS["text"],
+                 color=CHIP_TXT, va="center", ha="left", zorder=8)
+    # the two bandwidth tiers across device speeds, bracketed outside the frame
+    x_out = S_HI * 1.10
+    for bw in (0.4, 12.5):
+        axes[1].plot([S_LO, S_HI * 1.16], [bw, bw], color=REF_LINE, lw=0.8,
+                     ls=(0, (4, 3)), alpha=0.75, zorder=6, clip_on=False)
+        axes[1].text(S_HI / 1.08, bw * 1.12, f"{bw:g} GB/s", fontsize=FS["text"],
+                     color=REF_TXT, ha="right", va="bottom", zorder=9)
+    axes[1].annotate("", xy=(x_out, 12.5), xytext=(x_out, 0.4),
+                     arrowprops=dict(arrowstyle="<|-|>", color=SLATE, lw=0.9,
+                                     mutation_scale=7, shrinkA=0, shrinkB=0),
+                     zorder=6, annotation_clip=False)
+    axes[1].text(x_out * 1.11, np.sqrt(0.4 * 12.5), "Reference bandwidth span",
+                 fontsize=FS["text"], color=SLATE_TXT, ha="center", va="top",
+                 rotation=90, rotation_mode="anchor", zorder=9, clip_on=False)
+    axes[1].plot([S_REF, S_REF], [0.4, 12.5], "-", color=CHIP, lw=0.8, zorder=8)
     # ISAAC's off-chip HyperTransport link is published (Table I)
     axes[1].plot([s_is], [isaac.d2d_gbps], marker="D", mfc=CHIP, mec=CHIP_TXT,
                  ms=5, mew=0.7, ls="none", zorder=8)
@@ -163,23 +174,27 @@ def main():
     for bw in (0.4, 12.5):
         axes[1].plot([S_REF], [bw], marker="o", mfc="white", mec=CHIP, ms=5.5,
                      mew=1.2, ls="none", zorder=9)
-        axes[1].text(S_REF / 1.25, bw if bw > 1 else bw / 1.45,
-                     f"{bw:g} GB/s", fontsize=FS["text"], color=CHIP_TXT,
-                     ha="right", va="center", zorder=9)
+        up = bw > 1
+        axes[1].text(S_REF, bw * 1.35 if up else bw / 1.35, f"NeuRRAM\n{bw:g} GB/s",
+                     fontsize=FS["text"], color=CHIP_TXT, ha="center",
+                     va="bottom" if up else "top", zorder=9, linespacing=1.1)
 
-    h, lab = axes[0].get_legend_handles_labels()
-    extra = [plt.Line2D([], [], marker="D", ls="none", mfc=CHIP, mec=CHIP_TXT,
-                        ms=5),
-             plt.Line2D([], [], marker="D", ls="-", color=CHIP, mfc="white",
-                        mec=CHIP, mew=1.0, ms=5, lw=0.8),
-             plt.Line2D([], [], marker="o", ls="none", mfc="white", mec=CHIP,
-                        mew=1.2, ms=5.5)]
-    fig.legend(h + extra, lab + ["Hardware-derived reference",
-                                 "Assumed bandwidth range",
-                                 "Evaluated NeuRRAM-based system"],
-               loc="lower center", ncol=3, fontsize=FS["legend"],
+    lines = [plt.Line2D([], [], color=SLATE, lw=1.0),
+             plt.Line2D([], [], ls=(0, (1.2, 2.2)), color=CONTOUR, lw=0.8),
+             plt.Line2D([], [], ls=(0, (4, 3)), color=REF_LINE, lw=0.8, alpha=0.75)]
+    marks = [plt.Line2D([], [], marker="D", ls="none", mfc=CHIP, mec=CHIP_TXT, ms=5),
+             plt.Line2D([], [], marker="D", ls="none", mfc="white", mec=CHIP, mew=1.0, ms=5),
+             plt.Line2D([], [], marker="o", ls="-", color=CHIP, mfc="white", mec=CHIP,
+                        mew=1.2, ms=5.5, lw=0.8)]
+    fig.legend(lines + marks, [r"boundaries $B_-$, $B_+$ over the placement set",
+                               "placement latency spread, 20%",
+                               "the two evaluated bandwidth tiers",
+                               "published parameter, projected onto this instance",
+                               "derived or alternative-mode value",
+                               "configurations evaluated in this paper"],
+               loc="lower center", ncol=2, fontsize=FS["legend"],
                frameon=False, bbox_to_anchor=(0.5, -0.005),
-               handlelength=2.0, columnspacing=1.6)
+               handlelength=2.0, columnspacing=2.0, labelspacing=0.6)
     fig.savefig(OUT_PNG, dpi=300)
     fig.savefig(OUT_PDF)   # vector version, same figure
     print(f"figure -> {OUT_PNG}  ({WIDTH_IN} x {HEIGHT_IN} in, text 7-8 pt)")

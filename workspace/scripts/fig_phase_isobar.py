@@ -46,7 +46,14 @@ from scripts import anchors as an
 from scripts import search_eval as se
 
 KAPPA = float(os.environ.get("ISOBAR_KAPPA", "1"))   # S9: the package panel's port ratio
-_SFX = "" if KAPPA == 1.0 else f"_k{KAPPA:g}"
+# Final form (2026-09-21): the two evaluated bandwidths as horizontal
+# reference tiers across device speeds, the two NeuRRAM points joined
+# vertically, the M1076 as ONE I/O-matched projected point instead of the
+# assumed 0.4-8 GB/s range, marker semantics in the legend. ISOBAR_REFS=old
+# reproduces the previous form into *_old files (comparison only).
+REFS = os.environ.get("ISOBAR_REFS", "lines") == "lines"
+REF_LINE, REF_TXT = "#8d84a3", "#6f6684"     # muted purple-grey for the reference tiers
+_SFX = ("" if KAPPA == 1.0 else f"_k{KAPPA:g}") + ("" if REFS else "_old")
 OUT_PNG = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.png")
 OUT_PDF = os.path.join(se.A, f"phase_diagram_isobar{_SFX}.pdf")
 matplotlib.rcParams["pdf.fonttype"] = 42   # embed TrueType: text stays text in the PDF
@@ -192,7 +199,7 @@ def draw_panel(ax, a_min, a_max, n_s, f_s, ylim, quantifier, p_desc,
         ax.text(x, y, txt, fontsize=6.0, color=CONTOUR, ha="center",
                 va="center", rotation=_angle_along(ax, x0, y0, x1, y1),
                 rotation_mode="anchor", zorder=4,
-                bbox=dict(fc=FILL_TOP, ec="none", pad=0.6))
+                bbox=None if REFS else dict(fc=FILL_TOP, ec="none", pad=0.6))
 
     # region labels: each sits in the visual centre of ITS region; the
     # band label follows the band's own slope
@@ -280,8 +287,8 @@ def main():
     intra_curves = intra_die_curves(SPREADS[0])
 
     fig, axes = plt.subplots(1, 2, figsize=(12.8, 5.0))
-    fig.subplots_adjust(left=0.055, right=0.985, top=0.94, bottom=0.235,
-                        wspace=0.17)
+    fig.subplots_adjust(left=0.055, right=0.955 if REFS else 0.985, top=0.94,
+                        bottom=0.275 if REFS else 0.235, wspace=0.17)
 
     lo_d, hi_d = draw_panel(
         axes[0], a_min_die, a_max_die, n_die, f_die, (1e-2, 1e3),
@@ -331,11 +338,20 @@ def main():
         ((0.22, 0.86), 3.2, (0.80, 0.13), (0.98, 0.66), (0.015, 0.015)),
         14.0)
     axes[1].set_title("(b) Inter-die placement", fontsize=9.5)
-    # Mythic has no published per-link figure: ONE assumed exploration
-    # range, drawn as a thin capped line in the marker style.
+    # Mythic has no published per-link figure. Default: ONE assumed
+    # exploration range as a thin capped line. REFS variant: one projected
+    # point, its published 2 GB/s PCIe capability matched to kappa x B.
     for key in ("mythic_m1076",):
         c = an.chip(key)
         sx = 1.0 / c.t_mvm_s / 1e6
+        if REFS:
+            b_io = c.io_gbps / KAPPA
+            axes[1].plot([sx], [b_io], marker="D", mfc="white", mec=CHIP,
+                         ms=6.5, mew=1.2, ls="none", zorder=8)
+            axes[1].text(sx * 1.10, b_io / 1.75, "M1076-derived,\nI/O-matched",
+                         fontsize=6.4, color=CHIP_TXT, va="center", ha="left",
+                         zorder=8, linespacing=1.15)
+            continue
         b0, b1 = c.ondie_band
         axes[1].plot([sx, sx], [b0, b1], "-", color=CHIP, lw=1.0, zorder=7)
         axes[1].plot([sx, sx], [b0, b1], marker="D", mfc="white", mec=CHIP,
@@ -347,35 +363,85 @@ def main():
     # ISAAC's off-chip link IS published (Table I), so it is a point here
     axes[1].plot([s_is], [isaac.d2d_gbps], marker="D", mfc=CHIP, mec=CHIP_TXT,
                  ms=6.5, mew=0.9, ls="none", zorder=8)
-    axes[1].text(s_is * 1.14, isaac.d2d_gbps * 1.10,
+    axes[1].text(s_is * 1.14, isaac.d2d_gbps * (0.92 if REFS else 1.10),
                  f"ISAAC, off-chip link\n{isaac.d2d_gbps:g} GB/s",
                  fontsize=6.4, color=CHIP_TXT, ha="left", va="bottom",
                  zorder=8, linespacing=1.15)
     # the two configurations this paper's searches actually evaluated:
     # NeuRRAM's device rate with the two interconnect bandwidths
+    if REFS:
+        # the two bandwidth tiers as muted references across device speeds,
+        # run a little past the frame and bracketed outside it with the values
+        x_out = S_HI * 1.10                     # the arrow sits here ...
+        for bw in (0.4, 12.5):                  # ... and the lines run past it
+            axes[1].plot([S_LO, S_HI * 1.16], [bw, bw], color=REF_LINE, lw=0.9,
+                         ls=(0, (4, 3)), alpha=0.75, zorder=6, clip_on=False)
+        axes[1].annotate("", xy=(x_out, 12.5), xytext=(x_out, 0.4),
+                         arrowprops=dict(arrowstyle="<|-|>", color=SLATE, lw=1.1,
+                                         mutation_scale=9, shrinkA=0, shrinkB=0),
+                         zorder=6, annotation_clip=False)
+        axes[1].text(x_out * 1.11, np.sqrt(0.4 * 12.5), "Reference bandwidth span",
+                     fontsize=6.6, color=SLATE_TXT, ha="center", va="top",
+                     rotation=90, rotation_mode="anchor", zorder=9, clip_on=False)
+        for bw in (0.4, 12.5):
+            axes[1].text(S_HI / 1.08, bw * 1.12, f"{bw:g} GB/s", fontsize=6.4,
+                         color=REF_TXT, ha="right", va="bottom", zorder=9)
+        # ... and the two configurations evaluated here, at one device rate
+        axes[1].plot([S_REF, S_REF], [0.4, 12.5], "-", color=CHIP, lw=1.0, zorder=8)
     for bw in (0.4, 12.5):
         axes[1].plot([S_REF], [bw], marker="o", mfc="white", mec=CHIP,
                      ms=7, mew=1.5, ls="none", alpha=1.0, zorder=9)
-        axes[1].text(S_REF / 1.22, bw if bw > 1 else bw / 1.45,
-                     f"NeuRRAM-based\n{bw:g} GB/s", fontsize=6.4,
-                     color=CHIP_TXT, ha="right", va="center", zorder=9,
-                     linespacing=1.15)
+        if REFS:
+            up = bw > 1
+            axes[1].text(S_REF, bw * 1.35 if up else bw / 1.35,
+                         f"NeuRRAM-based\n{bw:g} GB/s", fontsize=6.4,
+                         color=CHIP_TXT, ha="center", va="bottom" if up else "top",
+                         zorder=9, linespacing=1.15)
+        else:
+            axes[1].text(S_REF / 1.22, bw if bw > 1 else bw / 1.45,
+                         f"NeuRRAM-based\n{bw:g} GB/s", fontsize=6.4,
+                         color=CHIP_TXT, ha="right", va="center", zorder=9,
+                         linespacing=1.15)
 
     h, lab = axes[0].get_legend_handles_labels()
     extra = [plt.Line2D([], [], ls=(0, (1.2, 2.2)), color=CONTOUR, lw=0.9),
              plt.Line2D([], [], marker="D", ls="none", mfc=CHIP, mec=CHIP_TXT,
                         ms=6),
-             plt.Line2D([], [], marker="D", ls="-", color=CHIP, mfc="white",
-                        mec=CHIP, mew=1.2, ms=6, lw=1.0),
-             plt.Line2D([], [], marker="o", ls="none", mfc="white", mec=CHIP,
-                        mew=1.5, ms=7)]
-    fig.legend(h + extra, lab + [
+             plt.Line2D([], [], marker="D", ls="none" if REFS else "-", color=CHIP,
+                        mfc="white", mec=CHIP, mew=1.2, ms=6, lw=1.0),
+             plt.Line2D([], [], marker="o", ls="-" if REFS else "none", color=CHIP,
+                        mfc="white", mec=CHIP, mew=1.5, ms=7, lw=1.0)]
+    if REFS:
+        lines = [plt.Line2D([], [], color=SLATE, lw=1.2),
+                 plt.Line2D([], [], ls=(0, (1.2, 2.2)), color=CONTOUR, lw=0.9),
+                 plt.Line2D([], [], ls=(0, (4, 3)), color=REF_LINE, lw=0.9, alpha=0.75)]
+        marks = [plt.Line2D([], [], marker="D", ls="none", mfc=CHIP, mec=CHIP_TXT, ms=6),
+                 plt.Line2D([], [], marker="D", ls="none", mfc="white", mec=CHIP, mew=1.2, ms=6),
+                 plt.Line2D([], [], marker="o", ls="-", color=CHIP, mfc="white", mec=CHIP,
+                            mew=1.5, ms=7, lw=1.0)]
+        fig.legend(lines + marks, [
+            r"boundaries $B_-$, $B_+$: min and max of $B_c(p)$ over the placement set",
+            "placement latency spread, 20%",
+            "the two evaluated bandwidth tiers",
+            "published parameter, projected onto this instance",
+            "derived or alternative-mode value, projected the same way",
+            "configurations evaluated in this paper"],
+            loc="lower center", ncol=2, fontsize=6.8, frameon=False,
+            bbox_to_anchor=(0.5, -0.012), labelspacing=0.9, columnspacing=2.5,
+            handlelength=2.4, handletextpad=0.8)
+    else:
+      fig.legend(h + extra, lab + [
         r"placement latency spread $(T_{\max}-T_{\min})/T_{\min}$ over the same $\mathcal{P}$",
         "hardware-derived reference point (published parameters projected "
         "onto this instance)",
-        "assumed bandwidth range (no per-link figure published)",   # Mythic only
-        "systems evaluated in this paper: NeuRRAM device rate, the two "
-        "interconnect bandwidths"],
+        ("M1076: published 2 GB/s I/O capability matched to the model's port "
+         "capacity $\\kappa B$, a projection" if REFS else
+         "assumed bandwidth range (no per-link figure published)"),   # Mythic only
+        ("NeuRRAM-based: the two bandwidth configurations evaluated in this paper, "
+         "at one device rate" if REFS else
+         "systems evaluated in this paper: NeuRRAM device rate, the two "
+         "interconnect bandwidths")]
+        + (["0.4 and 12.5 GB/s: the two bandwidth tiers, across device speeds"] if REFS else []),
         loc="lower center", ncol=2, fontsize=6.8, frameon=False,
         bbox_to_anchor=(0.5, -0.012))
     fig.savefig(OUT_PNG, dpi=150)

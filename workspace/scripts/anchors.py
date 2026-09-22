@@ -238,6 +238,8 @@ class ChipPoint:
     d2d_gbps: Optional[float] = None
     d2d_band: Optional[Tuple[float, float]] = None
     d2d_status: str = "n/a"
+    io_gbps: Optional[float] = None                  # published external I/O capability, if any
+    io_status: str = "n/a"
 
 
 CHIPS = [
@@ -307,7 +309,12 @@ CHIPS = [
               t_mvm_s=25e12 ** -1 * 76 * 2 * 1024 * 1024, t_mvm_status="derived",
               t_mvm_derivation="25 TOPS peak / 76 tiles / (2 x 1024 x 1024 ops per MVM row) = ~6.4 us per row; "
                                "the 1024x1024 tile array from 80M weights / 76 tiles = 1.05M (C36)",
-              ondie_band=(0.4, 8.0), ondie_status="estimated (router width / clock not published)"),
+              ondie_band=(0.4, 8.0), ondie_status="estimated (router width / clock not published)",
+              io_gbps=2.0,
+              io_status="published (product page, mythic.ai): PCIe interface up to 2 GB/s. "
+                        "Projected onto the diagram as an I/O-matched configuration, "
+                        "kappa x B = B_IO, i.e. B = 1.0 GB/s at kappa = 2 (2026-09-21); "
+                        "a model projection, not a published link rate"),
     ChipPoint("tsinghua_multichip", "Tsinghua multi-chip (2025)",
               "8 RRAM chips (144k cells each) + FPGA hub; no chip-to-chip direct links, everything through the FPGA",
               "hub-io", "Nat. Commun. 2025 (predecessor: Yao et al., Nature 2020, 8 PEs + FPGA)",
