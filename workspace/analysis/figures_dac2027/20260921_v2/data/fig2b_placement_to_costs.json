@@ -1,0 +1,67 @@
+{
+ "instance": "Fig. 5 controlled 4x4 die mesh, compact fill (the stacked default)",
+ "grid": "4x4",
+ "routing": "xy",
+ "kappa": 2.0,
+ "bw_gbps": 0.4,
+ "drawn_rows": "y = 0..2; the idle top row is not drawn and no XY route enters it, so every number is the 4x4 instance's",
+ "handoff": {
+  "from": "ffn1",
+  "to": "ffn2",
+  "n_flows": 25,
+  "words_per_flow": 1048576.0
+ },
+ "prod_slots": [
+  0,
+  1,
+  2,
+  3,
+  4
+ ],
+ "cons_slots": [
+  5,
+  6,
+  7,
+  8,
+  9
+ ],
+ "busiest_link": {
+  "from": [
+   1,
+   0
+  ],
+  "to": [
+   1,
+   1
+  ],
+  "dir": "+",
+  "flows": 8,
+  "words": 8388608.0,
+  "service_ms": 20.97152
+ },
+ "used_link_directions": 15,
+ "link_service_ms_sorted": [
+  20.97152,
+  15.728639999999999,
+  13.107199999999999,
+  13.107199999999999,
+  10.48576,
+  10.48576,
+  10.48576,
+  10.48576,
+  10.48576,
+  10.48576,
+  10.48576,
+  7.864319999999999,
+  7.864319999999999,
+  5.24288,
+  2.62144
+ ],
+ "port_bound_ms": 6.553599999999999,
+ "binding": "link",
+ "word_hops": 63963136.0,
+ "words": 26214400.0,
+ "mean_hops": 2.44,
+ "max_hops": 5.0,
+ "fan_out_producer": 3
+}

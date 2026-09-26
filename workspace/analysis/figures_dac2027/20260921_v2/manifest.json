@@ -21,13 +21,8 @@
  },
  "preexisting_outputs_check": {
   "note": "figures that already existed in analysis/ at the start of this run; this generator writes only inside its own run directory, so every one of these is expected to be byte-identical after it",
-  "count": 72,
+  "count": 71,
   "files": [
-   {
-    "file": "analysis/SUMMARY.pdf",
-    "bytes": 504127,
-    "sha256": "229dc37441ff0efb"
-   },
    {
     "file": "analysis/a_bandwidth_slices.png",
     "bytes": 110437,
@@ -753,9 +748,59 @@
     "preview/fig2_platform_workflow.png"
    ],
    "sources": [
-    "scripts/search_eval.py (live: the Fig. 5 instance's compact fill)"
+    "schematic",
+    "scripts/search_eval.py (live: _one_boundary_flows, resource_loads)",
+    "scripts/interconnect.py (Mesh 4x4, xy)"
    ],
-   "note": "the fragment's numbers are the compact fill's busiest link and one consumer port"
+   "note": "(a) schematic; (b) the Fig. 5 instance's compact fill, evaluated live"
+  },
+  {
+   "name": "fig2a_platform",
+   "kind": "panels",
+   "files": [
+    "panels/fig2a_platform.pdf",
+    "panels/fig2a_platform.svg",
+    "preview/fig2a_platform.png"
+   ],
+   "sources": [
+    "schematic"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig2a_platform_drawio",
+   "kind": "panels",
+   "files": [
+    "panels/fig2a_platform.drawio"
+   ],
+   "sources": [
+    "schematic"
+   ],
+   "note": "editable draw.io export of the same layout (192 px per inch)"
+  },
+  {
+   "name": "fig2b_placement_to_costs",
+   "kind": "panels",
+   "files": [
+    "panels/fig2b_placement_to_costs.pdf",
+    "panels/fig2b_placement_to_costs.svg",
+    "preview/fig2b_placement_to_costs.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig2b_placement_to_costs",
+   "kind": "data",
+   "files": [
+    "data/fig2b_placement_to_costs.json"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)"
+   ],
+   "note": "plotting data"
   },
   {
    "name": "fig3_external_validation",

@@ -556,93 +556,438 @@ def fig5():
 
 
 # =====================================================================
-# Fig. 2  platform workflow with a real routing fragment
+# Fig. 2  the platform (left) and why per-resource accounting matters (right)
 # =====================================================================
-def _box(ax, xy, w, h, text, fc="#eef2f6", ec=NAVY, fs=7.0, lw=0.8):
-    ax.add_patch(FancyBboxPatch(xy, w, h, boxstyle="round,pad=0.010,rounding_size=0.015",
-                                fc=fc, ec=ec, lw=lw, zorder=3))
-    ax.text(xy[0] + w / 2, xy[1] + h / 2, text, ha="center", va="center", fontsize=fs,
-            zorder=4, linespacing=1.25)
+# Panel (a) is the author's draw.io drawing (fig2a.drawio, 2026-09-22),
+# transcribed here so the matplotlib panel, the composite and the draw.io
+# export all come from one layout. Coordinates are draw.io pixels (x right,
+# y down); the renderer maps them onto the 5.02 x 2.90 in panel.
+TITLE = "#2b3a4f"
+TXT = "#24313c"
+ARR = "#3c4650"
 
 
-def _arrow(ax, p0, p1, ec=NAVY, lw=1.0, ls="-", rad=0.0):
-    ax.add_patch(FancyArrowPatch(p0, p1, arrowstyle="-|>", mutation_scale=8, color=ec,
-                                 lw=lw, ls=ls, zorder=2, connectionstyle=f"arc3,rad={rad}",
-                                 shrinkA=1, shrinkB=1))
+def _inch_axes(fig, rect, w, h):
+    ax = fig.add_axes(rect)
+    ax.set_xlim(0, w); ax.set_ylim(0, h); ax.set_aspect("equal"); ax.axis("off")
+    return ax
 
 
-def fig2(inst):
-    L = inst["layouts"][inst["representative"]["compact"]]
-    hot = max(L["links"], key=lambda l: l["words"])
-    wpf = inst["handoff"]["words_per_flow"]
-    fig, ax = plt.subplots(figsize=(PAGE_WIDTH, PAGE_WIDTH * 0.50))
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
-    y1, h1 = 0.74, 0.16
-    row = [(0.020, 0.150, "Workload and\nhardware\nconfiguration"),
-           (0.200, 0.150, "Mapping and\ndependencies\n(tiling, splits)"),
-           (0.380, 0.165, "Placement and\nrouting: die and\nmacro levels"),
-           (0.575, 0.165, "Link and port\nloads per\nhand-off"),
-           (0.770, 0.210, "Latency: max per stage,\nsum over stages\nDynamic energy: word-hops")]
-    for x, w, txt in row:
-        _box(ax, (x, y1), w, h1, txt, fs=6.8)
-    for i in range(len(row) - 1):
-        _arrow(ax, (row[i][0] + row[i][1] + 0.004, y1 + h1 / 2), (row[i + 1][0] - 0.004, y1 + h1 / 2))
-    y2, h2 = 0.47, 0.13
-    _box(ax, (0.575, y2), 0.165, h2, "Phase analysis\nB and device rate", fs=6.8)
-    _box(ax, (0.770, y2), 0.210, h2, "DP over block cuts\nSA over die placement\nenumeration in a die",
-         fc="#eaf3ed", ec=GREEN, fs=6.8)
-    _arrow(ax, (0.900, y1), (0.900, y2 + h2 + 0.004), ec=GREEN)
-    _arrow(ax, (0.800, y1), (0.680, y2 + h2 + 0.004), ec=SLATE, ls=(0, (3, 2)))
-    ax.plot([0.800, 0.800, 0.462], [y2, 0.415, 0.415], color=GREEN, lw=1.0, zorder=2)
-    _arrow(ax, (0.462, 0.415), (0.462, y1 - 0.004), ec=GREEN)
-    ax.text(0.630, 0.405, "revised placement", fontsize=6.4, color=GREEN, ha="center", va="top")
-    # the real routing fragment, from the Fig. 5 instance
-    ex = fig.add_axes([0.02, 0.04, 0.50, 0.50])
-    ex.set_xlim(-0.6, 4.4); ex.set_ylim(-0.9, 1.9); ex.axis("off")
-    ex.text(-0.5, 1.75, "One link of the Fig. 5 instance (compact fill)", fontsize=7.2,
-            va="top", ha="left", color=INK)
-    # three nodes on a row: producer -> shared link -> consumer, plus a second producer above
-    for (x, y, kind, lab) in ((0, 0.4, "P", "P"), (1, 1.2, "P", "P"), (2, 0.4, "", ""),
-                              (3, 0.4, "C", "C")):
-        if kind == "P":
-            ex.add_patch(Rectangle((x - 0.22, y - 0.22), 0.44, 0.44, fc=SLATE, ec="#1d2f3d", lw=0.6, zorder=5))
-        elif kind == "C":
-            ex.add_patch(Circle((x, y), 0.22, fc=BRICK, ec="#4a2412", lw=0.6, zorder=5))
+def _fig2a_spec():
+    """The platform figure as data, in draw.io pixels."""
+    Z = [dict(id="dcfg", x=50, y=1010, w=290, h=160, fill="#ebf7f4", edge="#80cdbb",
+              title="Deployment configuration"),
+         dict(id="inputs", x=50, y=1200, w=290, h=410, fill="#f1f6eb", edge="#a5c582",
+              title="User Configuration"),
+         dict(id="core", x=370, y=1010, w=570, h=600, fill="#eef4fa", edge="#5a96cc",
+              title="Isobar evaluation core"),
+         dict(id="phase", x=980, y=1010, w=290, h=270, fill="#f0f8fa", edge="#68b4ce",
+              title="Phase analysis"),
+         dict(id="search", x=980, y=1330, w=290, h=280, fill="#f8f6e4", edge="#d6cf67",
+              title="Deployment search")]
+    CORE = dict(fill="#5a96cc", edge="#5a96cc", elw=1.2, text="white")
+    INP = dict(fill="white", edge="#a5c582", elw=3.2, text=TXT)
+    PH = dict(fill="#a4d2e2", edge="#a4d2e2", elw=1.2, text="black")
+    SR = dict(fill="#d6cf67", edge="#d6cf67", elw=1.2, text=TXT)
+    B = [dict(id="pp", x=70, y=1070, title="Partition & placement", sub=None,
+              fill="#80cdbb", edge="#80cdbb", elw=1.2, text=TXT),
+         dict(id="wl", x=70, y=1260, title="Workload", sub="Model, sequence length", **INP),
+         dict(id="ot", x=70, y=1370, title="Operator tiling\n& dependencies", sub=None, **INP),
+         dict(id="hw", x=70, y=1480, title="Hardware &\nexecution settings",
+              sub="routing, device, execution mode", **INP),
+         dict(id="ext", x=530, y=1070, title="Extract logical transfers",
+              sub="Sources, destinations, volumes", **CORE),
+         dict(id="rt", x=530, y=1180, title="Route & accumulate loads",
+              sub="Fixed routing; link & port loads", **CORE),
+         dict(id="cw", x=390, y=1290, title="Compute, write\n& digital costs", sub=None, **CORE),
+         dict(id="cc", x=670, y=1290, title="Communication costs",
+              sub="Service bounds & comm. energy", **CORE),
+         dict(id="ag", x=530, y=1400, title="Aggregate execution costs",
+              sub="Comp–comm overlap;\nserial hand-offs", **CORE),
+         dict(id="lt", x=530, y=1510, title="Latency &\nDynamic energy", sub=None, bold=True,
+              fill="white", edge="#5a96cc", elw=3.2, text=TXT),
+         dict(id="sw", x=1000, y=1068.8, title="Sweep device rate\n& bandwidth", sub=None, **PH),
+         dict(id="pb", x=1000, y=1178.8, title="Extract phase\nboundaries", sub=None, **PH),
+         dict(id="dp", x=1000, y=1390, title="Partition &\ngroup sizing (DP)", sub=None, **SR),
+         dict(id="sa", x=1000, y=1500, title="Die placement (SA) &\nMacro assignment", sub=None, **SR)]
+    for b in B:
+        b.setdefault("w", 250); b.setdefault("h", 80)
+    E = [  # (points, colour, width px, label)
+        dict(pts=[(655, 1150), (655, 1180)], col="#416c93", lw=2.5),
+        dict(pts=[(655, 1260), (655, 1270), (795, 1270), (795, 1290)], col="#416c93", lw=2.5),
+        dict(pts=[(515, 1370), (515, 1380), (655, 1380), (655, 1400)], col="#416c93", lw=2.5),
+        dict(pts=[(795, 1370), (795, 1380), (655, 1380), (655, 1400)], col="#416c93", lw=2.5),
+        dict(pts=[(655, 1480), (655, 1510)], col="#416c93", lw=2.5),
+        dict(pts=[(340, 1100), (530, 1100)], col="#418b78", lw=3),
+        dict(pts=[(340, 1230), (460, 1230), (460, 1130), (530, 1130)], col="#6e8d4e", lw=3),
+        dict(pts=[(340, 1230), (460, 1230), (460, 1290)], col="#6e8d4e", lw=3),
+        dict(pts=[(195, 1200), (195, 1170)], col="#6e8d4e", lw=3),
+        dict(pts=[(195, 1610), (195, 1640), (1125, 1640), (1125, 1610)], col="#6e8d4e", lw=3),
+        dict(pts=[(780, 1550), (980, 1550)], col="#416c93", lw=3,
+             label=("Latency", 880, 1535)),
+        dict(pts=[(940, 1109), (980, 1109)], col="#416c93", lw=3),
+        dict(pts=[(980, 1080), (940, 1080)], col="#4b8294", lw=3),
+        dict(pts=[(1125, 1148.8), (1125, 1178.8)], col="#4b8294", lw=2.5),
+        dict(pts=[(1125, 1470), (1125, 1500)], col="#8d8944", lw=2.5),
+        dict(pts=[(1270, 1470), (1290, 1470), (1290, 980), (200, 980), (200, 1010)],
+             col="#8d8944", lw=3, label=("Updated deployment", 282.5, 965))]
+    return dict(zones=Z, boxes=B, edges=E, x0=45, x1=1295, y0=948, y1=1645)
+
+
+def _fig2a(ax, W=5.02, H=3.00):
+    """(a) The platform, drawn from _fig2a_spec onto a W x H inch axes."""
+    S = _fig2a_spec()
+    sc = (S["x1"] - S["x0"]) / W                     # draw.io px per inch
+    hin = (S["y1"] - S["y0"]) / sc
+    yoff = 0.14 + (H - 0.14 - hin) / 2               # centred below the panel-letter row
+    X = lambda x: (x - S["x0"]) / sc
+    Y = lambda y: H - yoff - (y - S["y0"]) / sc
+    L = lambda px: px / sc                            # px -> in
+    PT = lambda px: px * 72 / sc                      # px -> pt
+    FS, FS_SUB = PT(20), PT(16) * 1.02
+    dash = (0, (PT(8), PT(4), PT(1), PT(4)))
+    fig = ax.figure
+    rend = fig.canvas.get_renderer()
+
+    def fit(t, max_w):                                # shrink a text to its box
+        for _ in range(14):
+            if t.get_window_extent(renderer=rend).width / fig.dpi <= max_w:
+                break
+            t.set_fontsize(t.get_fontsize() * 0.95)
+
+    for z in S["zones"]:
+        ax.add_patch(Rectangle((X(z["x"]), Y(z["y"] + z["h"])), L(z["w"]), L(z["h"]),
+                               fc=z["fill"], ec=z["edge"], lw=PT(2.5), ls=dash, zorder=1))
+        t = ax.text(X(z["x"] + 22), Y(z["y"] + 25), z["title"], fontsize=FS, color=TITLE,
+                    ha="left", va="center", fontweight="bold", zorder=5)
+        fit(t, L(z["w"] - 34))
+    for b in S["boxes"]:
+        ax.add_patch(FancyBboxPatch((X(b["x"]), Y(b["y"] + b["h"])), L(b["w"]), L(b["h"]),
+                                    boxstyle=f"round,pad=0,rounding_size={L(16)}",
+                                    fc=b["fill"], ec=b["edge"], lw=PT(b["elw"]), zorder=3))
+        xm, ym = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
+        wt = "bold" if b.get("bold") else "normal"
+        if b["sub"] is None:
+            t = ax.text(X(xm), Y(ym), b["title"], fontsize=FS, color=b["text"], ha="center",
+                        va="center", linespacing=1.2, fontweight=wt, zorder=4)
+            fit(t, L(b["w"] - 12))
         else:
-            ex.add_patch(Circle((x, y), 0.22, fc="#f6f8fa", ec="#c9d2d9", lw=0.6, zorder=5))
-        if lab:
-            ex.text(x, y, lab, ha="center", va="center", fontsize=6.4, color="white",
-                    fontweight="bold", zorder=6)
-    ex.plot([0.25, 1.75], [0.4, 0.4], color=LOAD_CMAP(0.35), lw=2.4, zorder=3)
-    ex.plot([1, 1, 1.75], [0.95, 0.4, 0.4], color=LOAD_CMAP(0.35), lw=2.4, zorder=3)
-    ex.plot([2.25, 2.75], [0.4, 0.4], color=LOAD_CMAP(0.95), lw=4.0, zorder=3)
-    ex.add_patch(Circle((2.5, 0.4), 0.16, fc="none", ec="#08131c", lw=1.0, zorder=7))
-    ex.text(2.5, 0.72, f"shared link: {hot['flows']} flows\n"
-            f"{hot['flows']} x {wpf / 1e6:.2f} M = {hot['words'] / 1e6:.1f} M words\n"
-            f"{hot['words'] / 1e6:.1f} M / 0.4 GB/s = {hot['service_ms']:.1f} ms",
-            fontsize=6.3, ha="center", va="bottom", linespacing=1.3, color="#08131c")
-    ex.text(3.0, -0.05, f"consumer port: 5 flows\n5.24 M words / κ=2 → "
-            f"{L['max_port_service_ms']:.2f} ms", fontsize=6.3, ha="center", va="top",
-            linespacing=1.3, color=BRICK)
-    ex.text(-0.5, -0.55, "stage time = max over links and ports\n"
-            "package latency = Σ stages + propagation\n"
-            "communication energy = Σ words × hops × 10 pJ",
-            fontsize=6.4, ha="left", va="top", linespacing=1.35, color=INK)
+            nt, ns = b["title"].count("\n") + 1, b["sub"].count("\n") + 1
+            lt, ls = nt * 24, ns * 19.2                       # px, line height 1.2
+            top = ym - (lt + ls) / 2
+            t = ax.text(X(xm), Y(top + lt / 2), b["title"], fontsize=FS, color=b["text"],
+                        ha="center", va="center", linespacing=1.2, fontweight=wt, zorder=4)
+            fit(t, L(b["w"] - 12))
+            s = ax.text(X(xm), Y(top + lt + ls / 2), b["sub"], fontsize=FS_SUB, color=b["text"],
+                        ha="center", va="center", linespacing=1.2, zorder=4)
+            fit(s, L(b["w"] - 12))
+    for e in S["edges"]:
+        pts = [(X(x), Y(y)) for x, y in e["pts"]]
+        lw = PT(e["lw"])
+        if len(pts) > 2:
+            xs, ys = zip(*pts[:-1])
+            ax.plot(xs, ys, color=e["col"], lw=lw, zorder=5, solid_joinstyle="miter",
+                    solid_capstyle="butt")
+        ax.add_patch(FancyArrowPatch(pts[-2], pts[-1], arrowstyle="-|>", mutation_scale=lw * 6,
+                                     color=e["col"], lw=lw, zorder=6, shrinkA=0, shrinkB=0))
+        if "label" in e:
+            s, lx, ly = e["label"]
+            ax.text(X(lx), Y(ly), s, fontsize=FS_SUB, color=TXT, ha="center", va="center",
+                    style="italic", zorder=7)
+    return W, H
+
+
+def _fig2a_drawio(path):
+    """The same layout as an editable draw.io diagram (mxGraph XML, draw.io px)."""
+    from xml.sax.saxutils import escape
+    S = _fig2a_spec()
+    q = lambda s: escape(s, {'"': "&quot;"})
+    cells = ['<mxCell id="0"/>', '<mxCell id="1" parent="0"/>']
+    def rect(cid, x, y, w, h, value, style):
+        cells.append(f'<mxCell id="{cid}" value="{q(value)}" style="{style}" vertex="1" parent="1">'
+                     f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
+    for z in S["zones"]:
+        rect(z["id"], z["x"], z["y"], z["w"], z["h"], "",
+             f"rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 4 1 4;fillColor={z['fill']};"
+             f"strokeColor={z['edge']};strokeWidth=2.5;")
+        rect(z["id"] + "_t", z["x"] + 20, z["y"] + 10, z["w"] - 40, 30,
+             f'<span style="font-size:20px;font-weight:700;color:{TITLE}">{q(z["title"])}</span>',
+             "text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;")
+    for b in S["boxes"]:
+        title = q(b["title"]).replace("\n", "<br>")
+        if b.get("bold"):
+            title = f"<b>{title}</b>"
+        value = f'<span style="font-size:20px">{title}</span>'
+        if b["sub"] is not None:
+            value += "<br>" + q(b["sub"]).replace("\n", "<br>")
+        rect(b["id"], b["x"], b["y"], b["w"], b["h"], value,
+             f"rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor={b['fill']};"
+             f"strokeColor={b['edge']};strokeWidth={b['elw']};fontSize=16;fontColor="
+             f"{'#ffffff' if b['text'] == 'white' else ('#000000' if b['text'] == 'black' else b['text'])};")
+    for i, e in enumerate(S["edges"]):
+        (x0, y0), (x1, y1) = e["pts"][0], e["pts"][-1]
+        way = "".join(f'<mxPoint x="{x}" y="{y}"/>' for x, y in e["pts"][1:-1])
+        cells.append(f'<mxCell id="e{i}" style="html=1;endArrow=block;endFill=1;rounded=0;'
+                     f'strokeColor={e["col"]};strokeWidth={e["lw"]};" edge="1" parent="1">'
+                     f'<mxGeometry relative="1" as="geometry"><mxPoint x="{x0}" y="{y0}" as="sourcePoint"/>'
+                     f'<mxPoint x="{x1}" y="{y1}" as="targetPoint"/><Array as="points">{way}</Array>'
+                     f'</mxGeometry></mxCell>')
+        if "label" in e:
+            s, lx, ly = e["label"]
+            rect(f"e{i}l", lx - 90, ly - 15, 180, 30, f"<i>{q(s)}</i>",
+                 "text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=16;")
+    xml = ('<mxfile host="isobar" version="2"><diagram id="fig2a" name="Fig. 2(a) platform">'
+           '<mxGraphModel grid="1" gridSize="10" page="1" pageWidth="827" pageHeight="1169">'
+           '<root>' + "".join(cells) + '</root></mxGraphModel></diagram></mxfile>')
+    open(path, "w").write(xml)
+    return path
+
+
+def _fig2_instance():
+    """One deployment of the Fig. 5 instance (the compact fill), evaluated
+    live: the 25 ffn1 -> ffn2 flows, XY routes, per-direction link loads,
+    port loads over kappa, word-hops. Also the routed path of every flow
+    so that one producer's fan-out can be drawn."""
+    import re
+    mesh = _small_mesh()
+    fab, prev_e, e = _handoff()
+    prod, cons = list(range(0, 5)), list(range(5, 10))
+    fl = _flows(fab, prev_e, e, prod, cons)
+    sc = _score(mesh, fl)
+    seg = re.compile(r"seg\((\d+), (\d+)\)-\((\d+), (\d+)\)")
+    links, ports = {}, {}
+    for k, v in sc["loads"].items():
+        if k[0] == "port":
+            ports[(k[1], k[2])] = v
+        else:
+            x0, y0, x1, y1 = (int(g) for g in seg.search(k[0]).groups())
+            links[(x0, y0, x1, y1, k[1])] = v
+    paths = {}
+    for f in fl:
+        a, b = f["nodes"]
+        paths[(a, b)] = [(tuple(int(g) for g in seg.search(r).groups()), d)
+                         for r, d in mesh.path_directed(a, b)]
+    return {"mesh": mesh, "flows": fl, "score": sc, "links": links, "ports": ports,
+            "paths": paths, "prod": prod, "cons": cons,
+            "handoff": {"from": prev_e["name"], "to": e["name"], "n_flows": len(fl),
+                        "words_per_flow": fl[0]["volume"] * fl[0]["width"]}}
+
+
+LOAD_BR = matplotlib.colors.LinearSegmentedColormap.from_list(
+    "isobar_load_br", [(r / 255, g / 255, b / 255) for r, g, b in
+                       ((47, 120, 174), (49, 124, 183), (109, 173, 209), (182, 215, 232),
+                        (233, 241, 244), (247, 203, 180), (246, 178, 147), (220, 109, 87),
+                        (183, 34, 48), (109, 1, 31))])
+# the RdBu ten-step ramp with the blue end lightened (it is the idle-lane
+# colour) and the first peach stop deepened (the 7.9 ms lanes read as pink)
+
+
+def _fig2b(ax, I):
+    """(b) Resource accounting: the real ffn hand-off on the controlled
+    instance, its link loads after routing, and the service-time profile
+    the evaluator reads the binding cost from. Node boxes; each physical
+    link is two lanes (one per direction) drawn as roads with a dark rim,
+    filled by the load colour, idle lanes at the zero end of the ramp; lanes run
+    centre to centre and the nodes cover their ends. Only the occupied rows
+    are drawn: the XY routes never enter the idle top row (asserted), so
+    every number is the 4x4 instance's."""
+    W, H = 2.24, 3.00
+    FS_T, FS_N, FS, FS_K = 6.2, 6.0, 5.6, 5.2      # title, node label, text, ticks
+    TXT = "#24313c"
+    EDGE = "#2b2f33"
+    mesh, links, ports = I["mesh"], I["links"], I["ports"]
+    sc, h = I["score"], I["handoff"]
+    vpf = h["words_per_flow"]
+    ms = lambda words: words / WPS * 1e3
+    # ---- title block
+    ax.text(0.245, H - 0.02, "RESOURCE ACCOUNTING", fontsize=FS_T, color=TITLE,
+            ha="left", va="top", fontweight="bold")
+    ax.text(0.23, H - 0.15, f"{h['from'].upper()} → {h['to'].upper()} · 5→5 dies · "
+            f"{h['n_flows']} transfers", fontsize=FS, color=TXT, ha="left", va="top")
+    # ---- the occupied rows of the instance
+    occ = {int(mesh.coord(n)[1]) for n in I["prod"] + I["cons"]}
+    ny = max(occ) + 1
+    assert all(max(k[1], k[3]) < ny for k in links), "a route enters an idle row"
+    nx = GRID[0]
+    ox, oy, s = 0.376, 1.618, 0.443                 # mesh origin and pitch (in)
+    r, off = 0.136, 0.057
+    LANE, RIM = 4.6, 0.4                            # lane fill width, rim width (pt)
+    NODE_LW, EMPTY_LW = 0.85, 0.4                    # node edge heavier than the rim
+    CM = LOAD_BR
+    IDLE_FILL = CM(0.0)                              # idle lanes: the ramp's zero colour
+    X = lambda i: ox + i * s
+    Y = lambda j: oy + j * s
+    # the diverging ramp is centred on the port bound: blue lanes cannot bind,
+    # red lanes exceed it, the hotspot is the deepest red
+    vmax = max(links.values()); tport = max(ports.values())
+    norm = matplotlib.colors.TwoSlopeNorm(vmin=0.0, vcenter=ms(tport), vmax=ms(vmax))
+
+    def road(p0, p1, fill):
+        ax.plot([p0[0], p1[0]], [p0[1], p1[1]], color=EDGE, lw=LANE + 2 * RIM,
+                solid_capstyle="butt", zorder=2)
+        ax.plot([p0[0], p1[0]], [p0[1], p1[1]], color=fill, lw=LANE,
+                solid_capstyle="butt", zorder=3)
+    for x in range(nx):
+        for y in range(ny):
+            for (x1, y1) in ((x + 1, y), (x, y + 1)):
+                if x1 >= nx or y1 >= ny:
+                    continue
+                horiz = y1 == y
+                for d in ("+", "-"):
+                    sg = 1 if d == "+" else -1
+                    dx, dy = (0, sg * off) if horiz else (-sg * off, 0)
+                    v = links.get((x, y, x1, y1, d))
+                    road((X(x) + dx, Y(y) + dy), (X(x1) + dx, Y(y1) + dy),
+                         IDLE_FILL if v is None else CM(norm(ms(v))))
+    ep = {}
+    for i, p in enumerate(I["prod"]):
+        ep[p] = (f"P{i + 1}", "producer")
+    for i, c in enumerate(I["cons"]):
+        ep[c] = (f"C{i + 1}", "consumer")
+    for n in range(nx * GRID[1]):
+        x, y = (int(v) for v in mesh.coord(n))
+        if y >= ny:
+            continue
+        cx, cy = X(x), Y(y)
+        if n not in ep:
+            ax.add_patch(Circle((cx, cy), r, fc="white", ec=EDGE, lw=EMPTY_LW, zorder=6))
+            continue
+        lab, role = ep[n]
+        if role == "producer":
+            rs = 0.92 * r                            # a square reads larger than a circle
+            ax.add_patch(FancyBboxPatch((cx - rs, cy - rs), 2 * rs, 2 * rs,
+                                        boxstyle="round,pad=0,rounding_size=0.035",
+                                        fc="white", ec=EDGE, lw=NODE_LW, zorder=6))
+        else:
+            ax.add_patch(Circle((cx, cy), r, fc="white", ec=EDGE, lw=NODE_LW, zorder=6))
+        ax.text(cx, cy, lab, fontsize=FS_N, color="black", ha="center", va="center_baseline",
+                zorder=7, fontweight="bold")
+    # the hot link e*, labelled once
+    hot_key = max(links, key=links.get)
+    hx0, hy0, hx1, hy1, hd = hot_key
+    horiz = hy0 == hy1
+    sg = 1 if hd == "+" else -1
+    dx, dy = (0, sg * off) if horiz else (-sg * off, 0)
+    hx, hy = (X(hx0) + X(hx1)) / 2 + dx, (Y(hy0) + Y(hy1)) / 2 + dy
+    nflows = int(round(links[hot_key] / vpf))
+    ax.text(hx - 0.05, hy, "e*", fontsize=FS, color=TXT, ha="right", va="center", zorder=9)
+    ax.text(X(0) - r, oy - r - 0.07, f"e*  {nflows} flows \u00b7 {links[hot_key] / 1e6:.1f} M words",
+            fontsize=FS, color=TXT, ha="left", va="top", zorder=9)
+    # a short colour bar, bottom-aligned with the mesh; drawn by hand as one
+    # raster strip sampled through the same norm so the fill and the frame
+    # coincide in PDF and SVG (matplotlib's colorbar mesh under a TwoSlopeNorm
+    # did not)
+    cb_x, cb_w = X(nx - 1) + r + 0.15, 0.072
+    cbx = ax.inset_axes((cb_x, oy - r, cb_w, 0.60), transform=ax.transData)
+    vals = np.linspace(0.0, ms(vmax), 512)
+    cbx.imshow(CM(norm(vals))[:, None, :], origin="lower", aspect="auto",
+               extent=(0, 1, 0, ms(vmax)), interpolation="nearest")
+    cbx.set_xlim(0, 1); cbx.set_ylim(0, ms(vmax))
+    cbx.set_xticks([]); cbx.yaxis.tick_right()
+    cbx.set_yticks([0, ms(tport), ms(vmax)])
+    cbx.set_yticklabels(["0", f"{ms(tport):.1f}", f"{ms(vmax):.0f}"])
+    cbx.tick_params(labelsize=FS_K, length=1.5, pad=1, width=0.5, colors=TXT)
+    for sp in cbx.spines.values():
+        sp.set_linewidth(0.4)
+    cbx.set_title("ms", fontsize=FS_K, color=TXT, pad=2)
+    # ---- the service-time profile, aligned under the mesh
+    used = sorted(links.values(), reverse=True)
+    x_left, x_right = X(0) - r, cb_x + cb_w          # as wide as the mesh plus the colour bar
+    bx = ax.inset_axes((x_left, 0.28, x_right - x_left, 0.98), transform=ax.transData)
+    n = len(used)
+    bx.bar(range(n), [ms(v) for v in used], color=[CM(norm(ms(v))) for v in used],
+           width=0.74, zorder=3)
+    bx.plot([-0.6, n - 0.4], [ms(tport)] * 2, color=EDGE, lw=0.6, ls=(0, (3, 2)), zorder=4)
+    bx.text(n - 0.4, 12.2, f"Port bound {ms(tport):.1f} ms", fontsize=FS, color=TXT,
+            ha="right", va="bottom")
+    bx.text(0.55, ms(used[0]) + 1.2, f"e*\n{ms(used[0]):.1f} ms", fontsize=FS, color=TXT,
+            ha="left", va="top", linespacing=1.25)
+    bx.text(0.985, 0.97, f"Total routed traffic\n{sc['word_hops'] / 1e6:.1f} M word-hops",
+            transform=bx.transAxes, fontsize=FS, color=TXT, ha="right", va="top", linespacing=1.25)
+    bx.set_xlim(-0.6, n - 0.4)
+    bx.set_ylim(0, ms(vmax) * 1.30)              # headroom for the e* reading
+    bx.set_xticks([])
+    bx.set_yticks([0, 10, 20])
+    bx.tick_params(labelsize=FS_K, length=1.5, pad=1, width=0.5, colors=TXT)
+    bx.set_ylabel("Lₑ / B  (ms)", fontsize=FS, labelpad=1, color=TXT)
+    bx.set_xlabel("Directed links, sorted", fontsize=FS, labelpad=1.5, color=TXT)
+    for sp in ("top", "right"):
+        bx.spines[sp].set_visible(False)
+    for sp in ("left", "bottom"):
+        bx.spines[sp].set_linewidth(0.5)
+    bx.set_facecolor("none")
+    return W, H
+
+
+def _fig2b_data(I):
+    """The numbers behind panel (b), from the same evaluation."""
+    sc, links, ports = I["score"], I["links"], I["ports"]
+    hot = max(links, key=links.get)
+    return {"instance": "Fig. 5 controlled 4x4 die mesh, compact fill (the stacked default)",
+            "grid": f"{GRID[0]}x{GRID[1]}", "routing": "xy", "kappa": KAPPA, "bw_gbps": BW,
+            "drawn_rows": "y = 0..2; the idle top row is not drawn and no XY route enters it, "
+                          "so every number is the 4x4 instance's",
+            "handoff": I["handoff"], "prod_slots": I["prod"], "cons_slots": I["cons"],
+            "busiest_link": {"from": [hot[0], hot[1]], "to": [hot[2], hot[3]], "dir": hot[4],
+                             "flows": int(round(links[hot] / I["handoff"]["words_per_flow"])),
+                             "words": links[hot], "service_ms": links[hot] / WPS * 1e3},
+            "used_link_directions": len(links),
+            "link_service_ms_sorted": sorted((v / WPS * 1e3 for v in links.values()), reverse=True),
+            "port_bound_ms": max(ports.values()) / WPS * 1e3,
+            "binding": sc["binding"], "word_hops": sc["word_hops"], "words": sc["words"],
+            "mean_hops": sc["mean_hops"], "max_hops": sc["max_hops"],
+            "fan_out_producer": max(I["prod"], key=lambda p: sum(len(I["paths"][(p, c)])
+                                                                 for c in I["cons"]))}
+
+
+def fig2(inst=None):
+    I = _fig2_instance()
+    Wt, Ht = 7.46, 3.00                              # (a) 5.02 + gap 0.20 + (b) 2.24
+    fig = plt.figure(figsize=(Wt, Ht))
+    axa = _inch_axes(fig, [0, 0, 5.02 / Wt, 1], 5.02, Ht); _fig2a(axa)
+    axb = _inch_axes(fig, [5.22 / Wt, 0, 2.24 / Wt, 1], 2.24, Ht); _fig2b(axb, I)
+    # panel letters clear of both panels' content, tops level with (b)'s title
+    yl = (Ht - 0.02) / Ht
+    fig.text(0.006, yl, "(a)", fontsize=7.5, fontweight="bold", va="top")
+    fig.text(5.22 / Wt + 0.004, yl, "(b)", fontsize=7.5, fontweight="bold", va="top")
     save(fig, "fig2_platform_workflow", composite=True,
-         sources=["scripts/search_eval.py (live: the Fig. 5 instance's compact fill)"],
-         note="the fragment's numbers are the compact fill's busiest link and one consumer port")
+         sources=["schematic", "scripts/search_eval.py (live: _one_boundary_flows, resource_loads)",
+                  "scripts/interconnect.py (Mesh 4x4, xy)"],
+         note="(a) schematic; (b) the Fig. 5 instance's compact fill, evaluated live")
+    f = plt.figure(figsize=(5.02, 3.00)); a = _inch_axes(f, [0, 0, 1, 1], 5.02, 3.00); _fig2a(a)
+    save(f, "fig2a_platform", sources=["schematic"])
+    dpath = os.path.join(OUT["panels"], "fig2a_platform.drawio")
+    _fig2a_drawio(dpath)
+    PRODUCTS.append({"name": "fig2a_platform_drawio", "kind": "panels",
+                     "files": ["panels/fig2a_platform.drawio"], "sources": ["schematic"],
+                     "note": "editable draw.io export of the same layout (192 px per inch)"})
+    print("   panels/fig2a_platform.drawio")
+    f = plt.figure(figsize=(2.24, 3.00)); a = _inch_axes(f, [0, 0, 1, 1], 2.24, 3.00); _fig2b(a, I)
+    save(f, "fig2b_placement_to_costs", sources=["scripts/search_eval.py (live)"])
+    D = _fig2b_data(I)
+    dump_json("fig2b_placement_to_costs", D, sources=["scripts/search_eval.py (live)"])
+    hot = D["busiest_link"]
     CAPTIONS["fig2"] = (
-        "Fig. 2. The platform. The workload and hardware configuration enter the mapping, "
-        "which fixes the logical dependencies; placement and routing at the die and macro "
-        "levels turn them into per-hand-off link and port loads; latency takes the maximum "
-        "over resources within a stage and the sum over stages, dynamic energy the routed "
-        "word-hops. The phase analysis and the deployment search (a dynamic program over "
-        "block cuts, simulated annealing over die placement, enumeration inside a die) read "
-        "the same costs; the search feeds placements back. Lower left: one link of the "
-        f"Fig. 5 instance under the compact fill, where {hot['flows']} flows of "
-        f"{wpf / 1e6:.2f} M words share a link and owe {hot['service_ms']:.1f} ms at "
-        "0.4 GB/s, while a consumer's ejection port owes "
-        f"{L['max_port_service_ms']:.2f} ms with ports at twice the link rate.")
+        "Fig. 2. The platform. (a) The inputs are the workload, the given operator tiling with its "
+        "tensor dependencies, and the hardware and execution settings; the platform generates no "
+        "mapping. The evaluation core scores one deployment configuration: it extracts the logical "
+        "transfers, routes them under the fixed rule and accumulates link and port loads, prices "
+        "the communication from those loads, and aggregates it with the compute, write and digital "
+        "costs under the execution relation into latency and dynamic energy. The phase analysis "
+        "calls the core over device rates, bandwidths and placement sets; the deployment "
+        "search calls it on candidates and returns the updated deployment. (b) Resource accounting on the "
+        f"controlled instance of Fig. 5: the {D['handoff']['from']} to {D['handoff']['to']} hand-off of the "
+        f"2.7B mapping, five producer dies to five consumer dies, {D['handoff']['n_flows']} transfers of "
+        f"{D['handoff']['words_per_flow'] / 1e6:.2f} M words each, placed by the compact fill on the 4x4 die "
+        "mesh with XY routing, 0.4 GB/s per link direction and ports at twice the link rate; the idle top "
+        "row is not drawn. Each physical link has one lane per direction, coloured by its cumulative "
+        "load on a diverging scale whose white is the port bound: idle lanes sit at the zero end, blue "
+        f"lanes cannot bind, red lanes exceed it. The busiest link e* carries {hot['flows']} transfers, "
+        f"{hot['words'] / 1e6:.1f} M words. Below, the service time of every used link direction in "
+        f"decreasing order on the same colour scale, against the port bound of {D['port_bound_ms']:.1f} ms: "
+        "the load concentrates on a few links, the hand-off is link-bound, and the evaluator reads its "
+        f"latency term from e*. The {D['word_hops'] / 1e6:.1f} M word-hops of the same evaluation are the "
+        "cumulative traffic that sets the communication part of the dynamic energy.")
 
 
 # =====================================================================
@@ -668,6 +1013,29 @@ def _spearman(x, y):
     return num / den
 
 
+# Fig. 3 colours: the author's colour card, its light swatches each darkened
+# by 8%: blue (104,180,206), green (165,197,130), yellow (243,222,103)
+_F3 = dict(meas="#60a6be", bound="#98b578", est="#e0cc5f",
+           fam={"stacked": "#60a6be", "heuristic": "#e0cc5f", "random": GREY,
+                "search": "#98b578"})
+
+
+def _seating_glyph(ax, rect, seating, side, caption):
+    """A 6x6 chiplet grid with the four seated chiplets filled, as an
+    inset in axes fraction `rect`; caption below."""
+    g = ax.inset_axes(rect)
+    n = 6
+    for i in range(n):
+        for j in range(n):
+            g.add_patch(Rectangle((i, j), 1, 1, fc="white", ec="0.75", lw=0.35))
+    for (i, j) in seating:
+        g.add_patch(Rectangle((i + 0.08, j + 0.08), 0.84, 0.84, fc=_F3["meas"], ec="none"))
+    g.set_xlim(0, n); g.set_ylim(0, n); g.set_aspect("equal"); g.axis("off")
+    g.text(n / 2, n + 0.5, caption, fontsize=FS["small"], color=INK, ha="center", va="bottom",
+           transform=g.transData, linespacing=1.15)
+    return g
+
+
 def _fig3a(ax):
     t1 = load("simba_t1.json")
     rows = t1["rows"]
@@ -677,19 +1045,30 @@ def _fig3a(ax):
     meas = [r["measured_norm"] for r in rows]
     lo = [r["ratio_max_end"] for r in rows]
     est = [r["ratio_pess"] for r in rows]
-    ax.plot(x, meas, marker="s", ms=6, color=NAVY, ls="none", label="measured silicon", zorder=5)
-    ax.plot(x, lo, marker="o", ms=4.5, lw=1.4, color=GREEN, label="busiest-resource bound", zorder=4)
-    ax.plot(x, est, marker="D", ms=4.5, lw=1.3, ls="--", color=BRICK, mfc="white",
-            label="round-serialized estimate", zorder=4)
+    ax.plot(x, meas, marker="s", ms=6, color=_F3["meas"], ls="none", label="Measured silicon",
+            zorder=5)
+    ax.plot(x, lo, marker="o", ms=4.5, lw=1.4, color=_F3["bound"], zorder=4,
+            label="Resource-service bound")
+    ax.plot(x, est, marker="D", ms=4.5, mew=1.6, lw=1.7, ls="--", color=_F3["est"], mfc="white",
+            zorder=4, label="Isobar execution estimate")
     ax.annotate(f"{meas[-1]:.2f}× measured\n{est[-1]:.2f}× estimate",
                 (x[-1], meas[-1]), textcoords="offset points", xytext=(-8, -2),
                 ha="right", va="top", fontsize=FS["note"], color=INK, linespacing=1.25)
+    # what changes between the seatings: the four chiplets spread from an
+    # adjacent block to the corners of a 6x6 region (only the two ends drawn)
+    _seating_glyph(ax, [0.59, 0.10, 0.15, 0.24], rows[0]["seating"], 6, f"adjacent\n{dist[0]} hops")
+    _seating_glyph(ax, [0.83, 0.10, 0.15, 0.24], rows[-1]["seating"], 6, f"corners\n{dist[-1]} hops")
+    ax.annotate("", xy=(0.825, 0.22), xytext=(0.745, 0.22), xycoords="axes fraction",
+                arrowprops=dict(arrowstyle="-|>", color=INK, lw=0.8, mutation_scale=8))
+    ax.text(0.985, 0.45, "Four-chiplet placements", transform=ax.transAxes,
+            fontsize=FS["small"], color=INK, ha="right", va="bottom")
     ax.set_xticks(x); ax.set_xticklabels([f"{d:g}" for d in dist], fontsize=FS["tick"])
     ax.set_xlabel("Longest producer-consumer distance (hops)", fontsize=FS["axis"])
-    ax.set_ylabel("Latency, normalized to the\nadjacent seating", fontsize=FS["axis"])
-    ax.set_ylim(0.85, 2.75)
-    ax.set_title("(a) SIMBA: placement-dependent latency", fontsize=FS["title"])
-    ax.legend(fontsize=FS["small"], loc="upper left", frameon=False)
+    ax.set_ylabel("Relative latency", fontsize=FS["axis"])
+    ax.set_ylim(0.85, 2.85)
+    ax.set_title("(a) SIMBA: placement sensitivity", fontsize=FS["title"])
+    ax.legend(fontsize=FS["small"], loc="upper left", frameon=False, labelspacing=0.5,
+              handlelength=2.2, borderaxespad=0.3)
     tidy(ax, grid="y")
     return t1, dist
 
@@ -700,50 +1079,76 @@ def _fig3b(ax):
     ref = fan["summary"]["strongest_random_under_ours"]
     names = list(r)
     rho = _spearman([r[n]["ours_words"] for n in names], [r[n]["booksim_cycles"] for n in names])
-    for n in names:
-        fam = family(n if not n.startswith("sa_from") else "sa_x") if n != "dispersed" else "heuristic"
-        fam = "search" if n.startswith("sa_") else fam
-        mk = {"stacked": "s", "heuristic": "^", "random": "o", "search": "*"}[fam]
-        ax.plot([r[n]["ours_words"] / r[ref]["ours_words"]],
-                [r[n]["booksim_cycles"] / r[ref]["booksim_cycles"]],
-                marker=mk, ms=9 if mk == "*" else 5.5, color=FAM[fam], mec="white",
-                mew=0.5, ls="none", zorder=5)
-    ax.plot([1.0], [1.0], marker="o", ms=9, mfc="none", mec=INK, mew=0.9, ls="none", zorder=6)
-    ax.annotate("reference\nrandom fill", (1.0, 1.0), textcoords="offset points",
-                xytext=(-10, 6), fontsize=FS["small"], color=INK, ha="right", va="bottom",
-                linespacing=1.2)
-    ax.annotate("search endpoints", (0.72, 0.66), textcoords="offset points",
-                xytext=(4, -6), fontsize=FS["small"], color=GREEN, ha="left", va="top")
-    lim = [0.55, 4.2]
+    ends = fan["summary"]["endpoints"]
+    gains = [v["gain_booksim_vs_booksim_best_random_pct"] for v in ends.values()]
+    pts = {n: (r[n]["ours_words"] / r[ref]["ours_words"],
+               r[n]["booksim_cycles"] / r[ref]["booksim_cycles"]) for n in names}
+
+    def scatter(a, ms_scale=1.0):
+        for n in names:
+            fam = "search" if n.startswith("sa_") else family(n if n != "dispersed" else "x")
+            mk = {"stacked": "s", "heuristic": "^", "random": "o", "search": "*"}[fam]
+            a.plot([pts[n][0]], [pts[n][1]], marker=mk, color=_F3["fam"][fam], mec="white", mew=0.5,
+                   ms={"*": 9, "^": 7, "s": 5.5, "o": 5.5}[mk] * ms_scale, ls="none", zorder=5)
+
+    lim = [0.55, 5.2]
+    scatter(ax)
     ax.plot(lim, lim, color="0.6", lw=0.8, ls=(0, (4, 3)), zorder=2)
-    ax.text(2.35, 2.05, "y = x", fontsize=FS["small"], color="0.45", ha="left", va="top")
+    ax.text(2.5, 2.2, "y = x", fontsize=FS["small"], color="0.45", ha="left", va="top")
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlim(*lim); ax.set_ylim(*lim)
     for a in (ax.xaxis, ax.yaxis):
         a.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
         a.set_minor_formatter(matplotlib.ticker.NullFormatter())
     ax.set_xticks([0.6, 1, 2, 4]); ax.set_yticks([0.6, 1, 2, 4])
-    ax.set_xlabel("Analytical communication cost (normalized)", fontsize=FS["axis"])
-    ax.set_ylabel("BookSim batch time (normalized)", fontsize=FS["axis"])
-    ax.set_title("(b) BookSim: layout ranking", fontsize=FS["title"])
-    ax.text(0.04, 0.96, f"Spearman ρ = {rho:.3f}, n = {len(names)}",
-            transform=ax.transAxes, fontsize=FS["note"], va="top", ha="left")
-    ax.legend(handles=[Line2D([], [], marker=m, color=FAM[f], ls="none",
-                              ms=8 if m == "*" else 5.5, mec="white", mew=0.5)
+    ax.set_xlabel("Relative analytical cost", fontsize=FS["axis"])
+    ax.set_ylabel("Relative BookSim batch time", fontsize=FS["axis"])
+    ax.set_title("(b) BookSim: layout selection", fontsize=FS["title"])
+    ax.text(0.98, 0.04, f"Spearman ρ = {rho:.3f}, n = {len(names)}", transform=ax.transAxes,
+            fontsize=FS["note"], va="bottom", ha="right", color=INK)
+    ax.legend(handles=[Line2D([], [], marker=m, color=_F3["fam"][f], ls="none",
+                              ms={"*": 8, "^": 6.5, "s": 5.5, "o": 5.5}[m], mec="white", mew=0.5)
                        for f, m in (("stacked", "s"), ("heuristic", "^"),
                                     ("random", "o"), ("search", "*"))],
               labels=["stacked fills", "heuristics", "random fills", "search endpoints"],
-              fontsize=FS["small"], loc="lower right", frameon=False)
+              fontsize=FS["small"], loc="lower right", bbox_to_anchor=(1.0, 0.11), frameon=False)
     tidy(ax)
+    # the region that matters for selection: the reference and the endpoints
+    zx, zy = (0.66, 1.22), (0.62, 1.24)
+    ins = ax.inset_axes([0.07, 0.50, 0.44, 0.47])
+    scatter(ins, 1.1)
+    ins.plot(zx, zx, color="0.6", lw=0.7, ls=(0, (4, 3)), zorder=2)
+    ins.set_xlim(*zx); ins.set_ylim(*zy)
+    ins.set_xticks([0.7, 1.0]); ins.set_yticks([0.7, 1.0])
+    ins.tick_params(labelsize=FS["small"], length=2, pad=1.5)
+    ins.grid(alpha=0.16, lw=0.5); ins.set_axisbelow(True)
+    for s in ins.spines.values():
+        s.set_linewidth(0.6); s.set_color("0.45")
+    gx = max(pts[n][0] for n in ends); gy = np.mean([pts[n][1] for n in ends])
+    ins.annotate(f"Search endpoints\n{min(gains):.0f}–{max(gains):.0f}% lower\nbatch time",
+                 (gx + 0.015, gy), xytext=(0.87, 0.645), textcoords="data",
+                 fontsize=FS["small"], color=INK, ha="left", va="bottom", linespacing=1.15,
+                 arrowprops=dict(arrowstyle="-", color=_F3["fam"]["search"], lw=0.6, shrinkA=0,
+                                 shrinkB=1, relpos=(0.0, 0.5)))
+    ax.indicate_inset_zoom(ins, edgecolor="0.45", lw=0.6, alpha=0.9)
     return fan, ref, rho, names
+
+
+def _same_box(axes):
+    """After tight_layout, give the two panels one axes width and height
+    (the left panel keeps its left edge, the right panel its right edge)."""
+    pa, pb = axes[0].get_position(), axes[1].get_position()
+    w, h = min(pa.width, pb.width), min(pa.height, pb.height)
+    axes[0].set_position([pa.x0, pa.y0, w, h])
+    axes[1].set_position([pb.x1 - w, pb.y0, w, h])
 
 
 def fig3():
     SRC = ["analysis/simba_t1.json", "analysis/b_fanout_24x24_rerank.json"]
-    fig, axes = plt.subplots(1, 2, figsize=(PAGE_WIDTH, PAGE_WIDTH * 0.40))
+    fig, axes = plt.subplots(1, 2, figsize=(PAGE_WIDTH, PAGE_WIDTH * 0.44))
     t1, dist = _fig3a(axes[0])
     fan, ref, rho, names = _fig3b(axes[1])
-    fig.tight_layout()
+    fig.tight_layout(); _same_box(axes)
     save(fig, "fig3_external_validation", composite=True, sources=SRC)
     for tag, fn in (("fig3a_simba_placement", _fig3a), ("fig3b_booksim_ranking", _fig3b)):
         f, a = plt.subplots(figsize=(COL_WIDTH * 1.2, COL_WIDTH * 1.0))
@@ -775,23 +1180,32 @@ def fig3():
         sources=SRC[1:])
     ends = fan["summary"]["endpoints"]
     g = [v["gain_booksim_vs_booksim_best_random_pct"] for v in ends.values()]
+    ea = [r[n]["ours_words"] for n in ends]; eb = [r[n]["booksim_cycles"] for n in ends]
+    ends_spread_a = 100 * (max(ea) / min(ea) - 1); ends_spread_b = 100 * (max(eb) / min(eb) - 1)
     CAPTIONS["fig3"] = (
-        "Fig. 3. What the cost model is checked against. (a) The published placement "
-        "measurements of the Simba package (Shao et al., Fig. 9: one convolution layer, "
-        "res4a_branch1, on four chiplets with a fixed tiling) against the platform's two "
-        "estimates for the same five seatings, decoded from the paper into their longest "
-        "producer-to-consumer distance. Every series is normalized to its own adjacent "
-        "seating. The busiest-resource bound is nearly flat because the busiest link carries "
-        "the same load in every seating; the round-serialized estimate, which adds the "
-        f"packet round trips, follows the measured ladder from below (measured {t1['rows'][-1]['measured_norm']:.2f}x, "
-        f"estimate {t1['rows'][-1]['ratio_pess']:.2f}x at the farthest seating). The two are model "
-        "variants, not a confidence band. (b) An independent instance: a synthetic fan-out "
-        "batch on a 24x24 die mesh with 17 dies per stage and ports at the link rate, whose "
-        f"{len(names)} candidate placements are scored by the analytical bottleneck cost and by "
-        "the BookSim packet simulator, each normalized to the same random fill. The dashed "
-        "line is y = x; the rank correlation, not the line, is the claim. The four search "
-        f"endpoints are {min(g):.0f} to {max(g):.0f}% below the reference under BookSim; these "
-        "are network-batch times, not whole-model gains.")
+        "Fig. 3. External checks of the cost model. (a) SIMBA: placement sensitivity. "
+        "The published Simba measurements (Shao et al., Fig. 9: one convolution layer, "
+        "res4a_branch1, on four chiplets with a fixed tiling) for five seatings that spread the "
+        "four chiplets from an adjacent block to the corners of a 6x6 region (insets), against "
+        "two Isobar readings for the same seatings: the service bound, the busiest-link load of "
+        "the communication-cost stage in Fig. 2(a), and the execution estimate, the aggregation "
+        "stage's reading once the packet round trips of the Simba NoP protocol are added. Every "
+        "series is normalized to its own adjacent seating, so the panel checks the relative "
+        "change with distance, not absolute latency. The bound is flat because the busiest link "
+        "carries the same load in every seating; the execution estimate follows the measured "
+        f"ladder from below ({t1['rows'][-1]['ratio_pess']:.2f}x against {t1['rows'][-1]['measured_norm']:.2f}x "
+        "at the farthest seating). (b) BookSim: layout selection. "
+        f"{len(names)} candidate placements of a synthetic fan-out batch on a 24x24 die mesh "
+        "(17 dies per stage, ports at the link rate), scored by the analytical communication "
+        "cost and by the BookSim packet simulator, both relative to the same random fill. The "
+        "inset enlarges the region around that reference: the four search endpoints are "
+        f"{min(g):.0f} to {max(g):.0f}% below it under BookSim (27 to 29% analytically), so the "
+        "improvement the model selects is confirmed by the independent simulator. Among the "
+        f"endpoints the analytical scores lie within {ends_spread_a:.0f}% of each other while the BookSim "
+        f"times spread over {ends_spread_b:.0f}%: the model finds better layouts, and ranks the best "
+        "ones among themselves only coarsely. The rank "
+        f"correlation (Spearman rho = {rho:.3f}) is supporting evidence and the dashed y = x a "
+        "guide; these are network-batch times, not whole-model gains.")
 
 
 # =====================================================================
@@ -799,6 +1213,9 @@ def fig3():
 # =====================================================================
 BAR_ORDER = ["default_A4", "snake", "clustered", "heaviest_first", "nmap_greedy",
              "least_manhattan", "random_s3", "sa_random_s1"]
+
+
+BAR_NAME = {"random_s3": "Best random (of 5)", "sa_random_s1": "Search (representative)"}
 
 
 def _fig4a(ax, with_points=True):
@@ -814,27 +1231,13 @@ def _fig4a(ax, with_points=True):
         ax.barh(y, H, left=R, color=C_H, ec="white", lw=0.5, height=0.62, zorder=3)
         ax.text(R + H + 45, y, f"{R + H:.0f}", va="center", ha="left", fontsize=FS["note"],
                 color=FAM[family(n)], zorder=4)
-    if with_points:                     # the five random fills and the nine endpoints
-        yr, ysr = ys[BAR_ORDER.index("random_s3")], ys[-1]
-        rnd = [T[n] for n in mc if n.startswith("random")]
-        sea = [T[n] for n in mc if n.startswith("sa_")]
-        ax.plot(rnd, [yr + 0.46] * len(rnd), marker="|", ms=7, mew=1.0, color=GREY, ls="none", zorder=5)
-        ax.plot(sea, [ysr - 0.46] * len(sea), marker="|", ms=7, mew=1.0, color=GREEN, ls="none", zorder=5)
-        ax.text(max(rnd) + 45, yr + 0.46, "5 random fills", fontsize=FS["small"], color=GREY, va="center")
-        ax.text(max(sea) + 45, ysr - 0.46, "9 search endpoints", fontsize=FS["small"], color=GREEN, va="center")
     ax.set_yticks(ys)
-    ax.set_yticklabels([label(n) if n != "sa_random_s1" else "Search" for n in BAR_ORDER],
-                       fontsize=FS["tick"])
+    ax.set_yticklabels([BAR_NAME.get(n, label(n)) for n in BAR_ORDER], fontsize=FS["tick"])
     for tick, n in zip(ax.get_yticklabels(), BAR_ORDER):
         tick.set_color(FAM[family(n)])
     ax.set_xlabel("Whole-model prefill latency (ms)", fontsize=FS["axis"])
     ax.set_xlim(0, 5000)
-    ysr, yr = ys[-1], ys[BAR_ORDER.index("random_s3")]
-    ax.annotate("", xy=(T["sa_random_s1"], ysr + 0.50), xytext=(T["random_s3"], ysr + 0.50),
-                arrowprops=dict(arrowstyle="<|-|>", color=GREEN, lw=0.9, mutation_scale=7))
-    ax.text(T["random_s3"] + 60, ysr + 0.50,
-            f"{100 * (1 - T['sa_random_s1'] / T['random_s3']):.2f}% below the best random fill",
-            fontsize=FS["note"], color=GREEN, ha="left", va="center")
+    ysr = ys[-1]
     yb = ysr - 0.95
     ax.annotate("", xy=(T["sa_random_s1"], yb), xytext=(T["default_A4"], yb),
                 arrowprops=dict(arrowstyle="<|-|>", color=NAVY, lw=0.9, mutation_scale=7))
@@ -845,9 +1248,42 @@ def _fig4a(ax, with_points=True):
     ax.legend(handles=[Rectangle((0, 0), 1, 1, fc=C_R, ec="none"),
                        Rectangle((0, 0), 1, 1, fc=C_H, ec="none")],
               labels=["Non-communication", "Package communication"], fontsize=FS["note"],
-              loc="center right", bbox_to_anchor=(1.0, 0.50), frameon=False)
+              loc="upper right", bbox_to_anchor=(1.0, 0.79), frameon=False)
     ax.set_title("(a) Whole-model latency of the evaluated placements", fontsize=FS["title"])
     tidy(ax, grid="x")
+    if with_points:
+        # every sample on one short axis: the five random fills and the nine
+        # search endpoints; the representative and the best random marked
+        rnd = sorted(T[n] for n in mc if n.startswith("random"))
+        sea = sorted(T[n] for n in mc if n.startswith("sa_"))
+        ins = ax.inset_axes([0.585, 0.23, 0.40, 0.30])
+        ins.plot(rnd, [1] * len(rnd), marker="o", ms=4.5, color=GREY, mec="white", mew=0.4,
+                 ls="none", zorder=5)
+        ins.plot([T["random_s3"]], [1], marker="o", ms=5.5, color=GREY, mec=INK, mew=0.7,
+                 ls="none", zorder=6)
+        ins.plot(sea, [0] * len(sea), marker="*", ms=7, color=GREEN, mec="white", mew=0.4,
+                 ls="none", zorder=5)
+        ins.plot([T["sa_random_s1"]], [0], marker="*", ms=9.5, color=GREEN, mec=INK, mew=0.7,
+                 ls="none", zorder=6)
+        ins.annotate("", xy=(T["sa_random_s1"], 0.5), xytext=(T["random_s3"], 0.5),
+                     arrowprops=dict(arrowstyle="<|-|>", color=GREEN, lw=0.8, mutation_scale=6))
+        ins.text((T["sa_random_s1"] + T["random_s3"]) / 2, 0.58,
+                 f"{100 * (1 - T['sa_random_s1'] / T['random_s3']):.2f}%", ha="center",
+                 va="bottom", fontsize=FS["small"], color=GREEN)
+        ins.set_xlim(1880, 2180); ins.set_ylim(-0.55, 1.55)
+        ins.set_yticks([])
+        ins.text(1888, 1, "5 random fills", fontsize=FS["small"], color=GREY, ha="left",
+                 va="center")
+        ins.text(2172, 0, "9 search endpoints", fontsize=FS["small"], color=GREEN, ha="right",
+                 va="center")
+        ins.set_xticks([1900, 2000, 2100])
+        ins.tick_params(labelsize=FS["small"], length=2, pad=1.5)
+        ins.set_xlabel("ms", fontsize=FS["small"], labelpad=1)
+        ins.grid(axis="x", alpha=0.16, lw=0.5); ins.set_axisbelow(True)
+        for s in ("top", "right"):
+            ins.spines[s].set_visible(False)
+        for s in ("left", "bottom"):
+            ins.spines[s].set_linewidth(0.6)
     return mt, T
 
 
@@ -873,18 +1309,16 @@ def _fig4b(ax):
              ("heaviest_first", "Heaviest first", (8, 0), "left", "center"),
              ("least_manhattan", f"Least Manhattan\n{dE('least_manhattan'):+.1f}% energy, "
                                  f"{dT('least_manhattan'):+.1f}% latency", (0, 12), "center", "bottom"),
-             ("clustered", f"Clustered, {dT('clustered'):+.1f}% latency", (10, 0), "left", "center"),
-             ("random_s3", "best random fill", (12, -4), "left", "top"),
-             ("sa_random_s1", "search\n(representative)", (0, -12), "center", "top"))
+             ("clustered", "Clustered", (10, 0), "left", "center"),
+             ("random_s3", "Best random", (12, -4), "left", "top"),
+             ("sa_random_s1", f"Search (representative)\n{dT('sa_random_s1'):+.2f}% latency, "
+                              f"{dE('sa_random_s1'):+.2f}% energy", (-22, -12), "left", "top"))
     for n, lab, off, ha, va in notes:
         ax.annotate(lab, (en[n]["T_s"] * 1e3, en[n]["E_total_J"]), textcoords="offset points",
                     xytext=off, fontsize=FS["small"], ha=ha, va=va, color=FAM[family(n)],
                     linespacing=1.2)
-    ax.plot([Tr * 1e3, en["sa_random_s1"]["T_s"] * 1e3], [Er, en["sa_random_s1"]["E_total_J"]],
-            color=GREEN, lw=0.9, ls=(0, (3, 2)), zorder=4)
-    ax.text(1830, 2.560, f"search vs best random fill:\n{dT('sa_random_s1'):+.2f}% latency, "
-            f"{dE('sa_random_s1'):+.2f}% dynamic energy", fontsize=FS["note"], color=GREEN,
-            ha="left", va="top", linespacing=1.3)
+    ax.text(0.02, 0.975, "changes relative to best random", transform=ax.transAxes,
+            fontsize=FS["small"], color="0.4", style="italic", ha="left", va="top")
     ax.set_xlim(1750, 4550); ax.set_ylim(2.315, 2.57)
     ax.set_xlabel("Whole-model prefill latency (ms)", fontsize=FS["axis"])
     ax.set_ylabel("System dynamic energy (J)", fontsize=FS["axis"])
@@ -903,20 +1337,21 @@ def _fig4c(ax):
     b1 = [a["dies"]["attn"]["shipped_s"] * 1e3, a["dies"]["attn"]["best_s"] * 1e3]
     b2 = [a["dies"]["ffn"]["shipped_s"] * 1e3, a["dies"]["ffn"]["best_s"] * 1e3]
     xs = [0, 1]
-    ax.bar(xs, b1, width=0.5, color="#9db8c9", ec="white", lw=0.6, label="Attention die", zorder=3)
-    ax.bar(xs, b2, bottom=b1, width=0.5, color="#c9a86a", ec="white", lw=0.6, label="FFN die", zorder=3)
-    ax.bar(xs, [rest, rest], bottom=np.add(b1, b2), width=0.5, color="#dfe4e8", ec="white", lw=0.6,
+    ax.bar(xs, b1, width=0.55, color="#9db8c9", ec="white", lw=0.6, label="Attention die", zorder=3)
+    ax.bar(xs, b2, bottom=b1, width=0.55, color="#c9a86a", ec="white", lw=0.6, label="FFN die", zorder=3)
+    ax.bar(xs, [rest, rest], bottom=np.add(b1, b2), width=0.55, color="#dfe4e8", ec="white", lw=0.6,
            label="Other costs incl.\npackage transfers", zorder=3)
     for x, tot in zip(xs, (ship, best)):
-        ax.text(x, tot + 0.6, f"{tot:.2f} ms", ha="center", va="bottom", fontsize=FS["note"], color=INK)
-    ax.plot([1.32, 1.32], [best, ship], color=GREEN, lw=1.0, zorder=4)
-    ax.plot([1.27, 1.32], [best, best], color=GREEN, lw=1.0); ax.plot([1.27, 1.32], [ship, ship], color=GREEN, lw=1.0)
-    ax.text(1.36, (best + ship) / 2, f"{100 * (1 - best / ship):.2f}% lower\nlayer latency",
-            fontsize=FS["note"], color=GREEN, ha="left", va="center", linespacing=1.25)
-    ax.set_xticks(xs); ax.set_xticklabels(["Contiguous\nassignment", "Exhaustive\noptimum"], fontsize=FS["tick"])
-    ax.set_xlim(-0.5, 1.9)
+        ax.text(x, tot + 0.8, f"{tot:.2f} ms", ha="center", va="bottom", fontsize=FS["note"], color=INK)
+    ya = ship + 7.5
+    ax.annotate("", xy=(1, ya), xytext=(0, ya),
+                arrowprops=dict(arrowstyle="-|>", color=GREEN, lw=0.9, mutation_scale=7))
+    ax.text(0.5, ya + 1.0, f"−{100 * (1 - best / ship):.2f}%", ha="center", va="bottom",
+            fontsize=FS["note"], color=GREEN, fontweight="bold")
+    ax.set_xticks(xs); ax.set_xticklabels(["Contiguous", "Enumerated\noptimum"], fontsize=FS["tick"])
+    ax.set_xlim(-0.55, 1.55)
     ax.set_ylabel("Layer latency (ms)", fontsize=FS["axis"])
-    ax.set_ylim(0, ship * 1.75)
+    ax.set_ylim(0, ship * 2.0); ax.set_yticks([0, 20, 40, 60, 80])
     ax.set_title("(c) Whole-layer impact of\nintra-die assignment", fontsize=FS["title"])
     ax.legend(fontsize=FS["small"], loc="upper left", frameon=False, labelspacing=0.3)
     tidy(ax, grid="y")
@@ -927,7 +1362,7 @@ def fig4():
     SRC = ["analysis/main_config_results.json", "analysis/energy_export.json",
            "analysis/intra_die_integration.json"]
     fig = plt.figure(figsize=(PAGE_WIDTH, PAGE_WIDTH * 0.74))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 0.95], width_ratios=[2, 2, 1.25],
+    gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 0.95], width_ratios=[1.9, 1.75, 1.4],
                           hspace=0.45, wspace=0.42)
     mt, T = _fig4a(fig.add_subplot(gs[0, :]))
     en, ref = _fig4b(fig.add_subplot(gs[1, :2]))
@@ -947,27 +1382,35 @@ def fig4():
         ["layout_id", "name", "family", "T_prefill_ms", "R_ms", "H_ms", "E_dynamic_J",
          "dT_vs_random_s3_pct", "dE_vs_random_s3_pct"], sources=SRC)
     st = load("main_config_results.json")["stats"]["prefill"]
+    lm_vs_search = 100 * (en["least_manhattan"]["T_s"] / en["sa_random_s1"]["T_s"] - 1)
+    search_vs_default_E = 100 * (en["sa_random_s1"]["E_total_J"] / en["default_A4"]["E_total_J"] - 1)
+    s4 = st["0.4"]
     CAPTIONS["fig4"] = (
         "Fig. 4. What the deployment choice is worth, and what it costs. Main configuration: "
         "2.7B class, 512-token serial prefill, 544 of 576 dies on a 24x24 mesh, XY routing, "
         "0.4 GB/s per link direction, ports at twice the link rate. (a) Whole-model latency "
         "of the evaluated placements, split into the non-communication cost (compute, weight "
-        "write, digital unit) and the package hand-offs; the ticks under the random and search "
-        "bars are the five random fills (seeds 0 to 4) and the nine search endpoints. The "
-        "search bar is the representative layout, the median of three seeds after taking the "
-        f"best of three starts per seed: {100*(1-T['sa_random_s1']/T['random_s3']):.2f}% below "
-        f"the best random fill ({T['random_s3']:.2f} ms; range over seeds "
-        f"{st['0.4']['G_range_pct'] if '0.4' in st and 'G_range_pct' in st['0.4'] else '9.66 to 10.12'}%) "
-        f"and {100*(1-T['sa_random_s1']/T['default_A4']):.1f}% below the default stacked fill "
-        f"({T['default_A4']:.2f} ms). (b) The same layouts in latency and system dynamic energy "
-        "(no static term). The three short-path heuristics save about 7.3% of dynamic energy "
-        "against the best random fill at different latency costs: Least Manhattan +1.8%, "
-        "NMAP greedy +4.0%, Clustered +20.4%; the search lowers latency by 9.91% and dynamic "
-        "energy by 0.26%. (c) A different instance: the GPT-2-medium class layer with an "
-        "attention die and an FFN die, each a 2x4 macro mesh, at 0.4 GB/s; the exhaustive "
-        "optimum over 280 and 70 macro assignments against the contiguous assignment, with "
-        f"the fixed rest of the layer ({rest:.2f} ms incl. two package transfers) included. "
-        "Energy is not modelled at this level.")
+        "write, digital unit) and the package hand-offs. Best random is the strongest of the "
+        "five random fills (seeds 0 to 4); Search (representative) is the median of three "
+        "seeds after taking the best of three starts per seed. The inset places all five "
+        "random fills and all nine search endpoints on one axis: every endpoint is below "
+        f"every random fill; the representative is {s4['G_headline_pct']:.2f}% below the best "
+        f"random fill ({T['random_s3']:.2f} ms; {s4['G_min_pct']:.2f} to {s4['G_max_pct']:.2f}% "
+        f"over the three seeds) and {s4['G_vs_default_pct']:.1f}% below the default stacked "
+        f"fill ({T['default_A4']:.2f} ms). (b) The same layouts in latency and system dynamic "
+        "energy (no static term); the percentages are changes relative to the best random "
+        "fill. The search lowers latency by 9.91% and dynamic energy by 0.26%; Least Manhattan "
+        "saves 7.3% of dynamic energy at +1.8% latency against the same reference, which is "
+        f"{lm_vs_search:.1f}% slower than the representative search layout (NMAP greedy and "
+        "Clustered save about as much energy at +4.0% and +20.4% latency). Against the default "
+        f"fill the search's dynamic energy is {search_vs_default_E:+.1f}%, so the 54.5% of (a) "
+        "and the -0.26% here are not the same comparison. (c) An independent intra-die "
+        "instance, the one Fig. 1(a) refers to: one GPT-2-medium class layer over an attention "
+        "die and an FFN die, each a 2x4 macro mesh, at 0.4 GB/s; the enumerated optimum over "
+        "280 and 70 macro assignments against the contiguous assignment, with the fixed rest "
+        f"of the layer ({rest:.2f} ms incl. two package transfers) included, so the 9.02% is "
+        "the whole-layer gain. Not the 2.7B system of (a) and (b); energy is not modelled at "
+        "this level.")
 
 
 # =====================================================================
@@ -1163,8 +1606,8 @@ def write_docs(run_id, argv):
            "| figure | paper section | claim | instance | layout ids | statistic / denominator | sources |\n"
            "|---|---|---|---|---|---|---|\n",
            f"| fig1_phase_diagram | {SECTION['fig1']} | placement is a phase with computable boundaries | (a) GPT-2-medium class ffn die, 70 seatings; (b) 2.7B on 544/576 dies, 7 rules, kappa 2 | rules by name | envelopes max/min over the set; boundaries at the NeuRRAM rate | phase_diagram_isobar_k2.json |\n",
-           f"| fig2_platform_workflow | {SECTION['fig2']} | what the platform computes and where the search sits | schematic; fragment from the Fig. 5 instance's compact fill | compact_fill | one link's flows x words / bandwidth; one port / kappa | fig5_small_mesh_instance.json |\n",
-           f"| fig3_external_validation | {SECTION['fig3']} | what the cost model is checked against | (a) Simba T1, 4 chiplets, 5 seatings; (b) 24x24 fan-out batch, kappa 1, 13 candidates | (b) candidate ids in fig3_booksim_candidates.csv | (a) each series / its adjacent seating; (b) both axes / the reference random fill; rho with average ranks | simba_t1.json, b_fanout_24x24_rerank.json |\n",
+           f"| fig2_platform_workflow | {SECTION['fig2']} | what the platform computes; how one deployment becomes resource costs | (a) schematic; (b) the Fig. 5 instance's compact fill, evaluated live | compact_fill | (b) busiest link flows x words / B; port bound max L_p / (kappa B); word-hops | fig2b_placement_to_costs.json |\n",
+           f"| fig3_external_validation | {SECTION['fig3']} | (a) does the cost model explain the measured placement effect; (b) does the independent simulator confirm the layouts it selects | (a) Simba T1, 4 chiplets, 5 seatings; (b) 24x24 fan-out batch, kappa 1, 13 candidates | (b) candidate ids in fig3_booksim_candidates.csv | (a) each series / its adjacent seating; (b) both axes / the reference random fill; rho with average ranks | simba_t1.json, b_fanout_24x24_rerank.json |\n",
            f"| fig4_deployment_gain | {SECTION['fig4']} | what the deployment choice is worth and costs | main configuration; (c) GPT-2-medium class layer | random_s3 (best random), sa_random_s1 (representative), default_A4 | 9.91% = median of 3 seeds of best-over-3-starts vs random_s3 2118.71 ms; 54.5% vs default 4192.54 ms; dE = E/E_ref - 1 | main_config_results.json, energy_export.json, intra_die_integration.json |\n",
            f"| fig5_mechanism_and_ablation | {SECTION['fig5']} | where stacking comes from; what the objective is worth | (a-c) controlled 4x4 die mesh, the ffn1->ffn2 hand-off, 25 flows; (d) main configuration | compact_fill, random_seed3 (best of 0-4), search_seed (median of 0-2) | (a-c) busiest resource in link-time, word-hops; (d) excess over the best resource-aware endpoint 1886.5 ms | fig5_small_mesh_instance.json, objective_ablation_k2.json |\n",
            f"| fig6_conditions | {SECTION['fig6']} | the conditions that set the value of placement | (a) frozen pair re-scored; (b) 6 cells of the kappa x geometry sweep | random_s3 / sa_random_s1; per-cell runs | (a) G, eta, r as percentages, G = eta r; (b) per seed best of 3 starts, median and range over 3 seeds vs the cell's strongest baseline | bw_slice_k2.json, kappa_geometry_sweep.json |\n",
@@ -1204,8 +1647,7 @@ def main():
         if w == "fig5":
             inst = fig5()
         elif w == "fig2":
-            inst = inst or _small_instance()
-            fig2(inst)
+            fig2()
         else:
             {"fig1": fig1, "fig3": fig3, "fig4": fig4, "fig6": fig6}[w]()
     write_docs(args.run_id, sys.argv)

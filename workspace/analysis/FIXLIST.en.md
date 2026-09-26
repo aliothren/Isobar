@@ -6809,3 +6809,133 @@ overlap; serial hand-offs". The panel is now built from one layout spec
 export, panels/fig2a_platform.drawio (mxGraph XML, 192 px per inch,
 fonts scaled the same way, line jumps on the crossed edge). captions.md
 and manifest.json restored around the fig2 entries after the --only run.
+
+FIG. 2(a) HAND-DRAWN FORM 2026-09-22. The author redrew panel (a) in
+draw.io (fig2a.drawio.svg); the embedded diagram model is transcribed
+into _fig2a_spec in draw.io pixels (zones, boxes, polyline arrows, the two
+italic labels) and the matplotlib renderer now maps pixels onto the
+5.02 x 2.90 in panel (about 249 px per inch, so 20 px type is 5.8 pt and
+16 px is 4.7 pt, text shrunk to its box when the fallback font runs
+wider). Layout as drawn: Deployment configuration (Partition & placement)
+above User Configuration (Workload; Operator tiling & dependencies;
+Hardware & execution settings) on the left; the evaluation core's five
+filled steps and the white Latency & Dynamic energy box in the middle;
+Phase analysis and Deployment search on the right; "Latency" from the
+core to the search zone, "Updated deployment" from the search zone round
+the top to the Deployment configuration zone, the user configuration
+along the bottom into the search zone. The two short core<->phase
+arrows carry no labels, as in the drawing; the bottom arrow ends at the
+search zone's bottom centre. panels/fig2a_platform.drawio is emitted
+from the same spec. Composite with the standing (b) regenerated;
+captions.md and manifest.json restored around the fig2 entries.
+
+FIG. 2 COMPOSITE PASS 2026-09-22. Panel letters now sit on the first text
+row of each panel (the "Updated deployment" label in (a), the title in
+(b)) instead of floating above both. Panel (b) enlarged in place: mesh
+pitch 0.34 -> 0.38 in, node radius 0.105 -> 0.117 in, lanes 4.0 pt, colour
+bar 0.52 in, bar profile 0.94 in tall with 30% headroom for the e*
+reading; the mesh moved up under the title so the FFN1 -> FFN2 line and
+the mesh are 0.12 in apart. Type sizes unchanged.
+
+FIG. 2 COMPOSITE PASS 2 2026-09-22. Composite 7.16 x 3.00 in (was 2.90):
+the extra 0.10 in lets the panel letters sit clear above (a)'s "Updated
+deployment" row, tops level with (b)'s title. (b) is 2.10 in wide at
+x = 5.06 and scaled once more about its top-left corner (pitch 0.41 in,
+node radius 0.126 in, lanes 4.3 pt, colour bar 0.56 in, profile 1.01 in
+tall); the title-to-mesh gap is kept. Type sizes unchanged.
+
+FIG. 2 COMPOSITE PASS 3 2026-09-22. Wider gap between the panels and (b)
+scaled once more about its top-left (pitch 0.443 in, node radius 0.136 in,
+lanes 4.6 pt, colour bar 0.60 in, profile 0.98 in). The 7.16 in width is
+fixed, so (a) is rendered at 4.72 in (its type falls from 5.8/4.7 pt to
+about 5.4/4.4 pt) and (b) takes 2.24 in from x = 4.92; the visible gap
+between the panels is about 0.24 in. Composite height back to 3.00 in;
+(a) is centred below the panel-letter row.
+
+FIG. 2 COMPOSITE PASS 4 2026-09-22. (a) back at its 5.02 in rendering
+(type 5.8/4.7 pt); the composite is 7.46 x 3.00 in, (b) 2.24 in wide from
+x = 5.22 with a 0.20 in gap. The page layout scales the figure to the
+column, so only the proportions matter.
+
+FIG. 3 REFRAME 2026-09-22 (reviewer: the figure should say what changed
+and what is being checked, and carry Fig. 2 forward). (a) "Silicon:
+placement-induced latency change": two seating glyphs (6x6 chiplet grid,
+the four seated chiplets filled) show the two ends of the ladder, the
+adjacent block (2 hops) and the corners (10 hops), with the arrow between
+them; the three series are now named by their place in the platform,
+"Measured silicon (Shao et al.)", "Isobar service bound (busiest link;
+comm. costs)" and "Isobar execution estimate (+ packet round trips;
+aggregate)", i.e. the communication-cost stage and the aggregation stage
+of Fig. 2(a), the latter being the pessimistic rail of the packet
+bracket; the y label says each series is relative to its own adjacent
+seating. (b) "BookSim: independent validation of layout selection": the
+full 13-candidate scatter stays, and an inset enlarges the region around
+the reference random fill with the four search endpoints labelled
+"12-31% faster under BookSim"; the rank correlation (rho 0.953, average
+ranks) moves to a corner as supporting evidence and y = x stays a guide.
+Caption and index row rewritten to the two questions. NOTE for the
+outline: paper_numbers.md and search_setting_design.md still quote rho
+0.962 (ordinal ranks over two tied analytic values); the figure prints
+0.953 (average ranks, same 13 candidates); one value should be chosen.
+
+FIG. 3 TEXT PASS + CARD-COLOUR VARIANT 2026-09-23 (reviewer). Titles
+"(a) SIMBA: placement sensitivity" / "(b) BookSim: layout selection";
+(a) legend cut to "Measured silicon" / "Resource-service bound" / "Isobar
+execution estimate" (mechanism in the caption), glyph heading
+"Four-chiplet placements", y label "Relative latency"; (b) x/y labels
+"Relative analytical cost" / "Relative BookSim batch time", inset label
+"Search endpoints, 12-31% lower batch time". Caption keeps the
+normalization denominators and adds the resolving-power reading (the
+endpoints lie within 3% of each other analytically but spread 27% under
+BookSim). Comparison variant composites/fig3_external_validation_alt:
+the same panels in the Fig. 2(a) card colours (measured #416c93, bound
+#418b78, estimate #8d8944; families stacked #416c93, heuristics #8d8944,
+random grey, search #418b78) via the F3_PALS switch; the standing figure
+keeps the set palette. Full set regenerated (61 products).
+
+FIG. 3 VARIANT RECOLOURED 2026-09-23: the card variant now uses the
+card's own swatches rather than the darkened tones (measured / stacked
+fills (72,80,152); bound / search endpoints (165,197,130); estimate /
+heuristics (243,222,103); random fills grey). The dashed estimate line is
+1.7 pt in this variant so the yellow reads on white, and the inset label
+is set in ink. Full set regenerated.
+
+FIG. 3 VARIANT, LIGHT TRIO 2026-09-23: the card variant now uses the
+card's light swatches darkened by 8%: blue (96,166,190) for measured /
+stacked fills, green (152,181,120) for bound / search endpoints, yellow
+(224,204,95) for estimate / heuristics; random fills grey. Full set
+regenerated.
+
+FIG. 3 PASS 2026-09-23: the reference random fill is no longer ringed or
+labelled (it stays an ordinary grey point at (1, 1); the caption still
+names it as the denominator); the two panels now share one axes width
+and height (_same_box after tight_layout, left panel keeps its left edge,
+right panel its right edge). Both the standing figure and the card
+variant.
+
+FIG. 3 FINAL COLOURS 2026-09-23: the card palette (light blue / green /
+yellow, each darkened 8%) is now the standing Fig. 3 and the comparison
+variant is removed (fig3_external_validation_alt deleted, 60 products).
+The yellow marks carry more weight so the three series read evenly: the
+estimate's diamonds have a 1.6 pt edge on a 1.7 pt dashed line, and the
+heuristics triangles are 7 pt (6.5 pt in the legend).
+
+FIG. 4 REVIEW PASS 2026-09-23. (a) bar names "Best random (of 5)" and
+"Search (representative)"; the tick strips are replaced by an inset dot
+plot on one 1880-2180 ms axis with the five random fills (best random
+edged) and the nine search endpoints (representative edged) and the
+9.91% arrow between the two anchors, so "every endpoint below every
+random fill" is visible; the 54.5% arrow stays under the bars; legend
+moved up beside the heuristic bars. (b) all percentages now share one
+base, stated in the panel ("changes relative to best random"): only
+Search (-9.91% latency, -0.26% energy) and Least Manhattan (-7.3%
+energy, +1.8% latency) carry numbers; Clustered's +20.4% and the green
+summary box are gone. Caption adds that Least Manhattan is 13.0% slower
+than the representative search and that the search's dynamic energy is
++5.1% against the default, so 54.5% and -0.26% are different
+comparisons. (c) wider column (width ratios 1.9 / 1.75 / 1.4), ticks
+"Contiguous" / "Enumerated optimum", the 49.60 -> 45.13 ms values at
+the bar tops with a -9.02% arrow between them, y range doubled to clear
+the legend; caption names it the independent intra-die instance of
+Fig. 1(a), one layer over two dies, distinct from the 2.7B system of (a)
+and (b). Full set regenerated.
