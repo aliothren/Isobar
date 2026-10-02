@@ -6939,3 +6939,222 @@ the bar tops with a -9.02% arrow between them, y range doubled to clear
 the legend; caption names it the independent intra-die instance of
 Fig. 1(a), one layer over two dies, distinct from the 2.7B system of (a)
 and (b). Full set regenerated.
+
+FIG. 4 CARD COLOURS + REVIEW PASS 2 2026-10-01. Palette switched to the
+author's card (F4): families blue (96,166,190) / yellow (224,204,95) /
+green (152,181,120), random fills grey; bar segments (70,96,173) for
+package communication and a tint of (104,180,206) for the rest; (c)
+stacks (104,180,206) attention, (243,222,103) FFN, light grey other;
+text in the same hues darkened for legibility. (b) Least Manhattan's
+label gets a leader to its own triangle (NMAP greedy sits next to it).
+(c) tick "Optimal" (the full enumeration is named in the caption),
+legend above the plot area in a reserved strip (sub-gridspec 0.22 /
+0.78), y axis 0-65 ms so the stacks fill the panel. Caption: the
+representative is per seed the best of three starts then the median of
+seeds, while the inset shows all nine endpoints; (a) and (b) are the
+2.7B 544-die main instance, (c) the separate two-die layer instance.
+Full set regenerated; not committed.
+
+FIG. 4 COLOUR PASS 2026-10-01: (a)'s non-communication segment now uses
+the same light grey as (c)'s "other costs" (#dfe4e8), so one colour means
+"fixed cost" in both panels; package communication softened from
+(70,96,173) to the card's (90,150,204); heuristics triangles in (b) in
+the card's olive yellow (214,207,103) darkened 8% and drawn at 6 pt so
+they read on white.
+
+FIG. 4 COLOUR PASS 2 2026-10-01: one blue (104,180,206) for package
+communication in (a), the stacked fills in (b) and the attention die in
+(c); heuristics in (b) in the card's teal (128,205,187) darkened 8% (text
+in its dark tone); bars drawn without white edges so they meet the
+spines; the sample inset raised clear of the 54.5% arrow; the Search
+label in (b) moved inside the axes; (c)'s -9.02% arrow higher, in grey
+with ink text (no green in that panel).
+
+FIG. 4 COLOUR PASS 3 2026-10-01: heuristics in the card's deep blue
+(70,96,173) desaturated to (88,104,160) so it is not confused with the
+teal of the stacked fills; the light colours a step heavier (blue
+(94,162,185), green (140,168,108), yellow (224,204,95)); the 54.5%
+label now sits above its arrow like the other arrow labels, and the
+axes bottom margin shrinks accordingly.
+
+FIG. 4 COLOUR PASS 4 2026-10-01: back to the Fig. 3 trio (blue (96,166,190),
+green (152,181,120), yellow (224,204,95)) for stacked fills / package
+communication / attention die, search endpoints and FFN die; heuristics
+keep the desaturated deep blue (88,104,160).
+
+FIG. 4 COLOUR PASS 5 2026-10-01: colours as before the "heavier" pass,
+i.e. the card swatches themselves (blue (104,180,206) in every panel,
+yellow (243,222,103) FFN die, green (152,181,120) search), heuristics in
+the desaturated deep blue (88,104,160). This is the standing form.
+
+FIGS. 1-3 PASS 2026-10-01 (author). Fig. 1: every type size one point
+above the standing print form (FS bumped around the print generator's
+main(), the standalone phase_diagram_isobar_print_k2 untouched). Fig. 2:
+the Deployment search zone in the clear yellow of Fig. 4 ((243,222,103)
+boxes and edge, a tint for the zone, arrows (201,181,61)) instead of the
+olive card tone. Fig. 3: the row is filled (0.42 in gap for the right
+y label) with the right panel 0.2 in wider than the left so the two read
+as equal, y range 0.9-2.72 in (a), 0.6-5.0 in (b), the inset kept clear
+of the dispersed heuristic; figure height 0.42 of the width.
+
+FIGS. 1-3 PASS 2 2026-10-01 (author's correction). Fig. 1: the type is
+now the standing (non-print) figure's effective size plus one point
+(title / axis 6.5, ticks 6, text and legend 5.5, ratio 5.6 pt), not the
+print form plus one; the composite render also trims the print layout's
+bottom margin from 30% to 22% so the panels gain the room the smaller
+legend frees. Fig. 2: Deployment search in a lighter, clearer yellow
+((249,239,124) boxes and edge, (254,252,233) zone, arrows (212,192,74));
+panel (b) scaled up once more (pitch 0.47 in, radius 0.144 in, lanes
+4.9 pt, panel 2.32 in wide, composite 7.54 x 3.00 in) and its profile's
+x axis placed on the flowchart's zone bottom line (0.17 in). Fig. 3: the
+inter-panel gap stays at 0.50 in and the left panel is 0.5 in narrower
+than the right; the inset moved right so its tick numbers no longer sit
+on the main y axis.
+
+FIG. 1 BACK TO THE STANDING FORM 2026-10-01: Fig. 1 is rendered by the
+standing (non-print) generator fig_phase_isobar.py (12.8 x 5.0 in, scaled
+to the column by the page layout) with every type size one point larger
+(explicit fontsize kwargs and the rc defaults bumped by 1 pt around its
+main(), the generator itself untouched); the print form is no longer
+used for the figure set. FIG. 2: the evaluation core's zone fill
+lightened from (238,244,250) to (245,249,253).
+
+FIG. 1 + FIG. 2 PASS 2026-10-01 (author). Fig. 1 (standing generator
+fig_phase_isobar.py edited): the 20% contour label gets a background in
+the colour of the region it sits on (the band's yellow in (a)), the
+envelope arrow of (a) moved from s = 6 to s = 15 Mrows/s so it clears
+the band label, chip labels reduced to name + number (HERMES 0.4 GB/s,
+ISAAC 4.0 / 6.4 GB/s, M1076 1 GB/s, NeuRRAM 0.4 / 12.5 GB/s; sources
+stay in the caption); the figure-set render is two points larger than
+the generator's type. Fig. 2: Deployment search in the teal of the
+Deployment configuration it produces ((128,205,187) boxes and edge,
+(235,247,244) zone, arrows (65,139,120)), so the search -> updated
+deployment -> configuration loop is one colour; the yellow is gone.
+
+FIG. 1 + FIG. 2 PASS 2 2026-10-01 (author). Fig. 1: chip labels on one
+line as "name, bandwidth" (HERMES, 0.4 GB/s with its two-mode note on a
+second line). Fig. 2: Deployment search in a deep teal of its own
+((72,150,132) boxes with white text, (233,245,241) zone, arrows
+(47,107,92)), distinct from the light teal of Deployment configuration
+so the two zones do not read as one module.
+
+FIG. 1 NUDGE 2026-10-01 (author): in (b) the two NeuRRAM labels are
+left-aligned from s_ref / 1.21 so each circle sits under the middle of
+the word; ISAAC's label raised to 1.30x its bandwidth, clear of the
+upper boundary; the band label moved from s = 3.2 to 2.1 Mrows/s; the
+M1076 label a little up and to the right.
+
+FIG. 5 REDRAW 2026-10-01 (author: "redo it the way we settled the
+traffic figure; (d) carries no information"). (a)-(c) now use the
+Fig. 2(b) idiom: every physical link is two lanes with a dark rim,
+filled by the service time on one shared ramp centred on the port bound
+(0 / 6.55 / 21.0 ms, idle lanes at the ramp's zero), white nodes with
+black bold labels (producers rounded squares, consumers circles, empty
+slots thin), e* on the busiest link, readings "e* N flows . X ms" and
+the word-hops under each mesh, one hand-drawn colour bar beside (c);
+titles in the card family colours; the overall header line moved into
+the caption. (d) is a strip chart on the latency axis: four objectives
+(resource-aware, links only, word-hops, max hops) x three seeds, best
+seed edged, each row labelled with its best latency and its change
+against the best random fill (dashed at 2119 ms): -11.0%, -10.2%,
+-0.9%, -1.0%, so the proxies are seen to search to no better than a
+random fill while dropping the port term costs 0.8 points. Caption and
+data/fig5_ablation.json (by_objective, best_random_fill_ms) rewritten
+accordingly. Composite 7.16 x 4.20 in.
+
+FIG. 5 ONE-ROW FORM 2026-10-01 (author + reviewer). The three meshes sit
+close together in one block (pitch 0.29 in, nodes r = 0.085 in so the
+lanes dominate), on a Fig.-5 ramp whose idle side is muted and whose hot
+end is a vivid red (LOAD_F5, centred on the port bound); titles
+"Compact / Random / Resource-aware" (seeds in the caption); the busiest
+link carries its flow count, and under each mesh the busiest-link
+service time is the bold line with the routed traffic beneath, aligned
+across the three; one shared colour bar "Link service time (ms)" and the
+node key (producer / consumer / empty slot) under the block; header
+"(a)-(c) 4x4 mechanism example". (d) "Objective ablation, 544-die
+system": a vertical dot plot, Full / Links only / Word-hops / Max hops
+on x, latency overhead (%) over the full objective's best seed on y,
+three seeds as hollow circles and the best seed as a filled diamond
+(+0.9%, +11.4%, +11.2%); the best-random reference and the per-row
+sentences are gone. Composite 7.16 x 2.35 in. DATA NOTE: the ablation
+is its own batch (one start = random seed 0, three annealer seeds, 1200
+steps per objective; objective_ablation_k2.json), so its full-objective
+endpoints (1886.5 / 1911.0 / 1911.3 ms) are not the Fig. 4 runs
+(three start families, best start per seed: 1904.2 / 1908.8 / 1914.1
+ms); the caption now says so and the overheads are within-batch.
+
+FIG. 5 PASS 2026-10-01 (author): (d) shrunk to a 1.35 x 1.5 in panel on
+the right (two-line tick labels, no legend: the caption says hollow
+circles are seeds and the diamond the best seed); the ramp's blue side
+back to a medium blue (150,186,216)/(140,184,220) with the hot end kept
+vivid; the (a)-(c) titles in ink, same size and baseline as "(d)
+Ablation, 544-die system", so the four letters sit on one line; the
+"4x4 mechanism example" note moved into the key row. Composite 6.10 x
+2.25 in.
+
+FIG. 5 PASS 2026-10-01 (author): colour bar and node key on one row
+under the meshes; the "4x4 mechanism example" note dropped; the busiest
+link marked e* again (flow counts are in the caption); the ms readings
+a little lower; (d) smaller still (1.15 in wide), its title on the
+(a)-(c) title line and its tick labels ending on the colour bar's label
+line, no x-axis title. Composite 5.95 x 2.25 in.
+
+FIG. 5 PASS 2026-10-01 (author): the colour bar / node key row raised
+(readings 0.22 in above it); (d) shortened so a 0.14 in gap separates
+its title from the axes while its tick labels still end on the colour
+bar's label line. Composite 5.95 x 2.13 in.
+
+FIG. 5 PASS 2026-10-02 (author): the ramp is now sequential, idle blue
+-> peach -> vivid red with no neutral stop, so no lane reads as grey
+(the diverging ramp's whitish centre had put the 2- and 3-flow lanes
+near the port bound into grey); the norm is linear 0-21 ms and the bar
+ticks 0 / 10 / 20 (the 6.6 ms port-bound tick belonged to Fig. 2(b)'s
+story, not this one). (d) moved 0.38 in closer to (c) and widened to
+1.50 in. Caption: flow counts of e* given there.
+Ramp stops pinned to this instance's flow counts (0 / 0.125 / 0.25 /
+0.5 / 0.75 / 1 of 21 ms): one-flow lanes a light blue, two-flow lanes
+peach, so no lane sits in a neutral tone.
+
+FIG. 5 PASS 2026-10-02 (author): the ramp's blue now runs to about
+8.5 ms (0.4 of the bar) with two blue stops before the peach, so the
+light lanes vary within blue; the red end unchanged. (d) labels: "ref."
+under its diamond, the links-only value above-right, the two proxy
+values under their diamonds; x range trimmed so nothing crosses the
+right spine.
+Ramp pass 2: the idle end deepened to (104,156,200) and the blue-to-peach
+turn moved left to about 7 ms, so the one- and two-flow lanes separate
+within blue.
+Ramp pass 3: the blue-to-peach turn back at about 5 ms (a quarter of the
+bar), the deeper idle blue kept.
+
+FIG. 5 TALL VARIANT 2026-10-02 (author, for comparison): composites/
+fig5_mechanism_and_ablation_tall, 3.40 x 3.90 in, (a) (b) on the first
+row and (c) (d) on the second, colour bar and node key along the bottom;
+same drawers, ramp and numbers. The one-row composite stays the standing
+form.
+
+FIG. 5 TALL VARIANT PASS 2026-10-02 (author): (b) 0.18 in from (a); the
+colour bar and the node key stacked to the right of (b); (d)'s x axis on
+(c)'s mesh bottom, its right edge on the figure's right content edge,
+title on (c)'s title line. 3.65 x 3.42 in. The one-row composite is
+unchanged.
+Tall variant pass 2: the colour bar is a short vertical strip (0.06 x
+0.61 in, ticks 0 / 10 / 20, "ms") beside (b) with a compact key
+(producer / consumer / empty) under it; figure 3.05 x 3.42 in.
+Tall variant pass 3: the key is smaller (4.6 pt, 0.04 in marks) and sits
+lower under the bar; (d)'s right edge is now measured from the rendered
+key and bar tick labels, so it ends on the figure's true right content
+edge, with its x axis still on (c)'s mesh bottom.
+Tall variant pass 4: all four titles at 7 pt; (d)'s ticks 5 pt, y label
+5.6 pt, in-panel labels 5.2 pt; its right edge 0.06 in short of the
+measured content edge so it reads flush.
+Tall variant pass 5: (d) and its title shifted about 0.15 in to the left.
+
+ZERO-MARGIN EXPORT 2026-10-02 (author): every PDF / SVG / PNG of the set
+is cropped to the drawn ink with no padding (savefig.pad_inches = 0 and
+a content bounding box that, for the inch-coordinate panels, is the
+union of the artists and inset axes rather than the panel frame), so
+the file's width is the figure's width in LaTeX. Fig. 1's composite and
+its two cropped panels likewise. Composite sizes: Fig. 1 12.40 x 4.91,
+Fig. 2 7.52 x 2.93, Fig. 3 6.92 x 2.77, Fig. 4 7.37 x 4.58, Fig. 5
+5.76 x 2.00 (tall 2.85 x 3.21), Fig. 6 6.92 x 2.49 in.

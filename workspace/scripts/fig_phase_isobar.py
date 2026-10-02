@@ -196,10 +196,12 @@ def draw_panel(ax, a_min, a_max, n_s, f_s, ylim, quantifier, p_desc,
     ax.set_ylim(*ylim)
 
     for (x, y, x0, y0, x1, y1, txt) in contour_labels:
+        k = min(int(np.searchsorted(SS, x)), len(SS) - 1)
+        on_band = lo[k] <= y <= hi[k]               # the label's own region colour
         ax.text(x, y, txt, fontsize=6.0, color=CONTOUR, ha="center",
                 va="center", rotation=_angle_along(ax, x0, y0, x1, y1),
                 rotation_mode="anchor", zorder=4,
-                bbox=None if REFS else dict(fc=FILL_TOP, ec="none", pad=0.6))
+                bbox=dict(fc=FILL_MID if on_band else FILL_TOP, ec="none", pad=0.6))
 
     # region labels: each sits in the visual centre of ITS region; the
     # band label follows the band's own slope
@@ -297,7 +299,7 @@ def main():
         "(a sub-problem, not the whole model)\n"
         "P = all 70 joint macro seatings, enumerated",
                 ((0.20, 0.86), 1.5, (0.80, 0.13), (0.74, 0.86), (0.015, 0.015)),
-        6.0, curves=intra_curves, labels=LABELS_MAX)
+        15.0, curves=intra_curves, labels=LABELS_MAX)
     axes[0].set_title("(a) Intra-die placement", fontsize=9.5)
     # (the boundaries are the per-op masking thresholds of the max model;
     # the 20% contour is solved on the enumeration under the same model)
@@ -311,8 +313,8 @@ def main():
                  mew=0.9, ls="none", zorder=8)
     axes[0].plot([h4], [0.4], marker="D", mfc="white", mec=CHIP, ms=6.5,
                  mew=1.2, ls="none", zorder=8)
-    axes[0].text(np.sqrt(h1 * h4), 0.4 / 1.6, "HERMES, published link rate\n"
-                 "4-phase (open) / 1-phase (filled) MVM", fontsize=6.4,
+    axes[0].text(np.sqrt(h1 * h4), 0.4 / 1.6, "HERMES, 0.4 GB/s\n"
+                 "4-phase (open) / 1-phase (filled)", fontsize=6.4,
                  color=CHIP_TXT, ha="center", va="top", zorder=8,
                  linespacing=1.15)
     # ISAAC: the paper's OWN per-link figures, re-read 2026-09-18.
@@ -325,7 +327,7 @@ def main():
     axes[0].plot([s_is], [b_is], marker="D", mfc=CHIP, mec=CHIP_TXT, ms=6.5,
                  mew=0.9, ls="none", zorder=8)
     axes[0].text(s_is * 1.14, b_is / 1.35,
-                 f"ISAAC, inter-tile link\n{b_is:.1f} GB/s", fontsize=6.4,
+                 f"ISAAC, {b_is:.1f} GB/s", fontsize=6.4,
                  color=CHIP_TXT, ha="left", va="top", zorder=8,
                  linespacing=1.15)
 
@@ -335,7 +337,7 @@ def main():
         "latency object: whole-model serial prefill (2.7B)\n"
         "P = the seven named die-seating rules"
         + ("" if KAPPA == 1.0 else f"\nports at {KAPPA:g}$\\times$ the link rate"),
-        ((0.22, 0.86), 3.2, (0.80, 0.13), (0.98, 0.66), (0.015, 0.015)),
+        ((0.22, 0.86), 2.1, (0.80, 0.13), (0.98, 0.66), (0.015, 0.015)),
         14.0)
     axes[1].set_title("(b) Inter-die placement", fontsize=9.5)
     # Mythic has no published per-link figure. Default: ONE assumed
@@ -348,7 +350,7 @@ def main():
             b_io = c.io_gbps / KAPPA
             axes[1].plot([sx], [b_io], marker="D", mfc="white", mec=CHIP,
                          ms=6.5, mew=1.2, ls="none", zorder=8)
-            axes[1].text(sx * 1.10, b_io / 1.75, "M1076-derived,\nI/O-matched",
+            axes[1].text(sx * 1.18, b_io / 1.45, f"M1076, {b_io:g} GB/s",
                          fontsize=6.4, color=CHIP_TXT, va="center", ha="left",
                          zorder=8, linespacing=1.15)
             continue
@@ -363,8 +365,8 @@ def main():
     # ISAAC's off-chip link IS published (Table I), so it is a point here
     axes[1].plot([s_is], [isaac.d2d_gbps], marker="D", mfc=CHIP, mec=CHIP_TXT,
                  ms=6.5, mew=0.9, ls="none", zorder=8)
-    axes[1].text(s_is * 1.14, isaac.d2d_gbps * (0.92 if REFS else 1.10),
-                 f"ISAAC, off-chip link\n{isaac.d2d_gbps:g} GB/s",
+    axes[1].text(s_is * 1.14, isaac.d2d_gbps * (1.30 if REFS else 1.10),
+                 f"ISAAC, {isaac.d2d_gbps:g} GB/s",
                  fontsize=6.4, color=CHIP_TXT, ha="left", va="bottom",
                  zorder=8, linespacing=1.15)
     # the two configurations this paper's searches actually evaluated:
@@ -393,9 +395,10 @@ def main():
                      ms=7, mew=1.5, ls="none", alpha=1.0, zorder=9)
         if REFS:
             up = bw > 1
-            axes[1].text(S_REF, bw * 1.35 if up else bw / 1.35,
-                         f"NeuRRAM-based\n{bw:g} GB/s", fontsize=6.4,
-                         color=CHIP_TXT, ha="center", va="bottom" if up else "top",
+            # left-aligned so the point sits under the middle of "NeuRRAM"
+            axes[1].text(S_REF / 1.21, bw * 1.35 if up else bw / 1.35,
+                         f"NeuRRAM, {bw:g} GB/s", fontsize=6.4,
+                         color=CHIP_TXT, ha="left", va="bottom" if up else "top",
                          zorder=9, linespacing=1.15)
         else:
             axes[1].text(S_REF / 1.22, bw if bw > 1 else bw / 1.45,

@@ -1,33 +1,72 @@
 {
  "protocol": "same feasible space, solver, budget, starts and seeds; only the objective changes; every output re-scored under the system latency",
  "denominator": "the best endpoint of the resource-aware objective, 1886.54 ms",
- "excess_pct_by_objective": [
+ "by_objective": [
   {
    "objective": "ours",
-   "excess_pct": [
+   "T_ms": [
+    1886.537968,
+    1910.952588,
+    1911.280948
+   ],
+   "best_ms": 1886.537968,
+   "overhead_vs_full_best_pct": [
     0.0,
     1.2941494109383278,
     1.311554838529494
-   ]
+   ],
+   "best_overhead_pct": 0.0
+  },
+  {
+   "objective": "wire_only",
+   "T_ms": [
+    1902.7601079999997,
+    1911.113788,
+    1921.767128
+   ],
+   "best_ms": 1902.7601079999997,
+   "overhead_vs_full_best_pct": [
+    0.8598893992680878,
+    1.3026941634285638,
+    1.8673973488775308
+   ],
+   "best_overhead_pct": 0.8598893992680878
   },
   {
    "objective": "word_hops",
-   "excess_pct": [
+   "T_ms": [
+    2100.6730680000005,
+    2123.611268,
+    2136.717068
+   ],
+   "best_ms": 2100.6730680000005,
+   "overhead_vs_full_best_pct": [
     11.350691246729273,
     12.56657984208669,
     13.261280941259045
-   ]
+   ],
+   "best_overhead_pct": 11.350691246729273
   },
   {
    "objective": "max_hops",
-   "excess_pct": [
-    11.211304706696446,
+   "T_ms": [
+    2098.043488,
+    2107.711788,
+    2110.1674679999996
+   ],
+   "best_ms": 2098.043488,
+   "overhead_vs_full_best_pct": [
+    11.211304706696467,
     11.723793729657928,
     11.853962326402524
-   ]
+   ],
+   "best_overhead_pct": 11.211304706696467
   }
  ],
+ "reference_full_objective_best_ms": 1886.537968,
+ "batch": "the ablation's own batch: one start (random fill, seed 0), three annealer seeds, 1200 steps per objective; not the Fig. 4 search runs",
  "recorded_loss_avoided_pct": {
+  "wire_only": 0.8598893992680878,
   "word_hops": 11.350691246729273,
   "max_hops": 11.211304706696446
  }

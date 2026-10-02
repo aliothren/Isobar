@@ -475,6 +475,20 @@
    "note": ""
   },
   {
+   "name": "fig5_mechanism_and_ablation_tall",
+   "kind": "composites",
+   "files": [
+    "composites/fig5_mechanism_and_ablation_tall.pdf",
+    "composites/fig5_mechanism_and_ablation_tall.svg",
+    "preview/fig5_mechanism_and_ablation_tall.png"
+   ],
+   "sources": [
+    "scripts/search_eval.py (live)",
+    "analysis/objective_ablation_k2.json"
+   ],
+   "note": "comparison variant: (a) (b) over (c) (d); the standing form is the one-row composite"
+  },
+  {
    "name": "fig5_small_mesh_instance",
    "kind": "data",
    "files": [
@@ -1023,11 +1037,10 @@
     "preview/fig1_phase_diagram.png"
    ],
    "sources": [
-    "scripts/fig_phase_isobar_print.py",
     "scripts/fig_phase_isobar.py",
     "analysis/phase_diagram_isobar_k2.json"
    ],
-   "note": "identical to analysis/phase_diagram_isobar_print_k2 (final form)"
+   "note": "analysis/phase_diagram_isobar_k2 (standing form) with every type size one point larger"
   },
   {
    "name": "fig1a_intra_die_phase",
@@ -1038,7 +1051,6 @@
     "preview/fig1a_intra_die_phase.png"
    ],
    "sources": [
-    "scripts/fig_phase_isobar_print.py",
     "scripts/fig_phase_isobar.py",
     "analysis/phase_diagram_isobar_k2.json"
    ],
@@ -1053,7 +1065,6 @@
     "preview/fig1b_inter_die_phase.png"
    ],
    "sources": [
-    "scripts/fig_phase_isobar_print.py",
     "scripts/fig_phase_isobar.py",
     "analysis/phase_diagram_isobar_k2.json"
    ],
