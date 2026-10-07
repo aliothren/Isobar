@@ -1602,49 +1602,86 @@ def fig4():
 # =====================================================================
 # Fig. 6  conditions
 # =====================================================================
+# Fig. 6 colours: two hues from the card, green and light blue (darker tones
+# of the same hues for text), r in neutral grey; the envelope in the card's
+# yellow. One line width and one marker size in every panel, as in Fig. 3.
+F6 = dict(green="#98b578", green_txt="#6f8f52", blue="#68b4ce", blue_txt="#3f7f93",
+          deep="#5868a0", env="#f3de67", env_txt="#8a7a2a", bar="#99a3aa")
+LEG6 = 5.5                                           # legend type size in every panel
+LW6, MS6 = 1.4, 4.5
+# a square or a diamond at the circle's nominal size reads larger (more area,
+# wider extent), so they are drawn a little smaller to balance
+MS6_S, MS6_D = 3.5, 3.7
+MS6_BC, MS6_BC_S = 4.0, 3.5                          # dots in (b) and (c): circle, square
+TITLE6 = dict(fontsize=8, loc="left", pad=6.5)       # one title style for (a), (b), (c)
+
+
 def _fig6a(ax):
+    """(a) Bandwidth response of the fixed pair: r, eta and G as three
+    lines on one percent axis, G's value at three points; the crossover
+    envelope of Fig. 1(b) shaded with B- and B+ at its edges."""
     sl = load("bw_slice_k2.json")
     pts = sorted(sl["points"].values(), key=lambda p: p["B_gbps"])
     B = [p["B_gbps"] for p in pts]
     G, eta, r = ([100 * p[k] for p in pts] for k in ("G", "eta", "r"))
-    ax.axvspan(sl["B_minus_gbps"], sl["B_plus_gbps"], color=CREAM, alpha=0.55, lw=0, zorder=1)
-    ax.text(np.sqrt(sl["B_minus_gbps"] * sl["B_plus_gbps"]), 74, "placement-\ndependent band",
-            fontsize=FS["small"], ha="center", va="top", color="#6b5a2a", linespacing=1.2)
-    ax.plot(B, r, ls="--", lw=1.2, color=AMBER, marker="s", ms=3.5, zorder=3,
-            label="r: communication share of the reference")
-    ax.plot(B, eta, ls=(0, (1.5, 1.8)), lw=1.3, color=SLATE, marker="D", ms=3.5, zorder=4,
-            label="\u03b7: communication improvement of the pair")
-    ax.plot(B, G, marker="o", ms=4.5, lw=1.7, color=GREEN, zorder=5, label="G: whole-model gain")
-    for p in pts:
-        if abs(p["B_gbps"] - 0.4) < 1e-6:
-            ax.annotate(f"{100 * p['G']:.2f}%", (p["B_gbps"], 100 * p["G"]),
-                        textcoords="offset points", xytext=(0, -8), ha="center", va="top",
-                        fontsize=FS["note"], color=GREEN)
-        elif 0.85 < p["B_gbps"] < 0.9:
-            ax.annotate(f"{100 * p['G']:.2f}%", (p["B_gbps"], 100 * p["G"]),
-                        textcoords="offset points", xytext=(0, 7), ha="center", va="bottom",
-                        fontsize=FS["note"], color=GREEN)
-        elif p["B_gbps"] > 10:
-            ax.annotate(f"{100 * p['G']:.2f}%", (p["B_gbps"], 100 * p["G"]),
-                        textcoords="offset points", xytext=(-6, 8), ha="right", va="bottom",
-                        fontsize=FS["note"], color=GREEN)
+    Bm, Bp = sl["B_minus_gbps"], sl["B_plus_gbps"]
+    ax.axvspan(Bm, Bp, color=F6["env"], alpha=0.30, lw=0, zorder=1)
+    # at the top of the band: B- and B+ in its corners, the name under them
+    for x, s_, ha in ((Bm, "$B_-$", "left"), (Bp, "$B_+$", "right")):
+        ax.text(x * (1.03 if ha == "left" else 1 / 1.03), 78.5, s_, fontsize=FS["small"], ha=ha,
+                va="top", color=F6["env_txt"], zorder=2)
+    ax.text(np.sqrt(Bm * Bp), 72, "Crossover\nenvelope", fontsize=6.0, ha="center",
+            va="top", color=F6["env_txt"], linespacing=1.1, zorder=2)
+    ax.plot(B, r, ls=(0, (4, 2)), lw=1.15, color=F6["deep"], marker="s", ms=MS6_S, zorder=3,
+            label="r: Communication share")
+    ax.plot(B, eta, ls=(0, (1.2, 1.6)), lw=LW6, color=F6["blue"], marker="D", ms=MS6_D, zorder=4,
+            label="η: Communication reduction")
+    ax.plot(B, G, lw=LW6, color=F6["green"], marker="o", ms=MS6, zorder=5,
+            label="G: Whole-model latency reduction")
+    for p in pts:                                    # G's value at three points, beside its dot
+        b, g = p["B_gbps"], 100 * p["G"]
+        if abs(b - 0.4) < 1e-6:                      # under its dot: the curve falls away there
+            off, ha, va = (0, -4.5), "center", "top"
+        elif 0.85 < b < 0.9:
+            off, ha, va = (0, 4), "center", "bottom"
+        elif b > 10:
+            off, ha, va = (5, -1), "left", "bottom"
+        else:
+            continue
+        ax.annotate(f"{g:.2f}%", (b, g), textcoords="offset points", xytext=off, ha=ha,
+                    va=va, fontsize=FS["note"], color=F6["green_txt"])
     ax.set_xscale("log")
-    ax.set_xticks([0.2, 0.4, 0.872, 2, 12.5])
+    ax.set_xlim(0.165, 32)                           # room right of 12.5 GB/s for its label
+    ax.set_xticks([0.2, 0.4, 0.87, 2, 12.5])
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
     ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     ax.set_xlabel("Link bandwidth per direction (GB/s)", fontsize=FS["axis"])
     ax.set_ylabel("Percent", fontsize=FS["axis"])
-    ax.set_ylim(0, 80)
-    ax.text(0.97, 0.94, "G = η · r at every point", transform=ax.transAxes,
-            fontsize=FS["note"], ha="right", va="top", color=INK)
-    ax.set_title("(a) Bandwidth response of fixed placements", fontsize=FS["title"])
-    ax.legend(fontsize=FS["small"], loc="upper center", bbox_to_anchor=(0.5, -0.20), ncol=1,
-              frameon=False, handlelength=2.2)
+    ax.set_ylim(0, 80); ax.set_yticks([0, 20, 40, 60, 80])
+    ax.set_title("(a) Bandwidth response of fixed placements", **TITLE6)
+    # top right corner, small enough to clear the envelope and its labels
+    ax.legend(fontsize=4.5, loc="upper right", frameon=False, handlelength=1.5,
+              handletextpad=0.5, labelspacing=0.3, borderaxespad=0.2, borderpad=0.2,
+              markerscale=0.7, title="G = \u03b7 \u00b7 r", title_fontsize=4.5,
+              alignment="left")
     tidy(ax)
     return sl, pts
 
 
-def _fig6b(ax, bw="0.4"):
+def _load_reuse():
+    import csv
+    rows = list(csv.DictReader(open(os.path.join(A, "workload_reuse", "summary.csv"))))
+    for r in rows:
+        for k, v in list(r.items()):
+            try:
+                r[k] = float(v)
+            except (TypeError, ValueError):
+                pass
+        r["S"] = int(r["S"])
+    return rows
+
+
+def _port_stat(bw="0.4"):
     sw = load("kappa_geometry_sweep.json")
     stat = {}
     for cell_name, cell in sw["cells"].items():
@@ -1659,36 +1696,92 @@ def _fig6b(ax, bw="0.4"):
         stat[(grid, float(k[1:]))] = {"median": gains[len(gains) // 2], "lo": gains[0],
                                       "hi": gains[-1], "baseline_ms": base * 1e3,
                                       "endpoint_binding": binding}
-    for grid, col, mk in (("24x24", GREEN, "o"), ("12x48", SLATE, "s")):
-        ks = sorted(k for (g, k) in stat if g == grid)
-        med = [stat[(grid, k)]["median"] for k in ks]
-        lo = [stat[(grid, k)]["median"] - stat[(grid, k)]["lo"] for k in ks]
-        hi = [stat[(grid, k)]["hi"] - stat[(grid, k)]["median"] for k in ks]
-        ax.errorbar(ks, med, yerr=[lo, hi], marker=mk, ms=5, lw=1.5, color=col, capsize=2.5,
-                    elinewidth=0.9, label=f"{grid} package", zorder=4)
-    ax.set_xticks([1, 2, 4]); ax.set_xlim(0.7, 4.4); ax.set_ylim(0, 12)
-    ax.set_xlabel("Port capacity / link capacity, κ", fontsize=FS["axis"])
-    ax.set_ylabel("Gain over the strongest baseline\nof the same cell (%)", fontsize=FS["axis"])
-    ax.set_title("(b) Port capacity and mesh geometry", fontsize=FS["title"])
-    ax.text(1.12, 3.9, "port capacity limits\nthe remaining gain", fontsize=FS["small"], ha="left",
-            va="bottom", color=INK, linespacing=1.25)
-    ax.text(3.0, 11.3, "ports no longer bind", fontsize=FS["small"], ha="center", va="top", color=INK)
-    leg = ax.legend(fontsize=FS["small"], loc="lower right", frameon=False,
-                    title="median of three seeds; bars: range")
-    leg.get_title().set_fontsize(FS["small"])
-    tidy(ax)
     return stat
 
 
+def _fig6b(ax, show_x=False):
+    """(b) Paired dots: one row per port capacity, the two geometries
+    offset a little, each at its median over three seeds."""
+    stat = _port_stat()
+    ks = [1.0, 2.0, 4.0]
+    ys = [2, 1, 0]
+    for grid, col, ct, mk, ms, dy, lab in (
+            ("24x24", F6["green"], F6["green_txt"], "o", MS6_BC, 0.2, "24 × 24"),
+            ("12x48", F6["blue"], F6["blue_txt"], "s", MS6_BC_S, -0.2, "12 × 48")):
+        med = [stat[(grid, k)]["median"] for k in ks]
+        ax.plot(med, [y + dy for y in ys], marker=mk, ms=ms, color=col, ls="none", zorder=4,
+                label=lab)
+        for m, y in zip(med, ys):
+            ax.annotate(f"{m:.1f}", (m, y + dy), textcoords="offset points", xytext=(4.5, 0),
+                        ha="left", va="center", fontsize=FS["note"], color=ct)
+    ax.set_yticks(ys); ax.set_yticklabels([f"κ = {k:g}" for k in ks], fontsize=FS["tick"])
+    ax.set_ylim(-0.5, 3.0); ax.set_xlim(0, 12.4); ax.set_xticks([0, 4, 8, 12])
+    ax.set_title("(b) Ports and geometry", **TITLE6)
+    ax.legend(fontsize=LEG6, loc="upper right", bbox_to_anchor=(1.0, 1.06), frameon=False,
+              ncol=2, handlelength=1.0, handletextpad=0.3, columnspacing=0.8, borderaxespad=0,
+              borderpad=0.2, markerscale=0.8)
+    tidy(ax, grid="x")
+    if not show_x:
+        plt.setp(ax.get_xticklabels(), visible=False); ax.tick_params(axis="x", length=0)
+    else:
+        ax.set_xlabel("Latency reduction (%)", fontsize=FS["axis"])
+    return stat
+
+
+def _fig6c(ax):
+    """(c) Dumbbells: one row per length, decode and prefill as two equal
+    dots joined by a grey line, each value above its dot."""
+    rows = _load_reuse()
+    rp = {(r["phase"], r["S"]): r for r in rows}
+    S = [128, 512, 1024]
+    ys = [2, 1, 0]
+    for s, y in zip(S, ys):
+        d, pf = rp[("decode", s)]["reuse_gain_pct"], rp[("prefill", s)]["reuse_gain_pct"]
+        ax.plot([d, pf], [y, y], color=F6["bar"], lw=0.8, solid_capstyle="butt", zorder=2)
+        for v, c, ct, lab in ((d, F6["blue"], F6["blue_txt"], "Decode"),
+                              (pf, F6["green"], F6["green_txt"], "Prefill")):
+            ax.plot([v], [y], marker="o", ms=MS6_BC, color=c, ls="none", zorder=4,
+                    label=lab if y == ys[0] else None)
+            ax.annotate(f"{v:.2f}", (v, y), textcoords="offset points", xytext=(0, 3.5),
+                        ha="center", va="bottom", fontsize=FS["note"], color=ct)
+    ax.set_yticks(ys); ax.set_yticklabels([str(s) for s in S], fontsize=FS["tick"])
+    ax.set_ylim(-0.5, 3.0); ax.set_xlim(0, 12.4); ax.set_xticks([0, 4, 8, 12])
+    ax.set_xlabel("Latency reduction (%)", fontsize=FS["axis"])
+    ax.set_title("(c) Workload reuse", **TITLE6)
+    leg = ax.legend(fontsize=LEG6, loc="upper right", bbox_to_anchor=(1.0, 1.06), frameon=False,
+                    ncol=2, handlelength=1.0, handletextpad=0.3, columnspacing=0.8,
+                    borderaxespad=0, borderpad=0.2, markerscale=0.8)
+    ax.annotate("Tokens", xy=(0, 1.0), xycoords="axes fraction", xytext=(-3.5, 0),
+                textcoords="offset points", ha="right", va="center", fontsize=LEG6,
+                color="0.45")
+    tidy(ax, grid="x")
+    return rows
+
+
 def fig6():
-    SRC = ["analysis/bw_slice_k2.json", "analysis/kappa_geometry_sweep.json"]
-    fig, axes = plt.subplots(1, 2, figsize=(PAGE_WIDTH, PAGE_WIDTH * 0.40))
-    sl, pts = _fig6a(axes[0]); stat = _fig6b(axes[1])
-    fig.tight_layout()
+    SRC = ["analysis/bw_slice_k2.json", "analysis/kappa_geometry_sweep.json",
+           "analysis/workload_reuse/summary.csv", "analysis/workload_reuse/workload_reuse.json"]
+    # inch layout: (a) left; (b) over (c) right; (a) and (b) share the top
+    # edge, so their titles share one baseline; (a) and (c) share the bottom
+    W, H = 4.78, 2.62
+    R = lambda x0, y0, w, h: [x0 / W, y0 / H, w / W, h / H]
+    bot, top = 0.36, 2.38
+    xa, wa, xr, wr = 0.42, 2.52, 3.40, 1.25
+    hb = (top - bot - 0.30) / 2                     # 0.30 in holds (c)'s title
+    fig = plt.figure(figsize=(W, H))
+    axa = fig.add_axes(R(xa, bot, wa, top - bot)); sl, pts = _fig6a(axa)
+    axb = fig.add_axes(R(xr, top - hb, wr, hb)); stat = _fig6b(axb)
+    axc = fig.add_axes(R(xr, bot, wr, hb)); rows = _fig6c(axc)
     save(fig, "fig6_conditions", composite=True, sources=SRC)
-    for tag, fn in (("fig6a_bandwidth_response", _fig6a), ("fig6b_port_geometry", _fig6b)):
-        f, a = plt.subplots(figsize=(COL_WIDTH * 1.25, COL_WIDTH * 1.0)); fn(a); f.tight_layout()
-        save(f, tag, sources=SRC)
+    f, a = plt.subplots(figsize=(COL_WIDTH * 1.25, COL_WIDTH * 0.95)); _fig6a(a); f.tight_layout()
+    save(f, "fig6a_bandwidth_response", sources=SRC[:1])
+    for tag, fn, kw, src in (("fig6b_port_geometry", _fig6b, {"show_x": True}, SRC[1:2]),
+                             ("fig6c_placement_reuse", _fig6c, {}, SRC[2:])):
+        fw, fh = 0.5 + wr + 0.1, 0.4 + hb + 0.3    # the same axes size as in the composite
+        f = plt.figure(figsize=(fw, fh))
+        fn(f.add_axes([0.5 / fw, 0.4 / fh, wr / fw, hb / fh]), **kw)
+        save(f, tag, sources=src)
+    dump_csv("fig6_placement_reuse", rows, list(rows[0].keys()), sources=SRC[2:])
     dump_csv("fig6_bandwidth_response", [
         {"point": k, "B_gbps": p["B_gbps"], "region": p["region"], "T_reference_ms": p["T_s_ref"] * 1e3,
          "T_selected_ms": p["T_s_sel"] * 1e3, "G_ratio": p["G"], "eta_ratio": p["eta"], "r_ratio": p["r"],
@@ -1705,19 +1798,35 @@ def fig6():
         for (g, k), v in sorted(stat.items())],
         ["grid", "kappa", "gain_median_pct", "gain_min_pct", "gain_max_pct", "strongest_baseline_ms",
          "endpoint_binding", "statistic"], sources=SRC[1:])
+    rp = {(r["phase"], r["S"]): r for r in rows}
     CAPTIONS["fig6"] = (
         "Fig. 6. The conditions that set the value of placement. (a) One fixed pair of "
-        "layouts, the best random fill and the representative search layout of Fig. 4, "
-        "re-scored at each bandwidth without a new search. The communication share r of the "
-        "reference, the communication improvement η of the pair and the whole-model gain "
-        "G are all percentages, and G = η r holds at every point; the shaded band is the "
-        "placement-dependent band of Fig. 1(b) for the seven named rules at the NeuRRAM row "
-        f"rate ({sl['B_minus_gbps']:.3f} to {sl['B_plus_gbps']:.3f} GB/s). (b) The search gain "
-        "against the strongest evaluated baseline of each cell for two package geometries and "
-        "three port capacities at 0.4 GB/s: per seed the best of three starts, then the "
-        "median and the range over three seeds. At κ = 1 the port capacity limits the "
-        "remaining gain; at κ = 2 and 4 the endpoints are link-bound and the two "
-        "geometries agree within the seed range.")
+        "layouts, the best random fill (reference) and the representative search layout of "
+        "Fig. 4, re-scored at each bandwidth without a new search: the whole-model latency "
+        "reduction G, the pair's communication reduction \u03b7 (level, since the hand-off "
+        "volumes do not change) and the reference's communication share r, "
+        "with G = \u03b7 r. The shaded crossover envelope [B-, B+] = "
+        f"[{sl['B_minus_gbps']:.3f}, {sl['B_plus_gbps']:.3f}] GB/s is Fig. 1(b)'s "
+        "placement-decides band for the seven named rules at the NeuRRAM row rate, not a "
+        "boundary of this pair; 0.87 GB/s is its geometric midpoint. (b) and (c) share one "
+        "axis of latency reduction, each condition against its own strongest evaluated "
+        "baseline. (b) A new search per cell at 0.4 GB/s over two package geometries and three "
+        "port capacities: per seed the best of three starts, then the median over three seeds; "
+        f"the three seeds lie within {max(v['hi'] - v['lo'] for v in stat.values()):.1f} points of "
+        "each other in every cell (data/fig6_port_geometry.csv). (c) Placement reuse across workloads, main "
+        "configuration (24x24, 0.4 GB/s, \u03ba = 2): the frozen layout selected at "
+        "512-token prefill, re-scored at 128, 512 and 1024 prefill tokens and at decode over "
+        "a 128-, 512- and 1024-token cache (2048 is infeasible under the same grouping: the "
+        "attention die's K/V arrays would exceed its capacity). Every hand-off's volume "
+        "scales with the token count, so the 21 evaluated layouts keep one ranking across "
+        "the six workloads and the gain changes by dilution (the communication share moves "
+        f"from {rp[('prefill', 128)]['comm_share_ref_pct']:.1f} to "
+        f"{rp[('prefill', 1024)]['comm_share_ref_pct']:.1f}% over prefill, and is "
+        f"{rp[('decode', 512)]['comm_share_ref_pct']:.1f}% at decode), not by placement "
+        "mismatch; an appended search per workload (same annealer, objective normalized by "
+        "the baseline latency) found nothing better than the frozen layout at this budget. "
+        "The 128- and 1024-token per-operator accounts are derived from the measured "
+        "512-token account.")
 
 
 # =====================================================================
@@ -1824,12 +1933,12 @@ def write_docs(run_id, argv):
            f"| fig3_external_validation | {SECTION['fig3']} | (a) does the cost model explain the measured placement effect; (b) does the independent simulator confirm the layouts it selects | (a) Simba T1, 4 chiplets, 5 seatings; (b) 24x24 fan-out batch, kappa 1, 13 candidates | (b) candidate ids in fig3_booksim_candidates.csv | (a) each series / its adjacent seating; (b) both axes / the reference random fill; rho with average ranks | simba_t1.json, b_fanout_24x24_rerank.json |\n",
            f"| fig4_deployment_gain | {SECTION['fig4']} | what the deployment choice is worth and costs | main configuration; (c) GPT-2-medium class layer | random_s3 (best random), sa_random_s1 (representative), default_A4 | 9.91% = median of 3 seeds of best-over-3-starts vs random_s3 2118.71 ms; 54.5% vs default 4192.54 ms; dE = E/E_ref - 1 | main_config_results.json, energy_export.json, intra_die_integration.json |\n",
            f"| fig5_mechanism_and_ablation | {SECTION['fig5']} | where stacking comes from; what the objective is worth | (a-c) controlled 4x4 die mesh, the ffn1->ffn2 hand-off, 25 flows; (d) main configuration | compact_fill, random_seed3 (best of 0-4), search_seed (median of 0-2) | (a-c) busiest resource in link-time, word-hops; (d) excess over the best resource-aware endpoint 1886.5 ms | fig5_small_mesh_instance.json, objective_ablation_k2.json |\n",
-           f"| fig6_conditions | {SECTION['fig6']} | the conditions that set the value of placement | (a) frozen pair re-scored; (b) 6 cells of the kappa x geometry sweep | random_s3 / sa_random_s1; per-cell runs | (a) G, eta, r as percentages, G = eta r; (b) per seed best of 3 starts, median and range over 3 seeds vs the cell's strongest baseline | bw_slice_k2.json, kappa_geometry_sweep.json |\n",
+           f"| fig6_conditions | {SECTION['fig6']} | the conditions that set the value of placement | (a) frozen pair re-scored over bandwidth; (b) 6 cells of the kappa x geometry sweep; (c) the frozen layout re-scored at 6 workloads | random_s3 / sa_random_s1; per-cell runs | (a) G, eta, r as percentages, G = eta r; (b) per seed best of 3 starts, median over 3 seeds vs the cell's strongest baseline (seed range in the CSV); (c) reduction vs each workload's strongest evaluated baseline; (b)(c) one 0-12% axis | bw_slice_k2.json, kappa_geometry_sweep.json, workload_reuse/summary.csv |\n",
            "\n## Notes for the author (not for the paper)\n\n",
            "- Fig. 3(b): the source JSON records rho = 0.962 from ordinal ranks; two candidates tie on the analytic cost, and the standard Spearman with average ranks over the same 13 candidates is the value printed (see `data/fig3_booksim_rho.json`). The 154,037 packets are the size of ONE candidate's batch, not a total.\n",
            "- Fig. 5(a-c) is a new controlled instance: the 25 flows are the real ffn1->ffn2 hand-off of the 2.7B mapping, re-placed on a 4x4 mesh and re-scored by the evaluator's own flow and load code. Its numbers are hand-off service costs on that instance and are not the 24x24 stage readings of v1 (26.2 / 21.0 / 13.1 ms), which belong to the 544-die layouts.\n",
            "- Fig. 5(d) keeps the recorded denominator (the best resource-aware endpoint); the +11.4% / +11.2% labels are each proxy's best endpoint, the other seeds are drawn as points.\n",
-           "- Fig. 6(b): every cell uses the same statistic, recomputed from the per-run records; the sensitivity table in main_config_results.md mixes best-of-nine values and is not the source here.\n",
+           "- Fig. 6(b): the 128- and 1024-token per-operator accounts are derived from the measured 512-token account (compute per row, write per row, closed-form elementwise); the appended searches fall back to the frozen layout at all six workloads, their raw endpoints are in workload_reuse/per_run.csv. The appended searches are not drawn; their summary is in fig6_placement_reuse.csv.\n",
            "- Only the PDFs, the data, the captions and this index are committed; SVG and PNG come back from the command in the header.\n"]
     open(os.path.join(root, "figure_index.md"), "w").write("".join(idx))
     man = {"run_id": run_id, "generator": "scripts/plot_dac2027_v2.py", "command": " ".join(argv),

@@ -1,0 +1,7 @@
+phase,S,account_status,strongest_baseline,T_base_ms,comm_share_ref_pct,reuse_T_ms,reuse_gain_pct,search_headline_T_ms,search_gain_pct,search_gain_min_pct,search_gain_max_pct,reuse_plus_search_gain_pct,fallback_to_frozen,layout
+prefill,128,derived from the S = 512 account (see workload_reuse.py docstring),random_s3,560.403,53.42,507.926,9.364,509.977,8.998,8.947,9.232,9.364,True,sa_random_s1
+prefill,512,measured (the frozen S = 512 mapper account),random_s3,2118.706,56.52,1908.819,9.906,1908.819,9.906,9.659,10.123,9.906,True,sa_random_s1
+prefill,1024,derived from the S = 512 account (see workload_reuse.py docstring),random_s3,4179.273,57.31,3759.507,10.044,3759.507,10.044,9.715,10.263,10.044,True,sa_random_s1
+decode,128,derived from the S = 512 account (see workload_reuse.py docstring),random_s3,26.51,8.82,26.093,1.574,26.232,1.048,0.968,1.109,1.574,True,sa_random_s1
+decode,512,measured (the frozen S = 512 mapper account),random_s3,26.534,8.81,26.117,1.572,26.257,1.047,0.968,1.108,1.572,True,sa_random_s1
+decode,1024,derived from the S = 512 account (see workload_reuse.py docstring),random_s3,26.567,8.8,26.15,1.57,26.275,1.1,0.908,1.107,1.57,True,sa_random_s1

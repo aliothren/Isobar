@@ -288,9 +288,17 @@ def main():
     n_die, f_die = max(im["compute_ref_s"].values()), im["fixed_s"]   # PER-OP compute
     intra_curves = intra_die_curves(SPREADS[0])
 
-    fig, axes = plt.subplots(1, 2, figsize=(12.8, 5.0))
-    fig.subplots_adjust(left=0.055, right=0.955 if REFS else 0.985, top=0.94,
-                        bottom=0.275 if REFS else 0.235, wspace=0.17)
+    # The panels keep the size and position they have always had (3.325 in
+    # tall, their tops 0.30 in below the figure top). The three-column legend
+    # is one row shorter than the two-column one and sits closer under the
+    # axis titles; the space saved comes off the figure height, not onto the
+    # panels.
+    FIG_H = 4.6 if REFS else 5.0
+    fig, axes = plt.subplots(1, 2, figsize=(12.8, FIG_H))
+    fig.subplots_adjust(left=0.055, right=0.955 if REFS else 0.985,
+                        top=(FIG_H - 0.30) / FIG_H,
+                        bottom=(5.0 * 0.275 - (5.0 - FIG_H)) / FIG_H if REFS else 0.235,
+                        wspace=0.17)
 
     lo_d, hi_d = draw_panel(
         axes[0], a_min_die, a_max_die, n_die, f_die, (1e-2, 1e3),
@@ -422,15 +430,19 @@ def main():
                  plt.Line2D([], [], marker="D", ls="none", mfc="white", mec=CHIP, mew=1.2, ms=6),
                  plt.Line2D([], [], marker="o", ls="-", color=CHIP, mfc="white", mec=CHIP,
                             mew=1.5, ms=7, lw=1.0)]
-        fig.legend(lines + marks, [
-            r"boundaries $B_-$, $B_+$: min and max of $B_c(p)$ over the placement set",
+        # three columns of two rows: the line keys on the first row, the marker
+        # keys on the second (matplotlib fills a legend column by column, hence
+        # the interleaved order); plain-text subscripts so that every label has
+        # the same height and the rows line up across the columns
+        fig.legend([lines[0], marks[0], lines[1], marks[1], lines[2], marks[2]], [
+            "boundaries B\u208b, B\u208a over the placement set",
+            "published parameter, projected",
             "placement latency spread, 20%",
+            "derived or alternative-mode value",
             "the two evaluated bandwidth tiers",
-            "published parameter, projected onto this instance",
-            "derived or alternative-mode value, projected the same way",
             "configurations evaluated in this paper"],
-            loc="lower center", ncol=2, fontsize=6.8, frameon=False,
-            bbox_to_anchor=(0.5, -0.012), labelspacing=0.9, columnspacing=2.5,
+            loc="lower center", ncol=3, fontsize=6.8, frameon=False,
+            bbox_to_anchor=(0.5, -0.012), labelspacing=0.45, columnspacing=2.5,
             handlelength=2.4, handletextpad=0.8)
     else:
       fig.legend(h + extra, lab + [

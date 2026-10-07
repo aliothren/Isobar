@@ -240,13 +240,13 @@
    },
    {
     "file": "analysis/phase_diagram_isobar_k2.pdf",
-    "bytes": 52024,
-    "sha256": "dc60026c17706863"
+    "bytes": 51242,
+    "sha256": "eb6674252e27fb17"
    },
    {
     "file": "analysis/phase_diagram_isobar_k2.png",
-    "bytes": 233645,
-    "sha256": "f3fef79c9aae1fee"
+    "bytes": 219755,
+    "sha256": "82e889d2a07d56d5"
    },
    {
     "file": "analysis/phase_diagram_isobar_print.pdf",
@@ -974,7 +974,9 @@
    ],
    "sources": [
     "analysis/bw_slice_k2.json",
-    "analysis/kappa_geometry_sweep.json"
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/workload_reuse/summary.csv",
+    "analysis/workload_reuse/workload_reuse.json"
    ],
    "note": ""
   },
@@ -987,8 +989,7 @@
     "preview/fig6a_bandwidth_response.png"
    ],
    "sources": [
-    "analysis/bw_slice_k2.json",
-    "analysis/kappa_geometry_sweep.json"
+    "analysis/bw_slice_k2.json"
    ],
    "note": ""
   },
@@ -1001,10 +1002,35 @@
     "preview/fig6b_port_geometry.png"
    ],
    "sources": [
-    "analysis/bw_slice_k2.json",
     "analysis/kappa_geometry_sweep.json"
    ],
    "note": ""
+  },
+  {
+   "name": "fig6c_placement_reuse",
+   "kind": "panels",
+   "files": [
+    "panels/fig6c_placement_reuse.pdf",
+    "panels/fig6c_placement_reuse.svg",
+    "preview/fig6c_placement_reuse.png"
+   ],
+   "sources": [
+    "analysis/workload_reuse/summary.csv",
+    "analysis/workload_reuse/workload_reuse.json"
+   ],
+   "note": ""
+  },
+  {
+   "name": "fig6_placement_reuse",
+   "kind": "data",
+   "files": [
+    "data/fig6_placement_reuse.csv"
+   ],
+   "sources": [
+    "analysis/workload_reuse/summary.csv",
+    "analysis/workload_reuse/workload_reuse.json"
+   ],
+   "note": "plotting data"
   },
   {
    "name": "fig6_bandwidth_response",
@@ -1024,7 +1050,9 @@
     "data/fig6_port_geometry.csv"
    ],
    "sources": [
-    "analysis/kappa_geometry_sweep.json"
+    "analysis/kappa_geometry_sweep.json",
+    "analysis/workload_reuse/summary.csv",
+    "analysis/workload_reuse/workload_reuse.json"
    ],
    "note": "plotting data"
   },

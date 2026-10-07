@@ -7158,3 +7158,148 @@ the file's width is the figure's width in LaTeX. Fig. 1's composite and
 its two cropped panels likewise. Composite sizes: Fig. 1 12.40 x 4.91,
 Fig. 2 7.52 x 2.93, Fig. 3 6.92 x 2.77, Fig. 4 7.37 x 4.58, Fig. 5
 5.76 x 2.00 (tall 2.85 x 3.21), Fig. 6 6.92 x 2.49 in.
+
+FIG. 6 REVIEW PASS 2026-10-02. (a) is two stacked panels on one
+bandwidth axis: r and eta above (0-80%), G alone below (0-15%) with its
+9.91 / 6.55 / 0.70% readings beside the points and "G = eta . r" in the
+panel; legend labels "r: Communication share", "eta: Communication
+reduction", "G: Whole-model latency reduction" (the pair's identity is
+in the caption). The shading is "Crossover envelope" with B- and B+
+marked at its edges and the caption says it is Fig. 1(b)'s band for the
+seven rules, not a boundary of this pair; the midpoint tick reads 0.87.
+(b) keeps the two curves, drops the two mechanism notes and the legend
+title (protocol in the caption), y label "Latency reduction (%)",
+legend "24 x 24 mesh" / "12 x 48 mesh"; the caption states it is a new
+search per cell, unlike (a), and that the flat gain beyond kappa = 2
+says nothing by itself about ports binding. Widths 60 / 40. Card
+palette: r deep blue, eta light blue, G and the 24x24 mesh green, the
+12x48 mesh light blue, envelope in the card yellow at 30%.
+WORKLOAD REUSE 2026-10-02 (the Fig. 6(b) study; scripts/workload_reuse.py
+-> analysis/workload_reuse/): the frozen headline layout sa_random_s1
+re-scored and a fresh normalized-temperature search (T / T_base, t0 =
+20 ms / 2118.71 ms, 3 x 3, 1200 steps) at prefill S = 128 / 512 / 1024 and
+decode over a 128 / 512 / 1024-token cache, main configuration otherwise.
+S = 2048 infeasible under the frozen grouping (attention K/V arrays 20.97M
+cells against the die's 16.78M). Invariance pinned numerically: H scales
+by exactly S / 512 in prefill and is identical across decode cache lengths
+for all 21 layouts, R is layout-independent, the ordering of the 21
+layouts is the same at every workpoint. Readings: reuse gain 9.36 / 9.91 /
+10.04 percent (prefill 128 / 512 / 1024, communication share 53.4 / 56.5 /
+57.3 percent) and 1.57 percent at every decode length; the workpoint
+searches never beat the frozen layout (prefill 9.00 / 9.91 / 10.04 percent
+medians, decode 1.05 to 1.10 percent), so Reuse + search falls back to the
+frozen layout everywhere. Accounts at S = 128 and 1024 are DERIVED from the
+S = 512 mapper account (compute = rows x per-row time, write = min(rows,
+256) x T_SET, declared in the files); scripts/run_2p7b_block_S.py produces
+the measured accounts when the container is reachable (docker socket
+permission lost after the 2026-09-29 host reboot). The 512 workpoint
+reproduces the frozen 9.91 / 1.57 percent and the frozen search endpoints
+bit for bit under the normalized objective.
+
+FIG. 6 REBUILT 2026-10-02 (reviewer's two-panel brief; experiment by the
+run agent in analysis/workload_reuse/). (a) Bandwidth response, one
+panel: G as the main curve with 9.91 / 6.55 / 0.70% beside the points,
+eta as the level dotted line, r annotated at 0.2, 0.87 and 12.5 GB/s,
+the crossover envelope shaded with B- / B+ at its foot, "G = eta . r".
+(b) Placement reuse across workloads: prefill (128 / 512 / 1024 tokens)
+and decode (128 / 512 / 1024 cache tokens) side by side on their own y
+scales; per workload the frozen sa_random_s1 re-scored (Reuse, green),
+the appended search's median and seed range (light blue, hollow) and
+Reuse + search (ink diamond, labelled), which falls back to the frozen
+layout at every point. Reads: prefill 9.36 / 9.91 / 10.04%, decode
+1.57% throughout; the caption states the invariance (every hand-off
+volume scales with the token count, so the 21 layouts keep one ranking:
+dilution, not mismatch), the 2048 infeasibility and the derived
+128 / 1024 accounts. The port-capacity / geometry panel is out of
+Fig. 6 and kept as panels/fig6x_port_geometry with its CSV. New data
+product data/fig6_placement_reuse.csv. Widths 46 / 54; card palette.
+
+FIG. 6 THREE-PANEL FORM 2026-10-02 (reviewer): (a) the bandwidth curve
+on the left (44% of the width); on the right, two 2 x 3 matrices on one
+0-12% single-hue ramp (card light blue -> deep teal, shared colour bar):
+(b) port capacity x mesh geometry, median latency reduction in each
+cell with the seed min-max beneath (1.8 / 9.9 / 9.7 over 24x24, 2.7 /
+9.8 / 9.8 over 12x48); (c) workload and placement reuse, the frozen
+layout's reduction at 128 / 512 / 1024 prefill tokens (9.36 / 9.91 /
+10.04%) and decode cache tokens (1.57% each); the appended searches are
+not drawn (summary in data/fig6_placement_reuse.csv). Composite
+7.16 x 2.58 in, cropped 6.8 x 2.5. The standalone fig6x port panel is
+replaced by panels/fig6b_port_geometry and fig6c_placement_reuse.
+
+FIG. 6 RIGHT PANELS 2026-10-02 (reviewer, after the matrices): (b) paired
+dots, one row per kappa, the two geometries offset (24x24 green circle,
+12x48 light-blue square), median with the seed min-max bar and the value
+beside each point; (c) dumbbells, one row per length, decode (deep blue
+square) and prefill (green circle) joined by a grey connector, values at
+the ends. The two panels share one 0-12% axis "Latency reduction (%)";
+no colour bar, no "%" after the numbers. Layout unchanged (a 44% left,
+b over c right).
+
+FIG. 6 PASS 2026-10-06 (author). Composite narrowed to 5.64 x 2.47 in
+(cropped; was 6.89 x 2.71) on an inch layout: (a) 2.52 in wide, the right
+column 2.12 in; (a) and (b) share their top edge and all three titles use
+one style (8 pt, left-aligned, same pad), so the (a) and (b) titles sit on
+one baseline. Two hues only, green and light blue (darker tones of the
+same hues for text): the deep blue is gone from decode and from the r
+notes, which are now grey and stacked above the G value at 0.87 and
+12.5 GB/s; "9.91%" anchored to the upper right of its own point. (b): the
+in-panel "median; bars: seed min-max" note removed (the caption carries
+the statistic), legend moved into the free right end of the kappa = 1
+row, values set after the min-max bar. (c): real dumbbells, two equal
+7 pt circles (decode light blue, prefill green) joined by a grey bar,
+each value above its dot, legend in a top band, y label "Tokens".
+
+FIG. 6 PASS 2026-10-06 (author, second). One line width (1.4 pt) and one
+marker size (4.5) in all three panels, as in Fig. 3; the dumbbell
+connector at the same 1.4 pt in grey. (a) draws r, eta and G again as
+three lines on one 0-80% axis (r dashed grey squares, eta dotted light
+blue diamonds, G solid green circles), the r notes gone; G's values at
+0.4 (under its dot), 0.87 (above) and 12.5 GB/s (right of it, x axis to
+32 GB/s for the room). (b) drops the seed min-max bars, which at this
+scale were no longer than a marker (ranges <= 0.46 points); the caption
+states the seed spread. Right column narrowed to 1.60 in with titles
+"(b) Ports and geometry" / "(c) Reuse across workloads" so they fit;
+gap between (a) and the right column 0.46 in; title pad 6.5 pt in all
+three; legends of (b) and (c) in a top row, "Tokens" as the row-label
+header of (c). Composite 4.93 x 2.51 in (cropped). Standalone (b)/(c)
+exports now use the composite's axes size.
+
+FIG. 6 PASS 2026-10-06 (author, third). (a): the legend is small (5.5 pt,
+markers scaled 0.8) with "G = eta . r" as its title, placed right of the
+envelope between the r line and the band labels; "Crossover envelope"
+and B- / B+ moved to the top of the band (B- and B+ in its corners);
+three colours for the three lines (r the card's desaturated deep blue
+(88,104,160), eta light blue, G green). (c): the dumbbell connector is a
+thin 0.8 pt line in a darker grey (153,163,170); title "(c) Workload
+reuse". (b)/(c): right column 1.25 in; legends 5.5 pt with markers scaled
+0.8, raised to sit just above the axes. Composite cropped to 4.62 x 2.51 in.
+(a) legend pass: 4.5 pt (title "G = eta . r" too), markers scaled 0.7,
+back in the top right corner; it now clears the envelope and B+.
+
+FIG. 6 PASS 2026-10-06 (author, fourth). Marker shapes balanced by area:
+circles 4.5, squares 4.0, diamonds 3.7 (a square or diamond at the
+circle's nominal size reads larger); the r line 1.15 pt. (b) brings the
+seed min-max back as capped bars in the darker tone of each hue
+(1.2 pt, caps 3 pt), with small centres (circle 2.2, square 2.0) so the
+bars show; the spread is at most 0.46 points, so where it is near zero
+(kappa = 1) the two caps merge into one tick through the dot. Caption and
+index row say dot = median, bar = min-max.
+Fig. 6 pass, fifth: (b) back to plain points without the seed bars
+(caption and index row reverted); dots in (b) and (c) unified at circle
+4.0 / square 3.5; the r squares in (a) 3.5.
+
+FIG. 1 LEGEND 2026-10-06 (author): three columns of two rows instead of
+two columns of three, the line keys (boundaries, 20% spread, bandwidth
+tiers) on the first row and the marker keys (published, derived,
+evaluated configurations) on the second; labels shortened ("boundaries
+B-, B+ over the placement set", "published parameter, projected",
+"derived or alternative-mode value"); plain-text subscripts so every
+label has the same height and the rows line up across the columns;
+the panels keep their size and position; the one legend row saved comes off the figure height (5.0 -> 4.8 in). Edited in the
+standing generator fig_phase_isobar.py; its own output
+analysis/phase_diagram_isobar_k2.{png,pdf} re-rendered so it matches the
+code (it also picks up the Oct 1 label edits).
+Fig. 1 legend, second pass: row spacing 0.9 -> 0.45 and the legend 0.16 in
+closer under the axis titles (gap 0.28 -> 0.12 in in the figure set);
+the panels unchanged (5.309 x 3.325 in, 0.30 in top margin), the saved
+height taken off the figure (4.8 -> 4.6 in).
