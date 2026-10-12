@@ -180,8 +180,40 @@ def main():
     json.dump(auto, open(os.path.join(V3, "confirm_specs_auto.json"), "w"), indent=1)
     if not os.path.exists(os.path.join(V3, "confirm_specs.json")):      # never overwrite a hand-edited list
         json.dump(auto, open(os.path.join(V3, "confirm_specs.json"), "w"), indent=1)
+    # confirmation and reuse
+    conf = [r for r in done if r["unit"] == "confirm"]
+    if conf:
+        md.append("## Confirmation (500-fill pool, SA seeds 5 to 14, budget rule; sweep value = the same configuration in its sweep unit, 100-fill pool, seeds 0 to 4)\n")
+        md.append("| config | dies | grid | strongest (rule) | T_base (ms) | G median [min, max] | sweep G median [min, max] | eta | r0 | g_BW | vs default | vs strongest rule | dE | band of rules (ratio) | invariant | wall (s) |")
+        md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in sorted(conf, key=lambda r: -r["G_median"]):
+            sw = [x for x in done if x["unit"] != "confirm" and x["d"] == r["d"] and x["dh"] == r["dh"] and x["d_ff"] == r["d_ff"] and x["L"] == r["L"]
+                  and x["S"] == r["S"] and x["phase"] == r["phase"] and x["grid"] == r["grid"] and x["kappa"] == r["kappa"] and x["tiling"] == r["tiling"]]
+            sws = f"{sw[0]['G_median']:.2f} [{sw[0]['G_min']:.2f}, {sw[0]['G_max']:.2f}] ({sw[0]['unit']})" if sw else ""
+            md.append(f"| {r['config_id']} | {r['n_dies']} | {r['grid']} | {r['strongest']} ({r.get('strongest_rule', '')}) | {r['T_base_ms']:.1f} | {r['G_median']:.2f} [{r['G_min']:.2f}, {r['G_max']:.2f}] | {sws} | "
+                      f"{r['eta']:.1f} | {r['r0']:.1f} | {r['g_bw_eq']:.1f} | {r['G_vs_default']:.1f} | {r['G_vs_rule']:.1f} | {r['dE']:+.2f} | {r['B_minus']:.2f}-{r['B_plus']:.2f} ({r['band_ratio']:.2f}) | {r['invariant']} | {r['config_wall_s']:.0f} |")
+        md.append("")
+    for d_, label in (("e6_reuse", "100-fill pool at each workpoint"), ("e6_reuse_500", "500-fill pool at each workpoint")):
+        fs = sorted(glob.glob(os.path.join(V3, d_, "*.csv")))
+        if not fs:
+            continue
+        md.append(f"## Placement reuse across workpoints (`{d_}/`, {label}; the confirmed prefill-512 layout re-scored at each workpoint vs that workpoint's strongest baseline, and a fresh search there)\n")
+        md.append("| config | phase | S | strongest | T_base (ms) | comm share of ref | reuse gain | fresh search gain [min, max] | best of both | fresh search falls back to the frozen layout |")
+        md.append("|---|---|---|---|---|---|---|---|---|---|")
+        for f_ in fs:
+            for x in csv.DictReader(open(f_)):
+                if x["status"] != "done":
+                    md.append(f"| {os.path.basename(f_)[:-4]} | {x['phase']} | {x['S']} | {x['status']} | | | | | | |"); continue
+                md.append(f"| {os.path.basename(f_)[:-4]} | {x['phase']} | {x['S']} | {x['strongest']} | {float(x['T_base_ms']):.1f} | {float(x['comm_share_ref_pct']):.1f}% | {float(x['reuse_gain_pct']):.2f}% | "
+                          f"{float(x['search_gain_pct']):.2f}% [{float(x['search_min']):.2f}, {float(x['search_max']):.2f}] | {float(x['reuse_plus_search_pct']):.2f}% | {x['fallback']} |")
+        md.append("")
     md.append("\n## Figure data index\n")
-    md.append("- Fig. 1 (envelopes): `all_configs.csv` columns B_minus, B_plus, band_ratio, band_ratio_pool per config; the full curves per config in each unit's configs.jsonl (`cost_grid`).\n- Fig. 2 (resource accounting example): `e3/library_mech4x4.json` candidates with flows.\n- Fig. 3 (validation, efficiency): `e3/discriminability.json`, `e3/candidates.csv`, `e5/timing.csv`.\n- Fig. 4 (main case): `confirm/` unit after confirmation; `candidates.csv`, `runs.csv` of that unit.\n- Fig. 5 (discriminability, ablation): `e3/library_*.json`, `e3/ablation_*.json`.\n- Fig. 6 (scaling and conditions): `e2_*/summary.csv`, `e1a/summary.csv`, `e1s/summary.csv`, `e4/summary.csv`, `e1t/summary.csv`, every unit's `cost_grid.csv`.\n")
+    md.append("- Fig. 1 (envelopes): `all_configs.csv` columns B_minus, B_plus, band_ratio, band_ratio_pool per config; the full curves per config in each unit's configs.jsonl (`cost_grid`); the reference's curve in `confirm/cost_grid.csv`.\n"
+              "- Fig. 2 (resource accounting example): `e3_k2/library_mech4x4.json` candidates with flows (kappa 2).\n"
+              "- Fig. 3 (validation, efficiency): `e3_k2/discriminability.json`, `e3_k2/candidates.csv` (BookSim at concentration 4), `e5/timing.csv`; the kappa = 1 corner in `e3/`.\n"
+              "- Fig. 4 (main case): `confirm/summary.csv` (the row of the chosen configuration), `confirm/candidates.csv` (the 500-fill pool and the rules), `confirm/runs.csv` (30 runs per configuration).\n"
+              "- Fig. 5 (discriminability, ablation): `e3_k2/library_*.json`, `e3_k2/ablation_*.json`; the 544-die reference ablation at kappa 2 in `e3/ablation_ref_k2.json`.\n"
+              "- Fig. 6 (scaling and conditions): `e2_*/summary.csv`, `e1b/summary.csv`, `e1a/summary.csv`, `e1s/summary.csv`, `e4/summary.csv`, `e1t/summary.csv`; bandwidth response per configuration in `confirm/cost_grid.csv` and every unit's `cost_grid.csv`; reuse in `e6_reuse/*.csv` (and `e6_reuse_500/` where present).\n")
     open(os.path.join(V3, "REPORT.md"), "w").write("\n".join(md))
     print("->", os.path.join(V3, "REPORT.md"), len(rows), "configs")
 

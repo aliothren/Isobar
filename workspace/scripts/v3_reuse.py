@@ -43,8 +43,10 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--lengths", default="128,512,1024")
     ap.add_argument("--n-random", type=int, default=100)
+    ap.add_argument("--out", default=OUT, help="output directory (default analysis/v3/e6_reuse)")
     args = ap.parse_args()
-    os.makedirs(OUT, exist_ok=True)
+    OUT_DIR = args.out
+    os.makedirs(OUT_DIR, exist_ok=True)
     rec = load_record(args.unit, args.config)
     spec = rec["spec"]
     frozen = ss.Pi.from_json(rec["search"]["runs"][rec["search"]["headline"]]["best_pi"])
@@ -115,8 +117,8 @@ def main():
                            "delta_search_minus_reuse_pts": search_gain - reuse_gain})
             print(f"[{args.config}] {phase} S={S}: strongest {strongest} {t_base*1e3:.1f} ms | reuse {reuse_gain:.2f}% | search {search_gain:.2f}% [{min(gains):.2f},{max(gains):.2f}] | fallback {fallback} | share {rows[strongest]['H_s']/t_base*100:.1f}%", flush=True)
     res = {"config_id": args.config, "unit": args.unit, "frozen_layout": rec["search"]["headline"], "spec": spec, "grid": rec["grid"], "points": points}
-    json.dump(res, open(os.path.join(OUT, f"{args.config}.json"), "w"), indent=1)
-    with open(os.path.join(OUT, f"{args.config}.csv"), "w", newline="") as f:
+    json.dump(res, open(os.path.join(OUT_DIR, f"{args.config}.json"), "w"), indent=1)
+    with open(os.path.join(OUT_DIR, f"{args.config}.csv"), "w", newline="") as f:
         w = csv.writer(f); w.writerow(["phase", "S", "status", "account", "strongest", "T_base_ms", "comm_share_ref_pct", "reuse_T_ms", "reuse_gain_pct", "search_T_ms", "search_gain_pct", "search_min", "search_max", "reuse_plus_search_pct", "fallback"])
         for p in points:
             if p["status"] != "done":
@@ -124,7 +126,7 @@ def main():
             w.writerow([p["phase"], p["S"], "done", p["account"], p["strongest"], f"{p['T_base_s']*1e3:.3f}", f"{p['comm_share_ref']*100:.2f}", f"{p['reuse']['T_s']*1e3:.3f}",
                         f"{p['reuse']['gain_pct']:.3f}", f"{p['search']['T_s']*1e3:.3f}", f"{p['search']['gain_pct']:.3f}", f"{p['search']['gain_range_pct'][0]:.3f}",
                         f"{p['search']['gain_range_pct'][1]:.3f}", f"{p['reuse_plus_search_gain_pct']:.3f}", p["fallback_to_frozen"]])
-    print("->", OUT)
+    print("->", OUT_DIR)
 
 
 if __name__ == "__main__":

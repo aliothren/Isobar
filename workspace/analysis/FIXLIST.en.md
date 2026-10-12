@@ -7328,3 +7328,14 @@ port-bound corner (every good seating on the port floor), so every
 comparison is made at the main port ratio; the kappa = 1 E3 runs are
 kept apart under analysis/v3/e3/. docker-compose.yaml: restart
 unless-stopped.
+Confirmation list overwrite 2026-10-12: v3_report.py rewrote
+analysis/v3/confirm_specs.json with its automatic top 5 every time it
+ran, so the five specs appended by hand on 10-09 were dropped before the
+second confirmation launch (which therefore added nothing) and the two
+reuse runs that depended on them failed with KeyError. The generator now
+writes its list to confirm_specs_auto.json and never overwrites an
+existing confirm_specs.json; the five configurations were run on 10-12
+(all ten confirmations in analysis/v3/confirm/). v3_reuse.py gains --out
+so a 500-fill rerun of the reference (analysis/v3/e6_reuse_500/) does
+not overwrite the 100-fill record. REPORT.md gains the confirmation and
+reuse tables and the figure data index points at the kappa 2 E3 set.
