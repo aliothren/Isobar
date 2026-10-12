@@ -740,7 +740,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
            save_comm=True, comm_dir=cc.DEFAULT_COMM_DIR,
            hist_source=DEFAULT_HIST_SOURCE,
            value_mode="uniform", value_source="synthetic",
-           value_spread=cvmod.DEFAULT_SPREAD):
+           value_spread=cvmod.DEFAULT_SPREAD, strict_traffic=True):
     """Run one op on the MLX die hierarchy with its shape, attach write cost +
     latency. Returns a dict whose `output_dir` feeds crossbar_stats / crossbar_comm.
 
@@ -915,9 +915,22 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
     # [max, sum]: max = perfect overlap (double-buffered), sum = zero overlap.
     # Both ends are returned (O7 bracket); the max end is the headline.
     # All-zero unless a fabric link carries a bandwidth (default: none do).
-    flows_q, _, _, _ = cc.build_flows(res.output_dir, verbose=False,
-                                      fabric=mlx.FABRIC, placement=pl)
-    occ = cc.link_occupancy(flows_q, mlx.FABRIC, res.cycle_seconds)
+    traffic_guard_error = None
+    try:
+        flows_q, _, _, _ = cc.build_flows(res.output_dir, verbose=False,
+                                          fabric=mlx.FABRIC, placement=pl)
+        occ = cc.link_occupancy(flows_q, mlx.FABRIC, res.cycle_seconds)
+    except ValueError as e:
+        # The traffic extraction's conservation guard refused this mapping.
+        # By default that is an error (the guard is the platform's counting
+        # discipline); an account-measurement caller may pass
+        # strict_traffic=False to keep the compute, write and energy readings
+        # (all computed above, independent of the flow decomposition) and
+        # record the refusal instead.
+        if strict_traffic:
+            raise
+        traffic_guard_error = f"{type(e).__name__}: {e}"
+        occ = {"serialization_s": 0.0, "bottleneck": None}
     contention_lat = occ["serialization_s"]
     total_lat = wr_lat + max(compute_lat, contention_lat) + dist_lat
     total_lat_sum = wr_lat + compute_lat + contention_lat + dist_lat
@@ -968,6 +981,7 @@ def run_op(op: Op, place_fn=pa.place_grid, e_write=E_WRITE_PER_CELL_J,
         "total_latency_s": total_lat,
         "total_latency_sum_s": total_lat_sum,
         "comm_files": comm_files,                     # (csv, json) of per-pair flows
+        "traffic_guard_error": traffic_guard_error,   # None unless strict_traffic=False caught a refusal
         "levels": r["levels"],                        # perceived components (unit_pJ ...)
         "value_mode": value_mode,
         "crossbar_value": crossbar_value,             # per-crossbar energy spread or None

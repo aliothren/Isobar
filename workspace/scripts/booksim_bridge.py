@@ -85,10 +85,50 @@ def packets_for(volume_bytes):
 MESH_K = 6                 # the bridge's default grid (the Simba NoP)
 
 
-def _write_config(path, flow_path, extra=None, k=MESH_K):
-    lines = [
-        "topology = mesh;", f"k = {k};", "n = 2;",
-        "routing_function = dor;",
+def cmesh_address(x, y, t, k, c=4):
+    """BookSim cmesh terminal address of terminal t (0..c-1) of the router at
+    (x, y) on a k x k router grid with concentration c = cX x cY (cX = cY =
+    sqrt(c)): address = (y cY + ty) (cX k) + (x cX + tx) -- the inverse of
+    CMesh::NodeToRouter."""
+    cx = int(round(c ** 0.5)); tx, ty = t % cx, t // cx
+    return (y * cx + ty) * (cx * k) + (x * cx + tx)
+
+
+def split_flows_kappa(flows, k, kappa):
+    """kappa = c terminal channels per die (V3, 2026-10-09): each die becomes
+    a cmesh router with c terminals; a flow's packets are spread evenly over
+    the c (source terminal i -> destination terminal i) pairs, so the die's
+    injection and ejection capacity is c link channels while every mesh
+    channel stays one link. kappa must be a perfect square (cmesh needs
+    cX = cY); 4 stands in for the kappa >= 2 regime, where ports never bind."""
+    c = int(kappa)
+    out = []
+    for s, d, n in flows:
+        sx, sy, dx, dy = s % k, s // k, d % k, d // k
+        for t in range(c):
+            share = n // c + (1 if t < n % c else 0)
+            if share:
+                out.append((cmesh_address(sx, sy, t, k, c), cmesh_address(dx, dy, t, k, c), share))
+    return out
+
+
+def _write_config(path, flow_path, extra=None, k=MESH_K, kappa=1):
+    if int(kappa) > 1:
+        c = int(kappa); cx = int(round(c ** 0.5))
+        assert cx * cx == c, "cmesh concentration must be a perfect square"
+        # Allocators (V3, 2026-10-09): BookSim's default separable iSLIP
+        # allocator starves a shared output channel under several local
+        # inputs (a 3-flow single-channel test at c = 4 reads 1.37x the
+        # channel bound), while the wavefront (maximal-matching) allocator
+        # reaches it (1.003x; single-flow 1.002x at either setting). The
+        # concentrated runs therefore use wavefront so that the port model,
+        # not the router allocator, is what differs from the kappa = 1 runs.
+        lines = ["topology = cmesh;", f"k = {k};", "n = 2;", f"c = {c};", f"xr = {cx};", f"yr = {cx};",
+                 "routing_function = dor_no_express;", "use_noc_latency = 0;",
+                 "sw_allocator = wavefront;", "vc_allocator = wavefront;"]
+    else:
+        lines = ["topology = mesh;", f"k = {k};", "n = 2;", "routing_function = dor;"]
+    lines += [
         f"traffic = file({flow_path});",
         "sim_type = batch;",
         "batch_size = 1;",             # overridden per source by the patch
@@ -115,7 +155,7 @@ _DURATION = re.compile(r"Overall min batch duration = (\d+)")
 
 
 def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES,
-              k=MESH_K):
+              k=MESH_K, kappa=1):
     """flows: [(src_node, dst_node, n_packets)] on a k x k mesh (node =
     y*k+x, matching the repo's row-major die table; k defaults to the
     Simba NoP's 6). Returns completion cycles (inject + drain) and
@@ -129,6 +169,8 @@ def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES,
     with open(f"/tmp/h_{tag}", "w") as f:      # host-side scratch, copied in
         pass
     hostflow = f"/tmp/hostflows_{tag}"
+    if int(kappa) > 1:
+        flows = split_flows_kappa(flows, k, kappa)
     with open(hostflow, "w") as f:
         for s, d, n in flows:
             f.write(f"{s} {d} {n}\n")
@@ -136,13 +178,15 @@ def run_batch(flows, extra=None, latency_channel_cycles=HOP_CHANNEL_CYCLES,
     ex = dict(extra or {})
     if latency_channel_cycles != HOP_CHANNEL_CYCLES:
         ex.setdefault("mesh_channel_latency", latency_channel_cycles)
-    if IN_CONTAINER:
+    if IN_CONTAINER or os.access(BOOKSIM, os.X_OK):
+        # inside the container, or on a host where the vendored binary runs
+        # directly (its shared libraries are the stock ones): no docker hop
         os.replace(hostflow, flow_path)
-        _write_config(cfg_path, flow_path, ex, k)
+        _write_config(cfg_path, flow_path, ex, k, kappa)
         out = subprocess.run([BOOKSIM, cfg_path],
                              capture_output=True, text=True)
     else:
-        _write_config(hostcfg, flow_path, ex, k)
+        _write_config(hostcfg, flow_path, ex, k, kappa)
         subprocess.run(["docker", "cp", hostflow, f"{CONTAINER}:{flow_path}"],
                        check=True, capture_output=True)
         subprocess.run(["docker", "cp", hostcfg, f"{CONTAINER}:{cfg_path}"],
@@ -193,27 +237,34 @@ def lam(t_book_s, t_opt_s, t_pess_s, completion_s=None):
             "bracket_width_s": width}
 
 
-def flit_bounds(flows, k=MESH_K):
+def flit_bounds(flows, k=MESH_K, kappa=1):
     """The bridge-caliber reference bounds (cycles): busiest mesh channel
     (x-first XY, non-dedup unicasts) and the busiest injection channel --
     day-2 rails use max() of these consistently on both ends."""
     seg = {}
     inj = {}
+    ej = {}       # V3 (2026-10-09): the ejection port is a resource too (a 2-into-1 pattern reads 2x the channel bound without it)
     for s, d, n in flows:
         sx, sy = s % k, s // k
         dx, dy = d % k, d // k
         x, y = sx, sy
         path = []
+        # full-duplex channels: the two directions of a segment are
+        # different channels (V3 fix, 2026-10-09: the earlier key had no
+        # direction and summed opposite-direction flows onto one channel,
+        # which overstated the bound wherever flows cross)
         while x != dx:
             step = 1 if dx > x else -1
-            path.append((("h", min(x, x + step), y)))
+            path.append((("h", min(x, x + step), y, step)))
             x += step
         while y != dy:
             step = 1 if dy > y else -1
-            path.append((("v", x, min(y, y + step))))
+            path.append((("v", x, min(y, y + step), step)))
             y += step
         for e in path:
             seg[e] = seg.get(e, 0) + n * PACKET_FLITS
         inj[s] = inj.get(s, 0) + n * PACKET_FLITS
+        ej[d] = ej.get(d, 0) + n * PACKET_FLITS
     return {"channel_bound_cycles": max(seg.values(), default=0),
-            "injection_bound_cycles": max(inj.values(), default=0)}
+            "injection_bound_cycles": int(math.ceil(max(inj.values(), default=0) / int(kappa))),
+            "ejection_bound_cycles": int(math.ceil(max(ej.values(), default=0) / int(kappa)))}

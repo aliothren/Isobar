@@ -94,9 +94,13 @@ class Workload2p7B:
         self.pl = pm.sequential_fill(self.fab)
         self.die_ic = ic.build(self.fab, "die", self.pl)
 
+    # the tiler's split preference; the V3 tiling variants override it
+    tiling_dims = ("M", "C")
+
     def inventory(self):
         return ss.inventory_from_block_chain(self.cfg, self.S,
-                                             self.fab.level("die").per_parent)
+                                             self.fab.level("die").per_parent,
+                                             dims=self.tiling_dims)
 
     def layer_terms_s(self, phase):
         """(compute, write, elementwise) -- split so the DEVICE-SCALE knob
@@ -124,7 +128,8 @@ class Workload2p7B:
         """Per-boundary dicts (words, hops stats, surplus, into-segment
         index), block_die_flows conventions verbatim, wrap excluded."""
         base = lw.block_chain(self.cfg, self.S, phase, on_chip=True,
-                              max_dies=self.fab.level("die").per_parent)
+                              max_dies=self.fab.level("die").per_parent,
+                              dims=getattr(self, "tiling_dims", ("M", "C")))
         chain, seating = [], {}
         for li in range(self.cfg.n_layers):
             for e in base:
@@ -374,7 +379,8 @@ class ScoreSession:
 
     def _chain(self, phase):
         base = lw.block_chain(self.W.cfg, self.W.S, phase, on_chip=True,
-                              max_dies=self.W.fab.level("die").per_parent)
+                              max_dies=self.W.fab.level("die").per_parent,
+                              dims=getattr(self.W, "tiling_dims", ("M", "C")))
         names = [f"{e['name']}@L{li}" for li in range(self.W.cfg.n_layers)
                  for e in base]
         entries = {f"{e['name']}@L{li}": e for li in range(self.W.cfg.n_layers)

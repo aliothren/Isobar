@@ -104,7 +104,8 @@ def handoff_flows(W, pi, phase):
     """[(into-set name, flows)] for every hand-off of the chain, in chain
     order, the wrap boundary excluded (the evaluator's convention)."""
     base = lw.block_chain(W.cfg, W.S, phase, on_chip=True,
-                          max_dies=W.fab.level("die").per_parent)
+                          max_dies=W.fab.level("die").per_parent,
+                          dims=getattr(W, "tiling_dims", ("M", "C")))
     names = [f"{e['name']}@L{li}" for li in range(W.cfg.n_layers) for e in base]
     entries = {f"{e['name']}@L{li}": e for li in range(W.cfg.n_layers) for e in base}
     out = []

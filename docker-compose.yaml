@@ -32,6 +32,7 @@
 services:
   tutorial:
     hostname: tutorial
+    restart: unless-stopped
     image: timeloopaccelergy/timeloop-accelergy-pytorch:latest-${DOCKER_ARCH}
     ports:
       - "8888:8888"

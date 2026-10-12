@@ -7303,3 +7303,28 @@ Fig. 1 legend, second pass: row spacing 0.9 -> 0.45 and the legend 0.16 in
 closer under the axis titles (gap 0.28 -> 0.12 in in the figure set);
 the panels unchanged (5.309 x 3.325 in, 0.30 in top margin), the saved
 height taken off the figure (4.8 -> 4.6 in).
+V3 SUPPLEMENTARY CAMPAIGN 2026-10-08 to 10-12 (author's request; plan in
+analysis/v3/v3_experiment_plan.md, record in analysis/v3/NOTES.md and the
+generated analysis/v3/REPORT.md): the cross-configuration, scaling,
+tiling, workpoint, discriminability, ablation, timing, confirmation and
+reuse experiments behind outline V3. Protocol: random pools of 100 (500
+for confirmation) saved whole; starts = strongest named rule, strongest
+random of the pool, random seed 0; 5 seeds (10 new for confirmation);
+budget max(1200, ceil(1200 n/544)); normalized objective T/T_base with
+t0 = 0.0094396. Code: scripts/v3_sweep.py (driver; cost grid by the
+separable model with the ordering check), v3_measure_accounts.py and
+v3_attention_calib.py (mapper accounts for 52 (d, dh, d_ff, S) points),
+v3_discrim.py (candidate libraries, tie groups, BookSim, ablations),
+v3_timing.py, v3_reuse.py, v3_report.py. Platform changes: run_op gains
+strict_traffic (the traffic guard can be recorded instead of raised when
+only compute, write and energy are needed); the tiler's split preference
+(tiling_dims) threads through inventory, boundaries, baselines and the
+CLI; the BookSim bridge gains a port ratio via cmesh concentration (c
+terminals per die, packets spread over terminal pairs), the ejection
+bound, wavefront allocators for concentrated runs, and runs the binary
+locally when executable; vendored patch 0002 makes cmesh honour the
+channel latency knob. Finding behind the protocol: kappa = 1 is the
+port-bound corner (every good seating on the port floor), so every
+comparison is made at the main port ratio; the kappa = 1 E3 runs are
+kept apart under analysis/v3/e3/. docker-compose.yaml: restart
+unless-stopped.

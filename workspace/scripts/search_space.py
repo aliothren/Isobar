@@ -80,13 +80,13 @@ class Pi:
         return segs
 
 
-def chain_inventory(cfg, S: int, max_dies: int):
+def chain_inventory(cfg, S: int, max_dies: int, dims=("M", "C")):
     """The STANDING RULE's die-set inventory for one block: [(name,
     n_dies)] -- n_dies is the TILER's answer (block_chain consults
     plan_spatial), never capacity arithmetic (amendment 1 / O10)."""
     return [(e["name"], e["n_dies"])
             for e in lw.block_chain(cfg, S, "prefill", on_chip=True,
-                                    max_dies=max_dies)]
+                                    max_dies=max_dies, dims=dims)]
 
 
 # ---- inventories: the die-set granularity is DECLARED BY THE WORKLOAD
@@ -95,9 +95,11 @@ def chain_inventory(cfg, S: int, max_dies: int):
 # seats per-op sets [block_chain], the 355M class seats per-UNIT under
 # the C13 two-dies-per-layer co-residency rule; legal() consumes the
 # inventory, never re-derives it).
-def inventory_from_block_chain(cfg, S: int, max_dies: int):
-    """{'op@L{i}': n_dies} for L blocks under the per-op standing rule."""
-    inv = chain_inventory(cfg, S, max_dies)
+def inventory_from_block_chain(cfg, S: int, max_dies: int, dims=("M", "C")):
+    """{'op@L{i}': n_dies} for L blocks under the per-op standing rule.
+    `dims` = the tiler's split-dimension preference (the V3 tiling variants);
+    the default is the standing column-first rule."""
+    inv = chain_inventory(cfg, S, max_dies, dims)
     return {f"{name}@L{li}": n
             for li in range(cfg.n_layers) for name, n in inv}
 

@@ -52,7 +52,8 @@ def _chain_info(W):
         layer = {n: int(n[4:]) for n in names}
     else:
         base = lw.block_chain(W.cfg, W.S, "prefill", on_chip=True,
-                              max_dies=W.fab.level("die").per_parent)
+                              max_dies=W.fab.level("die").per_parent,
+                              dims=getattr(W, "tiling_dims", ("M", "C")))
         per = {e["name"]: e["in_words"] for e in base}
         words = {n: per[n.rsplit("@L", 1)[0]] for n in names}
         layer = {n: int(n.rsplit("@L", 1)[1]) for n in names}
