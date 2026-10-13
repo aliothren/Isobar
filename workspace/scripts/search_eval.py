@@ -85,9 +85,9 @@ class Workload2p7B:
             self.fab = _with_die_weave(self.fab, die_weave)
         stored = json.load(open(os.path.join(A, "scale_2p7b_per_op.json")))
         c = stored["config"]
-        self.cfg = lw.GptConfig(d_model=c["d_model"], n_heads=c["n_heads"],
-                                d_ff=c["d_ff"], n_layers=c["n_layers"],
-                                name=c["name"])
+        self.cfg = lw.GptConfig(d_model=c["d_model"], n_heads=c["n_heads"], d_ff=c["d_ff"],
+                                n_layers=c["n_layers"], name=c["name"],
+                                **{k: c[k] for k in ("head_dim", "n_kv_heads", "ffn_gated", "activation") if k in c})
         self.S = c["S"]
         self.ops = {ph: {r["name"]: r for r in rows}
                     for ph, rows in stored["phases"].items()}
@@ -199,29 +199,11 @@ class Workload355M:
 
 
 def _one_boundary_flows(prev_e, e, prod_slots, cons_slots, fab):
-    """ONE boundary's node-to-node flows -- the block_die_flows convention
-    verbatim (piece/width by the producer's split; every consumer die
-    receives the whole tensor), without the modulo-wrap validation a
+    """ONE boundary's node-to-node flows -- llm_workload.boundary_flows, the
+    single convention of the full path, without the modulo-wrap validation a
     two-entry mini-chain would trip. The incremental == full pin is the
     standing guard that this stays identical to the full path."""
-    psum = getattr(fab, "psum_word_bytes", 2.0)
-    lv = fab.level("die")
-    if prev_e["out_words"] != e["in_words"]:
-        raise ValueError(f"{prev_e['name']} -> {e['name']}: words mismatch")
-    if prev_e["split"] == "C":
-        piece, width = float(prev_e["out_words"]), psum
-    else:
-        piece, width = prev_e["out_words"] / len(prod_slots), 1.0
-    flows = []
-    for a in prod_slots:
-        for b in cons_slots:
-            if a == b:
-                continue
-            flows.append({"level": lv.link.name, "level_name": "die",
-                          "nodes": (a, b), "src": f"{prev_e['name']}@{a}",
-                          "dst": f"{e['name']}@{b}", "volume": float(piece),
-                          "width": width, "distance": 0.0})
-    return flows
+    return lw.boundary_flows(prev_e, e, list(prod_slots), list(cons_slots), fab)
 
 
 def resource_loads(flows, icl, ports: bool = True, kappa: float = 1.0):

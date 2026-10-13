@@ -7339,3 +7339,67 @@ existing confirm_specs.json; the five configurations were run on 10-12
 so a 500-fill rerun of the reference (analysis/v3/e6_reuse_500/) does
 not overwrite the 100-fill record. REPORT.md gains the confirmation and
 reuse tables and the figure data index points at the kappa 2 E3 set.
+NEXT-ROUND UNIT 1 2026-10-12 (author's request file of 2026-10-12;
+plan analysis/v4_experiment_plan.md; notes analysis/v4/NOTES.md): the V3
+records re-read without new searches. scripts/v4_propagation.py checks
+the separable formula T = N/rate + F + P + A/B against every recorded
+candidate and endpoint (7e-16), reports the propagation share at the main
+point and over the grid, the boundary with P (A/(R - P)) against the
+closed form, the equivalent bandwidth with P, and splits the ordering
+check into full order / strongest identity / gain sign along the rate
+and bandwidth axes. scripts/v4_e3_align.py re-scores every saved E3
+seating at kappa 1 / 2 / 4 against the recorded BookSim c = 4 runs,
+counts port-bound hand-offs, regenerates the ablation tables with the
+protocol statistic and explicit n/a. scripts/v4_tables.py: physical
+configurations vs records (protocol ids, alias grids), the distribution
+over distinct configurations, old vs new endpoints of the reference under
+one evaluator, pool-size denominators, energy outliers and non-dominance,
+ring ratio, tiler thresholds, coverage of the previous plan.
+scripts/v4_port_binding.py: binding resource per hand-off of the
+confirmed layouts. scripts/v4_objective_control.py: T/T_base vs
+(T - R)/(T_base - R) objectives, cold vs warm (frozen prefill layout)
+starts at prefill and decode. Corrections applied in analysis/v3/NOTES.md
+(unit names e1s / e1t / e4, ring 1.18x not 2 to 3x, E3 candidate counts
+69 to 74, tiler thresholds, kappa 3/4/8 within 0.5 points, confirmation
+wall times). Blocked until the docker socket permission is restored:
+items 2, 3, 4.1, 4.5 (mapper accounts for the real models, capacities and
+tilings).
+Die-capacity variants 2026-10-13 (next-round item 3): the per-die tiling
+menu in llm_workload._die_tiling was hard-coded to the base die (macro 8 x
+core 4 x crossbar 8), so a capacity variant changed the capacity floor
+(dies_for_op) and the mapper's physical die but never the slice a die may
+take: a 2x die kept the base die counts (the mapper then replicated the
+slice over the spare arrays and halved the compute), a 1/2x die took
+slices beyond its arrays. The menu now follows the fabric's per-parent
+counts (identical on the base die; 443 tests unchanged). The first
+variant accounts and the e8_cap records made with the fixed menu are kept
+apart (analysis/v4/accounts/old_fixed_fanout/, analysis/v4/
+e8_cap_old_fixed_fanout/) and are not used. Capacity-axis records now go
+to analysis/v4/e8_cap_m{N}/ (one process per macro count, CIMSIM_FABRIC
+set to the variant so the tiler, the account and the evaluator agree).
+Six macros per die (mesh 2 x 3) has no valid Timeloop mapping with the
+base menu; its status is recorded per model.
+Hand-off flow convention 2026-10-13 (next-round item 4.1): the two flow
+builders (llm_workload.block_die_flows for the full path,
+search_eval._one_boundary_flows for the incremental one) now share one
+function, llm_workload.boundary_flows. New case: a consumer that is itself
+row-split receives only the slice of the input its dies own (the overlap
+of the producer's column block with the consumer's row block, or 1/n_c of
+every producer's partial sums when the producer is row-split too). The
+frozen convention (every consumer receives the whole tensor) is unchanged
+for every column-split or single-die consumer, so no earlier headline
+moves (reference layout 1908.819408 ms re-scored to the digit; 443
+tests). The V3 unit e4 'row' records (every operator row-split) were made
+under the whole-tensor convention and over-count the row-split hand-offs
+by the consumer count; they are superseded by the next-round tiling unit
+(analysis/v4/e7_tiling, per-operator split preferences with their own
+mapper accounts, suffix _tl{row,mixed,mixed2}). block_chain and the
+mapper call accept a per-operator split preference (dims as a dict).
+Capacity-variant fabrics 2026-10-13: the variants carried the base file's
+24-die package, and the mapper's per-operator run refuses an operator
+that spans more dies than the package has (a 1/2x die makes Gemma's ffn1
+span 48 dies, a 3/4x die OPT-13B's 80). The variants now declare a
+144-die package (12 x 12); the die count plays no part in the
+per-operator account. V3 unit e4 'row' records re-run under the unified
+hand-off convention (see the previous entry); the whole-tensor rows are
+kept in analysis/v3/e4/configs_row_whole_tensor_convention.jsonl.

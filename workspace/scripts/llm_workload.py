@@ -84,6 +84,30 @@ class GptConfig:
     n_layers: int = 24
     name: str = "gpt2-medium"
     vocab: int = 50257          # embedding / LM head (GPT-2 BPE)
+    # Real-model fields (next-round item 2; every default reproduces the
+    # GPT-2 / 2.7B-class block above, so no earlier result changes):
+    head_dim: int = None        # None -> d_model // n_heads (Gemma: 256 with d_model 3072, 16 heads)
+    n_kv_heads: int = None      # None -> n_heads (grouped K/V: fewer resident K/V arrays)
+    ffn_gated: bool = False     # GeGLU / SwiGLU: two up-projections (gate, up) of width d_ff each, gated product into ffn2
+    activation: str = "gelu"    # "gelu" | "relu" (OPT) | "geglu" (set with ffn_gated)
+
+    @property
+    def dh(self) -> int:
+        return self.head_dim if self.head_dim else self.d_model // self.n_heads
+
+    @property
+    def kv_heads(self) -> int:
+        return self.n_kv_heads if self.n_kv_heads else self.n_heads
+
+    @property
+    def attn_width(self) -> int:
+        """n_heads x head_dim: the Q width and the out_proj input width (= d_model unless head_dim is set)."""
+        return self.n_heads * self.dh
+
+    def extra_fields(self) -> dict:
+        """The non-default real-model fields, for account records."""
+        return {k: getattr(self, k) for k in ("head_dim", "n_kv_heads", "ffn_gated", "activation")
+                if getattr(self, k) not in (None, False, "gelu")}
 
 
 @dataclass
@@ -96,6 +120,8 @@ class Op:
     N: int = 1
     write_cells: int = 0  # dynamic operand cells programmed into ReRAM / inference
     write_rows: int = 0   # DISTINCT wordlines those cells span -> serial SET pulses
+    out_M: int = None     # output width that leaves the die-set (None -> M); gated FFN: the gate x up product is formed on the die, so d_ff of the 2 d_ff columns leave
+    resident_N: int = None  # resident copies of the C x M operand (None -> N); grouped K/V: n_kv_heads arrays serve n_heads of compute
 
 
 def block_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
@@ -104,26 +130,29 @@ def block_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
     prefill : process all S query rows at once (P = S).
     decode  : process 1 new query row, attending over the S-long KV cache (P = 1).
     """
-    dh = cfg.d_model // cfg.n_heads
+    dh = cfg.dh
     Pq = S if phase == "prefill" else 1   # query rows this step
     Klen = S                              # keys/values ATTENDED over (compute shape)
+    Hq, Hkv, Wq = cfg.n_heads, cfg.kv_heads, cfg.attn_width
+    M_qkv = (Hq + 2 * Hkv) * dh           # Q (Hq dh) + K and V (Hkv dh each); = 3 d_model for the plain block
+    M_ffn1 = 2 * cfg.d_ff if cfg.ffn_gated else cfg.d_ff   # gate and up projections side by side (columns interleaved gate_j, up_j so that each die holds matching pairs)
     # Rows/cols NEWLY PROGRAMMED this step. ReRAM K/V arrays are resident and
     # APPEND-ONLY: prefill programs all S tokens; decode appends just the new
     # token. (Rewriting the whole cache per step would both contradict weight
     # residency and exceed ReRAM endurance within seconds of generation.)
     Kwrite = S if phase == "prefill" else 1
     return [
-        Op("qkv_proj", "static",  P=Pq, C=cfg.d_model, M=3 * cfg.d_model),
+        Op("qkv_proj", "static",  P=Pq, C=cfg.d_model, M=M_qkv),
         # K^T is mapped dh(rows) x Klen(cols): a new token is a new COLUMN, so its
         # dh cells land on dh DISTINCT wordlines -> dh serial SET pulses.
-        Op("qk^t",     "dynamic", P=Pq, C=dh,   M=Klen, N=cfg.n_heads,
-           write_cells=dh * Kwrite * cfg.n_heads, write_rows=dh),
+        Op("qk^t",     "dynamic", P=Pq, C=dh,   M=Klen, N=Hq, resident_N=Hkv,
+           write_cells=dh * Kwrite * Hkv, write_rows=dh),
         # V is mapped Klen(rows) x dh(cols): a new token is a new ROW, so its dh
         # cells share ONE wordline -> 1 serial SET pulse.
-        Op("av",       "dynamic", P=Pq, C=Klen, M=dh,   N=cfg.n_heads,
-           write_cells=Kwrite * dh * cfg.n_heads, write_rows=Kwrite),
-        Op("out_proj", "static",  P=Pq, C=cfg.d_model, M=cfg.d_model),
-        Op("ffn1",     "static",  P=Pq, C=cfg.d_model, M=cfg.d_ff),
+        Op("av",       "dynamic", P=Pq, C=Klen, M=dh,   N=Hq, resident_N=Hkv,
+           write_cells=Kwrite * dh * Hkv, write_rows=Kwrite),
+        Op("out_proj", "static",  P=Pq, C=Wq, M=cfg.d_model),
+        Op("ffn1",     "static",  P=Pq, C=cfg.d_model, M=M_ffn1, out_M=cfg.d_ff),
         Op("ffn2",     "static",  P=Pq, C=cfg.d_ff,    M=cfg.d_model),
     ]
 
@@ -166,9 +195,12 @@ def block_elementwise_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
         # softmax over each head's Pq x S score matrix: max pass, exp+sum pass,
         # normalise pass -> 3 glb passes; per element 1 LUT (exp), 2 adds, 1 mul
         ElementwiseOp("softmax", H * Pq * S, 3, adds=2, muls=1, luts=1, after="qk^t"),
-        # GELU on the FFN hidden activations: read + write; tanh approximation
-        # ~ 1 LUT + 3 mul + 2 add
-        ElementwiseOp("gelu", Pq * ff, 2, adds=2, muls=3, luts=1, after="ffn1"),
+        # the FFN activation on the hidden activations (read + write): GELU
+        # tanh approximation ~ 1 LUT + 3 mul + 2 add; ReLU (OPT) a compare;
+        # GeGLU (Gemma) reads gate and up, GELU on the gate, one product, writes
+        {"gelu": ElementwiseOp("gelu", Pq * ff, 2, adds=2, muls=3, luts=1, after="ffn1"),
+         "relu": ElementwiseOp("relu", Pq * ff, 2, adds=1, muls=0, luts=0, after="ffn1"),
+         "geglu": ElementwiseOp("geglu", Pq * ff, 3, adds=2, muls=4, luts=1, after="ffn1")}[cfg.activation],
         # two LayerNorms per block (pre-attention, pre-FFN): mean pass, variance
         # pass, normalise pass; per element ~ 3 adds, 2 muls, and an rsqrt LUT
         # amortised over the row
@@ -320,6 +352,15 @@ def unit_link_hops(fabric=None, assignment="snake", n_layers: int = None):
 ATTENTION_DIE = "attention"
 
 
+def dims_for(dims, op_name):
+    """The tiler's split preference for one operator: `dims` is a tuple for
+    every operator, or a dict {op_name: tuple} with "*" as the default (the
+    per-operator mixed variants of next-round item 4.1)."""
+    if isinstance(dims, dict):
+        return tuple(dims.get(op_name, dims.get("*", ("M", "C"))))
+    return tuple(dims)
+
+
 def block_chain(cfg: GptConfig, S: int, phase: str = "prefill", on_chip: bool = True,
                 max_dies: int = 24, dims=("M", "C")):
     """Data-flow order of one block's die-sets: [{name, kind, n_dies, split,
@@ -334,14 +375,17 @@ def block_chain(cfg: GptConfig, S: int, phase: str = "prefill", on_chip: bool = 
         if name == ATTENTION_DIE:
             chain.append({"name": name, "kind": "attention" if on_chip else "unit",
                           "n_dies": 1 if on_chip else 0, "split": None,
-                          "in_words": Pq * 3 * cfg.d_model,
-                          "out_words": Pq * cfg.d_model,
+                          "in_words": Pq * ops["qkv_proj"].M,
+                          "out_words": Pq * cfg.attn_width,
                           "ops": ["qk^t", "softmax", "av"]})
             continue
         op = ops[name]
-        n, dim, _ = plan_spatial(op, max_dies=max_dies, dims=dims)
+        n, dim, _ = plan_spatial(op, max_dies=max_dies, dims=dims_for(dims, name))
+        if op.out_M is not None and op.out_M != op.M and dim == "C":
+            raise ValueError(f"{name}: the gated product must be formed before the hand-off, which a row (C) split "
+                             f"cannot do (partial sums of gate and up would have to be reduced at the consumer first)")
         chain.append({"name": name, "kind": "static", "n_dies": n, "split": dim,
-                      "in_words": op.P * op.C, "out_words": op.P * op.M,
+                      "in_words": op.P * op.C, "out_words": op.P * (op.out_M if op.out_M is not None else op.M),
                       "ops": [name]})
     return chain
 
@@ -382,38 +426,68 @@ def seat_block(fabric, chain, style: str = "clustered", placement=None):
     return seating
 
 
+def boundary_pieces(p, e, n_prod, n_cons, psum):
+    """Volume (words) and width of the flow producer i -> consumer j for one
+    hand-off, by the two splits. Producer column split or one die: disjoint
+    pieces of the output; producer row split: partial sums of the whole
+    output at the partial-sum width, reduced at the consumer. A consumer
+    that is itself row-split (its input rows sharded over its dies) needs
+    only the slice of the input it owns: the overlap of producer i's column
+    block with consumer j's row block (column-split producer), or 1/n_cons
+    of every producer's partial sums (row-split producer). A consumer that is
+    not row-split receives the whole tensor (the frozen convention)."""
+    out = float(p["out_words"])
+    if e.get("split") != "C":
+        return ((out, psum) if p["split"] == "C" else (out / n_prod, 1.0)), None
+    if p["split"] == "C":
+        return (out / n_cons, psum), None
+    def overlap(i, j):
+        lo, hi = max(i / n_prod, j / n_cons), min((i + 1) / n_prod, (j + 1) / n_cons)
+        return max(0.0, hi - lo)
+    return (None, 1.0), lambda i, j: out * overlap(i, j)
+
+
+def boundary_flows(p, e, prod, cons, fabric):
+    """Node-to-node flows of ONE hand-off p -> e (producer dies prod, consumer
+    dies cons), the single convention behind block_die_flows (full path) and
+    the incremental evaluator."""
+    lv = fabric.level("die")
+    psum = getattr(fabric, "psum_word_bytes", 2.0)
+    if p["out_words"] != e["in_words"]:
+        raise ValueError(f"{p['name']} -> {e['name']}: {p['out_words']} words produced, {e['in_words']} consumed")
+    (piece, width), fn = boundary_pieces(p, e, len(prod), len(cons), psum)
+    flows = []
+    for i, a in enumerate(prod):
+        for j, b in enumerate(cons):
+            if a == b:
+                continue
+            vol = fn(i, j) if fn else piece
+            if vol <= 0:
+                continue
+            flows.append({"level": lv.link.name, "level_name": "die",
+                          "nodes": (a, b), "src": f"{p['name']}@{a}",
+                          "dst": f"{e['name']}@{b}", "volume": float(vol),
+                          "width": width, "distance": 0.0})
+    return flows
+
+
 def block_die_flows(chain, seating, fabric, psum_bytes=None):
     """Node-to-node die flows of every die-set's INPUT, from the previous
     die-set's owners (the first die-set's input comes from the last: the next
     layer's copy). {name: [flows]} for link_occupancy; each flow carries
     `width` (1.0 for activations; the fabric's partial-sum width when the
-    producer split its input rows)."""
+    producer split its input rows). See boundary_pieces for the convention."""
     from scripts import interconnect as ic_mod
-    lv = fabric.level("die")
-    psum = (getattr(fabric, "psum_word_bytes", 2.0) if psum_bytes is None
-            else float(psum_bytes))
     out, n = {}, len(chain)
+    fab = fabric
+    if psum_bytes is not None and float(psum_bytes) != getattr(fabric, "psum_word_bytes", 2.0):
+        import copy
+        fab = copy.copy(fabric); fab.psum_word_bytes = float(psum_bytes)
     for i, e in enumerate(chain):
         p = chain[(i - 1) % n]
         prod = seating.get(p["name"]) or [ic_mod.HUB]      # the unit sits at the attach point
         cons = seating.get(e["name"]) or [ic_mod.HUB]
-        if p["out_words"] != e["in_words"]:
-            raise ValueError(f"{p['name']} -> {e['name']}: {p['out_words']} words "
-                             f"produced, {e['in_words']} consumed")
-        if p["split"] == "C":          # partial sums of the whole output, reduced at the consumer
-            piece, width = float(p["out_words"]), psum
-        else:                          # column split / one die / the unit: disjoint pieces of the tensor
-            piece, width = p["out_words"] / len(prod), 1.0
-        flows = []
-        for a in prod:
-            for b in cons:
-                if a == b:
-                    continue
-                flows.append({"level": lv.link.name, "level_name": "die",
-                              "nodes": (a, b), "src": f"{p['name']}@{a}",
-                              "dst": f"{e['name']}@{b}", "volume": float(piece),
-                              "width": width, "distance": 0.0})
-        out[e["name"]] = flows
+        out[e["name"]] = boundary_flows(p, e, prod, cons, fab)
     return out
 
 
@@ -534,8 +608,9 @@ ENDURANCE_CYCLES = 1.0e8
 
 
 def op_weight_cells(op: Op) -> int:
-    """Physical cells the op's resident operand occupies."""
-    return op.C * op.M * op.N * CELLS_PER_WEIGHT
+    """Physical cells the op's resident operand occupies (grouped K/V: the
+    resident copies, not the compute copies)."""
+    return op.C * op.M * (op.resident_N if op.resident_N is not None else op.N) * CELLS_PER_WEIGHT
 
 
 def dies_for_op(op: Op) -> int:
@@ -620,8 +695,9 @@ def _die_tiling(c_res: int, m_res: int):
     """Closed-form spatial tiling of one die for a C_res x M_res weight slice.
 
     Rows are C-only (256/array); columns hold 256//CELLS_PER_WEIGHT = 128
-    weights of M per array. The fanout menu is macro 8 x core 4 x crossbar 8
-    = 256 array tiles, all powers of two -- so a non-power-of-two slice
+    weights of M per array. The fanout menu is the fabric's die, macro x core x
+    crossbar (8 x 4 x 8 = 256 array tiles on the base die, all powers of two;
+    a capacity variant changes the macro count) -- so a non-power-of-two slice
     (e.g. d=2560 shapes) must OVER-allocate: the per-level spatial factors
     must divide the slice dims, cover them within array capacity, and fit the
     fanouts jointly. Returns [(C_f, M_f) per level] minimising wasted tiles,
@@ -630,7 +706,7 @@ def _die_tiling(c_res: int, m_res: int):
     effect the capacity ceiling alone hides). Exists because the arch's
     greedy M-first maximize_dims can starve C and silently fall back to
     temporal weight tiling (= phantom reload) even for shapes that fit."""
-    fan = [8, 4, 8]                                  # macro, core, crossbar
+    fan = [mlx.N_MACROS_PER_DIE, mlx.N_CORES_PER_MACRO, mlx.CROSSBARS_PER_CORE]   # macro, core, crossbar: the fabric's die (8 x 4 x 8 on the base die; a capacity variant changes the macro count)
 
     def _divs(n):
         return [d for d in range(1, n + 1) if n % d == 0]

@@ -55,7 +55,9 @@ T0_NORM = 0.020 / 2.11870568800
 ALPHA = 0.996
 RATES = (1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32)
 BWS = (0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0, 4.0, 8.0, 12.5, 25.0, 50.0)
-TILINGS = {"col": ("M",), "colrow": ("M", "C"), "row": ("C", "M")}
+TILINGS = {"col": ("M",), "colrow": ("M", "C"), "row": ("C", "M"),
+           "mixed": {"*": ("M", "C"), "ffn2": ("C", "M")},            # item 4.1: the wide-input operator row-split, the rest column-split
+           "mixed2": {"*": ("M", "C"), "ffn2": ("C", "M"), "out_proj": ("C", "M")}}
 REF_D, REF_DH = 2560, 80
 
 
@@ -133,12 +135,13 @@ class V3Workload(se.Workload2p7B):
         self.fab = fabric
         c = account["config"]
         self.cfg = lw.GptConfig(d_model=c["d_model"], n_heads=c["n_heads"], d_ff=c["d_ff"],
-                                n_layers=c["n_layers"], name=c["name"])
+                                n_layers=c["n_layers"], name=c["name"],
+                                **{k: c[k] for k in ("head_dim", "n_kv_heads", "ffn_gated", "activation") if k in c})
         self.S = c["S"]
         self.ops = {ph: {r["name"]: r for r in rows} for ph, rows in account["phases"].items()}
         self.pl = pm.sequential_fill(self.fab)
         self.die_ic = ic.build(self.fab, "die", self.pl)
-        self.tiling_dims = tuple(tiling_dims)
+        self.tiling_dims = dict(tiling_dims) if isinstance(tiling_dims, dict) else tuple(tiling_dims)
         self.account_status = account.get("derivation", "measured")
 
 
@@ -180,7 +183,17 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
                        n_layers=spec["L"], name=spec.get("model_tag", f"d{spec['d']}"))
     S, phase = spec["S"], spec["phase"]
     # the account
-    if spec["d"] == REF_D and spec["dh"] == REF_DH and spec["d_ff"] == 10240 and S == 512:   # block-level: any L
+    if spec.get("account_path"):          # a real model's measured account (next-round item 2): the configuration comes from the account
+        if not os.path.exists(spec["account_path"]):
+            return {"config_id": spec["config_id"], "spec": spec, "status": "no account", "reason": f"missing {spec['account_path']}"}
+        account = json.load(open(spec["account_path"])); account_status = f"measured ({os.path.basename(spec['account_path'])})"
+        if not account.get("phases", {}).get(phase):
+            return {"config_id": spec["config_id"], "spec": spec, "status": "infeasible",
+                    "reason": account.get("infeasible", {}).get(phase, f"no {phase} account")}
+        c = account["config"]
+        cfg = lw.GptConfig(d_model=c["d_model"], n_heads=c["n_heads"], d_ff=c["d_ff"], n_layers=spec["L"], name=c["name"],
+                           **{k: c[k] for k in ("head_dim", "n_kv_heads", "ffn_gated", "activation") if k in c})
+    elif spec["d"] == REF_D and spec["dh"] == REF_DH and spec["d_ff"] == 10240 and S == 512:   # block-level: any L
         account = json.load(open(REF_ACCOUNT)); account_status = "measured (frozen 2.7B S=512)"
     else:
         measured = os.path.join(V3, "accounts", f"d{spec['d']}_dh{spec['dh']}_ff{spec['d_ff']}_S{S}.json")
@@ -195,9 +208,10 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
     account["config"]["n_layers"] = spec["L"]       # accounts are block-level; the depth is the spec's
     # capacity of the attention die: both attention operators co-resident
     att_cells = sum(lw.op_weight_cells(o) for o in lw.block_ops(cfg, S, phase) if o.kind == "dynamic")
-    if att_cells > lw.DIE_WEIGHT_CELLS:
+    att_cap = account.get("attention_die_capacity", {}).get("cells", lw.DIE_WEIGHT_CELLS)     # an assumed larger attention die is declared in the account
+    if att_cells > att_cap:
         return {"config_id": spec["config_id"], "spec": spec, "status": "infeasible",
-                "reason": f"attention K/V arrays {att_cells} cells > die {lw.DIE_WEIGHT_CELLS}"}
+                "reason": f"attention K/V arrays {att_cells} cells > die {att_cap}"}
     dims = TILINGS[spec["tiling"]]
     try:
         chain = lw.block_chain(cfg, S, phase, on_chip=True, max_dies=10 ** 6, dims=dims)
