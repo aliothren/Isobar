@@ -128,11 +128,14 @@ def proxies_of(handoffs, icl, kappa):
 
 
 # ------------------------------------------------------------------ instances
-def make_W(grid, L, S=512, kappa=1.0, phase="prefill"):
+def make_W(grid, L, S=512, kappa=1.0, phase="prefill", offload=False):
     fab = v3.make_fabric(grid, "mesh", "xy")
     acc = dict(REF); acc = json.loads(json.dumps(REF)); acc["config"]["n_layers"] = L
     W = v3.V3Workload(fab, acc, ("M", "C"))
     W.port_ratio = kappa
+    if offload:        # the central unit; its interface equals the die ports (kappa links) so that BookSim's c terminals per node express it
+        from scripts import offload as offload_mod, placement as pm
+        W.offload = offload_mod.build(pm.sequential_fill(fab).slots["die"], L, position="center", K=1, overrides={"link_bandwidth_gbps": BW * kappa})
     return W
 
 
@@ -266,9 +269,12 @@ def build_library(name, n_random, with_booksim, log=print):
             "layers2_8x8": dict(grid=(8, 8), L=2, phase="prefill", scale=0.01),
             "layer12x12": dict(grid=(12, 12), L=1, phase="prefill", scale=0.01),
             "decode6x6": dict(grid=(6, 6), L=1, phase="decode", scale=1.0),
-            "ref544": dict(grid=(24, 24), L=32, phase="prefill", scale=None)}[name]
+            "ref544": dict(grid=(24, 24), L=32, phase="prefill", scale=None),
+            "offload6x6": dict(grid=(6, 6), L=1, phase="prefill", scale=0.01, offload=True),        # one layer with the attention on the central unit
+            "offload_decode6x6": dict(grid=(6, 6), L=1, phase="decode", scale=1.0, offload=True),
+            "offload2_8x8": dict(grid=(8, 8), L=2, phase="prefill", scale=0.01, offload=True)}[name]
     phase, k = scen["phase"], scen["grid"][0]
-    W = make_W(scen["grid"], scen["L"], kappa=KAPPA_AN, phase=phase)
+    W = make_W(scen["grid"], scen["L"], kappa=KAPPA_AN, phase=phase, offload=scen.get("offload", False))
     mu = {phase: 1.0}
     only = scen.get("only_handoff")
 
@@ -286,7 +292,7 @@ def build_library(name, n_random, with_booksim, log=print):
         cands[f"random_s{s}"] = sb.generate("random", W, seed=s)
     # searches under four objectives from the best random, 3 seeds each, trajectory samples from the full one
     T0 = v3.T0_NORM
-    n_slots = W.fab.level("die").per_parent
+    n_slots = W.usable_slots() if getattr(W, "offload", None) is not None else W.fab.level("die").per_parent
     steps = 1200 if name != "ref544" else 1200
     t_eval = {n: se.score(p, W, mu=mu, d2d_gbps=BW).t_opt_s for n, p in cands.items()}
     start = min(cands, key=t_eval.get)

@@ -96,47 +96,103 @@ class Workload2p7B:
 
     # the tiler's split preference; the V3 tiling variants override it
     tiling_dims = ("M", "C")
+    # attention offload (scripts/offload.OffloadConfig) or None = the attention die with K/V in ReRAM
+    offload = None
+
+    @property
+    def on_chip(self):
+        return self.offload is None
+
+    def hub_nodes(self):
+        return () if self.offload is None else tuple(self.offload.hubs)
+
+    def usable_slots(self):
+        reserved = self.offload.reserved_slots() if self.offload is not None else set()
+        return [i for i in range(self.fab.level("die").per_parent) if i not in reserved]
 
     def inventory(self):
         return ss.inventory_from_block_chain(self.cfg, self.S,
                                              self.fab.level("die").per_parent,
-                                             dims=self.tiling_dims)
+                                             dims=self.tiling_dims, on_chip=self.on_chip)
+
+    def _static_ops(self, phase):
+        """The account rows the dies execute: every operator on chip; the
+        static operators only when the attention is offloaded."""
+        rows = self.ops[phase].values()
+        return rows if self.on_chip else [r for r in rows if r["kind"] != "dynamic"]
+
+    def _elementwise(self, phase):
+        ops = lw.block_elementwise_ops(self.cfg, S=self.S, phase=phase)
+        return ops if self.on_chip else [eo for eo in ops if eo.name not in lw.ATTENTION_ELEMENTWISE]
+
+    def unit_terms(self, phase):
+        """The offloaded attention's per-layer unit cost (None on chip). Head
+        mode: every unit works its head share in parallel, so the layer's
+        unit time is one unit's share."""
+        if self.on_chip:
+            return None
+        from scripts import offload as offload_mod
+        off = self.offload
+        if off.split == "head":
+            return offload_mod.unit_layer_cost(self.cfg, self.S, phase, off.unit, heads=self.cfg.n_heads // off.K, kv_heads=self.cfg.kv_heads // off.K)
+        return offload_mod.unit_layer_cost(self.cfg, self.S, phase, off.unit)
+
+    def chain_entries(self, phase):
+        """The block chain under the workload's attention setting, the
+        attention entry carrying the head-split layout when offloaded over
+        several units."""
+        base = lw.block_chain(self.cfg, self.S, phase, on_chip=self.on_chip,
+                              max_dies=self.fab.level("die").per_parent,
+                              dims=getattr(self, "tiling_dims", ("M", "C")))
+        if self.offload is not None and self.offload.split == "head":
+            base = [head_mode_entry(e, self.cfg, self.offload.K) if e["name"] == lw.ATTENTION_DIE else e for e in base]
+        return base
 
     def layer_terms_s(self, phase):
         """(compute, write, elementwise) -- split so the DEVICE-SCALE knob
         (O17 semantics) can shrink the MATRIX part alone: the whole stack
-        does not scale, the fixed terms (K/V write, digital unit) stay."""
-        elw = sum(lw.elementwise_cost(eo, self.fab.digital)["latency_s"]
-                  for eo in lw.block_elementwise_ops(self.cfg, S=self.S,
-                                                     phase=phase))
-        comp = sum(r["compute_s"] for r in self.ops[phase].values())
-        wr = sum(r["write_s"] for r in self.ops[phase].values())
+        does not scale, the fixed terms (K/V write, digital unit) stay.
+        Offloaded: compute is the static operators' only, the 'write' slot
+        carries the unit's time (compute + K/V memory, fixed), the
+        elementwise excludes the softmax (it runs on the unit)."""
+        elw = sum(lw.elementwise_cost(eo, self.fab.digital)["latency_s"] for eo in self._elementwise(phase))
+        comp = sum(r["compute_s"] for r in self._static_ops(phase))
+        wr = sum(r["write_s"] for r in self._static_ops(phase))
+        u = self.unit_terms(phase)
+        if u is not None:
+            wr += u["unit_s"]
         return comp, wr, elw
+
+    def layer_breakdown_s(self, phase):
+        """Named per-layer terms for the record."""
+        u = self.unit_terms(phase)
+        return {"cim_compute_s": sum(r["compute_s"] for r in self._static_ops(phase)),
+                "cim_write_s": sum(r["write_s"] for r in self._static_ops(phase)),
+                "digital_elementwise_s": sum(lw.elementwise_cost(eo, self.fab.digital)["latency_s"] for eo in self._elementwise(phase)),
+                "unit_compute_s": u["compute_s"] if u else 0.0, "unit_kv_s": u["kv_s"] if u else 0.0}
 
     def layer_serial_s(self, phase, device_scale: float = 1.0):
         comp, wr, elw = self.layer_terms_s(phase)
         return comp / device_scale + wr + elw
 
     def layer_energy_J(self, phase):
-        elw = [lw.elementwise_cost(eo, self.fab.digital)
-               for eo in lw.block_elementwise_ops(self.cfg, S=self.S,
-                                                  phase=phase)]
-        return (sum(r["energy_J"] for r in self.ops[phase].values())
-                + sum(e["energy_J"] for e in elw))
+        elw = [lw.elementwise_cost(eo, self.fab.digital) for eo in self._elementwise(phase)]
+        u = self.unit_terms(phase)
+        return (sum(r["energy_J"] for r in self._static_ops(phase))
+                + sum(e["energy_J"] for e in elw) + (u["energy_J"] if u else 0.0))
 
     def boundaries(self, pi: ss.Pi, phase):
         """Per-boundary dicts (words, hops stats, surplus, into-segment
         index), block_die_flows conventions verbatim, wrap excluded."""
-        base = lw.block_chain(self.cfg, self.S, phase, on_chip=True,
-                              max_dies=self.fab.level("die").per_parent,
-                              dims=getattr(self, "tiling_dims", ("M", "C")))
+        base = self.chain_entries(phase)
         chain, seating = [], {}
         for li in range(self.cfg.n_layers):
             for e in base:
                 name = f"{e['name']}@L{li}"
                 chain.append({**e, "name": name})
-                seating[name] = list(pi.seat[name])
+                seating[name] = seats_of(self, pi, name)
         flows_by = lw.block_die_flows(chain, seating, self.fab)
+        hubs = self.hub_nodes()
         wrap = chain[0]["name"]
         seg_of_block = {}
         for k, (lo, hi) in enumerate(pi.segments()):
@@ -150,10 +206,11 @@ class Workload2p7B:
             words = sum(f["volume"] * f["width"] for f in fl)
             hops = [self.die_ic.hops(*f["nodes"]) for f in fl]
             li = int(e["name"].rsplit("@L", 1)[1])
+            link, dport, hub = load_components(fl, self.die_ic, kappa=getattr(self, "port_ratio", 1.0), hub_nodes=hubs)
             out.append({
                 "into": e["name"], "words": words,
-                "busiest_words": busiest_link_words(
-                    fl, self.die_ic, kappa=getattr(self, "port_ratio", 1.0)),
+                "busiest_words": max(link, dport),        # links and die ports, link-time units (the hub port is priced at C_hub in _assemble)
+                "link_words": link, "dport_words": dport, "hub_words": hub,
                 "segment": seg_of_block[li],
                 "inter_layer": e["name"].startswith(base[0]["name"]),
                 "max_hops": max(hops) if hops else 0.0,
@@ -206,7 +263,34 @@ def _one_boundary_flows(prev_e, e, prod_slots, cons_slots, fab):
     return lw.boundary_flows(prev_e, e, list(prod_slots), list(cons_slots), fab)
 
 
-def resource_loads(flows, icl, ports: bool = True, kappa: float = 1.0):
+def seats_of(W, pi, name):
+    """The nodes of a chain entry: the seated die-set, or the unit node of
+    the layer when the attention is offloaded (the entry is not in pi)."""
+    if name in pi.seat:
+        return list(pi.seat[name])
+    off = getattr(W, "offload", None)
+    if off is None:
+        raise KeyError(name)
+    li = int(name.rsplit("@L", 1)[1])
+    return off.unit_nodes(li)
+
+
+def head_mode_entry(e, cfg, K):
+    """The attention chain entry under the head split: K consumer 'units',
+    each taking complete head groups of the QKV output's columns (Q block,
+    K block, V block per unit), and producing its share of the attention
+    output (split 'H' on the way out)."""
+    from scripts import offload as offload_mod
+    dh = cfg.dh; H, Hkv = cfg.n_heads, cfg.kv_heads
+    groups = offload_mod.head_groups(cfg, K)
+    cols = []
+    for g in groups:
+        q0, q1 = g["q_heads"]; k0, k1 = g["kv_heads"]
+        cols.append([(q0 * dh, q1 * dh), (H * dh + k0 * dh, H * dh + k1 * dh), ((H + Hkv) * dh + k0 * dh, (H + Hkv) * dh + k1 * dh)])
+    return {**e, "split": "H", "in_cols": (H + 2 * Hkv) * dh, "unit_cols": cols, "n_units": K}
+
+
+def resource_loads(flows, icl, ports: bool = True, kappa: float = 1.0, hub_ratio=None, hub_nodes=()):
     """The per-(resource, direction) load map behind the hand-off term:
     links by icl.path_directed, plus each die's ONE injection and ONE
     ejection port. `kappa` = C_port / C_link (S8): port loads are
@@ -225,12 +309,25 @@ def resource_loads(flows, icl, ports: bool = True, kappa: float = 1.0):
             key = (r, tag if (split and tag) else "")
             load[key] = load.get(key, 0.0) + vol
         if ports:
-            load[("port", a, "inj")] = load.get(("port", a, "inj"), 0.0) + vol / kappa
-            load[("port", b, "ej")] = load.get(("port", b, "ej"), 0.0) + vol / kappa
+            ka = hub_ratio if (hub_ratio is not None and a in hub_nodes) else kappa     # a unit node's interface has its own capacity C_hub
+            kb = hub_ratio if (hub_ratio is not None and b in hub_nodes) else kappa
+            load[("port", a, "inj")] = load.get(("port", a, "inj"), 0.0) + vol / ka
+            load[("port", b, "ej")] = load.get(("port", b, "ej"), 0.0) + vol / kb
     return load
 
 
-def busiest_link_words(flows, icl, ports: bool = True, kappa: float = 1.0) -> float:
+def load_components(flows, icl, kappa: float = 1.0, hub_nodes=()):
+    """(busiest link words, busiest die-port words / kappa, busiest hub-port
+    words) of one hand-off, so a service time can be formed under any
+    (B_mesh, C_hub): max(link / B, dport / (kappa B), hub / C_hub)."""
+    load = resource_loads(flows, icl, ports=True, kappa=1.0)
+    link = max((v for k, v in load.items() if k[0] != "port"), default=0.0)
+    dport = max((v for k, v in load.items() if k[0] == "port" and k[1] not in hub_nodes), default=0.0) / kappa
+    hub = max((v for k, v in load.items() if k[0] == "port" and k[1] in hub_nodes), default=0.0)
+    return link, dport, hub
+
+
+def busiest_link_words(flows, icl, ports: bool = True, kappa: float = 1.0, hub_ratio=None, hub_nodes=()) -> float:
     """The hand-off's BUSIEST-RESOURCE volume over links AND node ports.
 
     Every producer->consumer flow is routed on the declared die weave
@@ -257,7 +354,7 @@ def busiest_link_words(flows, icl, ports: bool = True, kappa: float = 1.0) -> fl
     and every link on its path carry the same volume, so the maximum
     is unchanged -- the 355M backend and any one-die-to-one-die
     hand-off read exactly as before (and for any kappa >= 1)."""
-    load = resource_loads(flows, icl, ports, kappa)
+    load = resource_loads(flows, icl, ports, kappa, hub_ratio, hub_nodes)
     return max(load.values()) if load else 0.0
 
 
@@ -299,8 +396,15 @@ def _assemble(pi, W, bs_by_phase, mu, caliber, d2d_gbps, device_scale):
         n_seg = len(pi.segments())
         seg_layers = [hi - lo for lo, hi in pi.segments()]
         seg_bnd_s = [0.0] * n_seg
+        off = getattr(W, "offload", None)
+        hub_wps = off.unit["link_bandwidth_gbps"] * 1e9 if off is not None else None
+        busiest_words = 0.0
         for b in bs:
-            seg_bnd_s[b["segment"]] += b["busiest_words"] / wps
+            t_b = b["busiest_words"] / wps
+            if hub_wps is not None and b.get("hub_words", 0.0) > 0:
+                t_b = max(t_b, b["hub_words"] / hub_wps)         # the unit's interface under its own capacity C_hub
+            seg_bnd_s[b["segment"]] += t_b
+            busiest_words += t_b * wps                            # the hand-off's load expressed at the mesh link rate (A/B = H at this B)
         d2d_s = sum(seg_bnd_s)
         t_single = W.n_layers() * layer_s + d2d_s + prop_s
         stage_s = [seg_layers[k] * layer_s + seg_bnd_s[k]
@@ -318,8 +422,10 @@ def _assemble(pi, W, bs_by_phase, mu, caliber, d2d_gbps, device_scale):
                        "stage_s": stage_s, "t_single_s": t_single,
                        "t_pipe_interval_s": t_pipe,
                        "d2d_words": sum(b["words"] for b in bs),
-                       "d2d_busiest_words": sum(b["busiest_words"]
-                                                for b in bs),
+                       "d2d_busiest_words": busiest_words,
+                       "hub_words_sum": sum(b.get("hub_words", 0.0) for b in bs),
+                       "link_words_sum": sum(b.get("link_words", b["busiest_words"]) for b in bs),
+                       "layer_breakdown_s": (W.layer_breakdown_s(phase) if hasattr(W, "layer_breakdown_s") else None),
                        "d2d_flat_J": sum(b["words"] for b in bs)
                        * PJ_D2D * 1e-12,
                        "d2d_surplus_J": sum(b["surplus_J"] for b in bs)}}
@@ -360,9 +466,8 @@ class ScoreSession:
         self.bs = {ph: W.boundaries(pi, ph) for ph in self.mu}
 
     def _chain(self, phase):
-        base = lw.block_chain(self.W.cfg, self.W.S, phase, on_chip=True,
-                              max_dies=self.W.fab.level("die").per_parent,
-                              dims=getattr(self.W, "tiling_dims", ("M", "C")))
+        base = self.W.chain_entries(phase) if hasattr(self.W, "chain_entries") else lw.block_chain(
+            self.W.cfg, self.W.S, phase, on_chip=True, max_dies=self.W.fab.level("die").per_parent, dims=getattr(self.W, "tiling_dims", ("M", "C")))
         names = [f"{e['name']}@L{li}" for li in range(self.W.cfg.n_layers)
                  for e in base]
         entries = {f"{e['name']}@L{li}": e for li in range(self.W.cfg.n_layers)
@@ -382,6 +487,7 @@ class ScoreSession:
             for k in new_seats:
                 affected.add(k)                          # its own in-boundary
                 affected.add(names[(idx[k] + 1) % len(names)])   # successor's
+            hubs = self.W.hub_nodes() if hasattr(self.W, "hub_nodes") else ()
             seg_of = {}
             for si, (lo, hi) in enumerate(self.pi.segments()):
                 for li in range(lo, hi):
@@ -394,15 +500,14 @@ class ScoreSession:
                 prev = names[idx[name] - 1]
                 fl = _one_boundary_flows(
                     entries[prev], entries[name],
-                    self.pi.seat[prev], self.pi.seat[name], self.W.fab)
+                    seats_of(self.W, self.pi, prev), seats_of(self.W, self.pi, name), self.W.fab)
                 words = sum(f["volume"] * f["width"] for f in fl)
                 hops = [self.W.die_ic.hops(*f["nodes"]) for f in fl]
                 li = int(name.rsplit("@L", 1)[1])
+                link, dport, hub = load_components(fl, self.W.die_ic, kappa=getattr(self.W, "port_ratio", 1.0), hub_nodes=hubs)
                 by_name[name] = {
                     "into": name, "words": words, "segment": seg_of[li],
-                    "busiest_words": busiest_link_words(
-                        fl, self.W.die_ic,
-                        kappa=getattr(self.W, "port_ratio", 1.0)),
+                    "busiest_words": max(link, dport), "link_words": link, "dport_words": dport, "hub_words": hub,
                     "inter_layer": by_name[name]["inter_layer"],
                     "max_hops": max(hops) if hops else 0.0,
                     "surplus_J": lw.die_flow_surplus_energy(

@@ -51,7 +51,7 @@ def _chain_info(W):
         words = {n: 512 * lw.GptConfig().d_model for n in names}
         layer = {n: int(n[4:]) for n in names}
     else:
-        base = lw.block_chain(W.cfg, W.S, "prefill", on_chip=True,
+        base = lw.block_chain(W.cfg, W.S, "prefill", on_chip=getattr(W, "offload", None) is None,
                               max_dies=W.fab.level("die").per_parent,
                               dims=getattr(W, "tiling_dims", ("M", "C")))
         per = {e["name"]: e["in_words"] for e in base}
@@ -62,6 +62,13 @@ def _chain_info(W):
 
 def _slots_xy(W):
     return pm.sequential_fill(W.fab).slots["die"]
+
+
+def _usable(W):
+    """The slots a die-set may take: every slot of the grid minus the
+    reserved unit nodes of an offload configuration."""
+    reserved = W.offload.reserved_slots() if getattr(W, "offload", None) is not None else set()
+    return [i for i in range(W.fab.level("die").per_parent) if i not in reserved]
 
 
 def _mk_pi(W, names, inv, order_of_slots):
@@ -87,21 +94,21 @@ def _manh(a, b):
 # ------------------------------------------------------------ generators
 def _gen_random(W, seed):
     names, inv, _, _ = _chain_info(W)
-    order = list(range(W.fab.level("die").per_parent))
+    order = _usable(W)
     random.Random(seed).shuffle(order)
     return _mk_pi(W, names, inv, order)
 
 
 def _gen_sequential(W, seed):
     names, inv, _, _ = _chain_info(W)
-    return _mk_pi(W, names, inv, list(range(W.fab.level("die").per_parent)))
+    return _mk_pi(W, names, inv, _usable(W))
 
 
 def _gen_snake(W, seed):
     names, inv, _, _ = _chain_info(W)
     xy = _slots_xy(W)
     mx, _my = W.fab.level("die").mesh
-    order = sorted(range(len(xy)),
+    order = sorted(_usable(W),
                    key=lambda i: (xy[i][1],
                                   xy[i][0] if xy[i][1] % 2 == 0
                                   else -xy[i][0]))
@@ -113,7 +120,7 @@ def _gen_least_manhattan(W, seed):
     (Manhattan) to the PREVIOUS set's centroid."""
     names, inv, _, _ = _chain_info(W)
     xy = _slots_xy(W)
-    free = set(range(len(xy)))
+    free = set(_usable(W))
     seat, prev_c = {}, xy[0]
     for n in names:
         picks = sorted(free, key=lambda i: (_manh(xy[i], prev_c), i))[:inv[n]]
@@ -209,7 +216,7 @@ def _nmap_construct(W):
         comm[prev] += words[cur]
         nbr[prev].append((cur, words[cur]))
         nbr[cur].append((prev, words[cur]))
-    free = set(range(len(xy)))
+    free = set(_usable(W))
     cx = (max(x for x, _ in xy) / 2, max(y for _, y in xy) / 2)
     seat = {}
     first = max(names, key=lambda n: comm[n])   # ties: first in chain
@@ -279,7 +286,7 @@ def _gen_heaviest_first(W, seed):
     xy = _slots_xy(W)
     bounds = sorted(zip(names[:-1], names[1:]),
                     key=lambda pc: -words[pc[1]])
-    free = set(range(len(xy)))
+    free = set(_usable(W))
     seat = {}
 
     def place(n, anchor):

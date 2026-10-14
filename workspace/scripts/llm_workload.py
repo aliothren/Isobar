@@ -437,6 +437,16 @@ def boundary_pieces(p, e, n_prod, n_cons, psum):
     of every producer's partial sums (row-split producer). A consumer that is
     not row-split receives the whole tensor (the frozen convention)."""
     out = float(p["out_words"])
+    if e.get("split") == "H":          # the offloaded attention over K units: unit j needs its head groups' Q, K and V columns of the QKV output
+        if p["split"] == "C":          # partial sums of the whole output: unit j needs its columns from every producer
+            return (out / n_cons, psum), None
+        M = e["in_cols"]; Pq = out / M
+        ranges = e["unit_cols"]        # per unit: [(start, end), ...] column ranges in words per row
+
+        def vol_h(i, j):
+            lo_i, hi_i = i * M / n_prod, (i + 1) * M / n_prod
+            return Pq * sum(max(0.0, min(hi_i, b) - max(lo_i, a)) for a, b in ranges[j])
+        return (None, 1.0), vol_h
     if e.get("split") != "C":
         return ((out, psum) if p["split"] == "C" else (out / n_prod, 1.0)), None
     if p["split"] == "C":

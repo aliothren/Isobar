@@ -76,7 +76,8 @@ def propose(rng: random.Random, seat: Dict[str, Tuple[int, ...]],
         a = names[rng.randrange(len(names))]
         x = seat[a][rng.randrange(len(seat[a]))]
         owner = {s: n for n in names for s in seat[n]}
-        targets = [t for t in range(n_slots) if t not in seat[a]]
+        universe = range(n_slots) if isinstance(n_slots, int) else n_slots     # a collection = the usable slots (unit nodes excluded)
+        targets = [t for t in universe if t not in seat[a]]
         t = targets[rng.randrange(len(targets))]
         if t not in owner:                        # free target: plain move
             return {a: _sorted_but(seat[a], x, t)}, kind

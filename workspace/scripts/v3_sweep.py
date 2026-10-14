@@ -46,6 +46,7 @@ from scripts import search_baselines as sb             # noqa: E402
 from scripts import search_eval as se                  # noqa: E402
 from scripts import search_sa as sa                    # noqa: E402
 from scripts import search_space as ss                 # noqa: E402
+from scripts import offload as offload_mod           # noqa: E402
 
 A = os.path.join(WS, "analysis")
 V3 = os.path.join(A, "v3")
@@ -175,7 +176,25 @@ def budget(n_movable):
     return max(1200, math.ceil(1200 * n_movable / 544))
 
 
-def evaluate_config(spec, n_random, seeds, calib, log=print):
+def unified_metrics(rec):
+    """The communication columns on the paper's definition H = P + A/B, all
+    from the SAME endpoint (the headline run): eta_P = 1 - (H1 + P1) /
+    (H0 + P0), r0_P = (H0 + P0) / T_base, G_headline = 1 - T1 / T_base, so
+    that G_headline = eta_P x r0_P holds exactly (R is common). The record's
+    eta_comm / r0 are on H = A/B alone and G_e2e is the same headline gain;
+    the summary's G median is the median over seeds and is a different
+    statistic from the headline's own gain when the seed count is even."""
+    c0 = rec["candidates"][rec["strongest"]]; h = rec["search"]["runs"][rec["search"]["headline"]]
+    T0 = rec["T_base_s"]
+    H0, H1 = c0["H_s"] + c0["prop_s"], h["H_s"] + h["prop_s"]
+    eta = 1 - H1 / H0 if H0 else 0.0
+    r0 = H0 / T0
+    G = 1 - h["T_s"] / T0
+    return {"eta_P": eta, "r0_P": r0, "G_headline": G, "eta_P_times_r0_P": eta * r0, "identity_abs_err": abs(G - eta * r0),
+            "P_share_of_H0": c0["prop_s"] / H0 if H0 else 0.0, "headline_T_s": h["T_s"]}
+
+
+def evaluate_config(spec, n_random, seeds, calib, log=print, objective="t_norm"):
     """spec: dict with model (d, dh, d_ff, L), S, phase, tiling, grid, topology,
     routing, kappa, bw; returns the full record."""
     t_cfg = time.perf_counter()
@@ -214,7 +233,7 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
                 "reason": f"attention K/V arrays {att_cells} cells > die {att_cap}"}
     dims = TILINGS[spec["tiling"]]
     try:
-        chain = lw.block_chain(cfg, S, phase, on_chip=True, max_dies=10 ** 6, dims=dims)
+        chain = lw.block_chain(cfg, S, phase, on_chip=not spec.get("offload"), max_dies=10 ** 6, dims=dims)
     except ValueError as e:
         return {"config_id": spec["config_id"], "spec": spec, "status": "infeasible", "reason": f"tiling: {e}"}
     dies_per_layer = sum(e["n_dies"] for e in chain)
@@ -228,16 +247,44 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
     W.port_ratio = float(spec["kappa"])
     bw = float(spec["bw"])
     mu = {phase: 1.0}
+    off = None
+    if spec.get("offload"):           # the agreed attention setting: a digital unit (hub) inside the package, K/V in its memory
+        o = spec["offload"]
+        slots_xy = pm.sequential_fill(fab).slots["die"]
+        off = offload_mod.build(slots_xy, cfg.n_layers, position=o.get("position", "center"), K=int(o.get("K", 1)),
+                                resource_mode=o.get("resource_mode", "per_unit"), overrides=o.get("unit"), co_located=bool(o.get("co_located", False)),
+                                split=o.get("split", "layer"))
+        W.offload = off
+        kvc = offload_mod.kv_capacity(cfg, S, off, phase=phase)
+        if not all(x["fits"] for x in kvc):
+            return {"config_id": spec["config_id"], "spec": spec, "status": "infeasible",
+                    "reason": "capacity (unit K/V memory): " + "; ".join(f"unit {x['unit']} needs {x['kv_bytes']} B of {x['capacity_bytes']:.0f}" for x in kvc if not x["fits"])}
+        if n_dies + len(off.reserved_slots()) > grid[0] * grid[1]:
+            return {"config_id": spec["config_id"], "spec": spec, "status": "infeasible",
+                    "reason": f"{n_dies} dies + {len(off.reserved_slots())} unit nodes do not fit the {grid[0]}x{grid[1]} grid"}
     comp, wr, elw = W.layer_terms_s(phase)
     L = cfg.n_layers
     N_s, F_s = comp * L, (wr + elw) * L
+    hub_wps = off.unit["link_bandwidth_gbps"] * 1e9 if off is not None else None
 
     def ev(pi):
-        sc = se.score(pi, W, mu=mu, caliber="single", d2d_gbps=bw)
+        bs = W.boundaries(pi, phase)
+        sc = se._assemble(pi, W, {phase: bs}, mu, "single", bw, 1.0)
         d = sc.per_phase[phase]["decomp"]
-        return {"T_s": sc.t_opt_s, "H_s": d["d2d_serial_s"], "prop_s": d["propagation_s"],
-                "A_words": d["d2d_busiest_words"], "words": d["d2d_words"], "E_J": sc.e_J,
-                "E_comm_J": d["d2d_flat_J"] + d["d2d_surplus_J"]}
+        row = {"T_s": sc.t_opt_s, "H_s": d["d2d_serial_s"], "prop_s": d["propagation_s"],
+               "A_words": d["d2d_busiest_words"], "words": d["d2d_words"], "E_J": sc.e_J,
+               "E_comm_J": d["d2d_flat_J"] + d["d2d_surplus_J"]}
+        if off is not None:        # per-hand-off components so any (B_mesh, C_hub) point can be formed
+            row["comp"] = [[round(b["link_words"]), round(b["dport_words"]), round(b["hub_words"])] for b in bs]
+            row["hub_words_sum"] = d["hub_words_sum"]
+        return row
+
+    def H_of(row, B, C_hub=None):
+        """The communication term at mesh bandwidth B (GB/s) for a candidate (offloaded: per-hand-off max over links, die ports, hub ports)."""
+        if off is None:
+            return row["A_words"] / (B * 1e9)
+        C = (C_hub if C_hub is not None else off.unit["link_bandwidth_gbps"]) * 1e9
+        return sum(max(max(l, dp) / (B * 1e9), h / C) for l, dp, h in row["comp"])
     # candidates
     t = time.perf_counter()
     cands, rule_failures = {}, {}
@@ -246,6 +293,8 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
             continue
         try:
             cands[n] = sb.generate(n, W, seed=0)
+            if off is not None and any(s in off.reserved_slots() for v in cands[n].seat.values() for s in v):
+                del cands[n]; rule_failures[n] = "seats a die on a unit node"
         except Exception as e:        # a rule that cannot handle this grid or chain (clustered on 9x9, least_manhattan on a 1-die chain)
             rule_failures[n] = str(e)[:160]
     for s in range(n_random):
@@ -265,8 +314,9 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
         t = time.perf_counter(); se.score(cands[strongest], W, mu=mu, d2d_gbps=bw); tt.append(time.perf_counter() - t)
     full_score_ms = statistics.median(tt) * 1e3
     # search
+    R_s = N_s + F_s
     starts = {"rule": strongest_rule, "random_best": strongest_random, "random_s0": "random_s0"}
-    n_slots = fab.level("die").per_parent
+    n_slots = fab.level("die").per_parent if off is None else W.usable_slots()
     steps = budget(n_dies)
     sched = sa.Schedule(t0=T0_NORM, alpha=ALPHA, steps=steps)
     runs = {}
@@ -274,7 +324,12 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
     for i, (sname, cname) in enumerate(sorted(starts.items())):
         for s in seeds:
             J = cli.Objective(W, cands[cname], mu, "single", bw, 1.0, "t")
-            Jn = lambda pi, J=J: J(pi) / t_base
+            if objective == "t_norm":            # the V3 objective: T / T_base
+                Jn = lambda pi, J=J: J(pi) / t_base
+            elif objective == "h_norm":          # the communication term normalised by its own baseline value: (T - R) / (T_base - R), R = N + F
+                Jn = lambda pi, J=J: (J(pi) - R_s) / (t_base - R_s)
+            else:
+                raise ValueError(objective)
             t = time.perf_counter()
             r = sa.anneal(Jn, cands[cname], n_slots, sched, seed=1000003 * s + i)
             wall = time.perf_counter() - t
@@ -293,55 +348,91 @@ def evaluate_config(spec, n_random, seeds, calib, log=print):
     # metrics
     H0, H1 = rows[strongest]["H_s"], h["H_s"]
     A0, A1 = rows[strongest]["A_words"], h["A_words"]
+    B_eq_off = None
+    if off is not None:                # the mesh bandwidth at which the strongest baseline matches the selected layout's H (C_hub fixed)
+        target = H1
+        if H_of(rows[strongest], 1e9) < target:
+            lo, hi = 1e-4, 1e6
+            for _ in range(80):
+                mid = math.sqrt(lo * hi)
+                if H_of(rows[strongest], mid) > target:
+                    lo = mid
+                else:
+                    hi = mid
+            B_eq_off = math.sqrt(lo * hi)
     eta = 1 - H1 / H0 if H0 else 0.0
     r0 = H0 / t_base
     G = 1 - h["T_s"] / t_base
-    # band over the 7 rules and over rules + pool (at rate 1): B_c = A / R, R = N + F (propagation excluded)
-    R_s = N_s + F_s
-    A_rules = [rows[n]["A_words"] for n in rules]
-    A_all = [rows[n]["A_words"] for n in cands]
-    band = {"rules": {"B_minus": min(A_rules) / R_s / 1e9, "B_plus": max(A_rules) / R_s / 1e9},
-            "rules_plus_pool": {"B_minus": min(A_all) / R_s / 1e9, "B_plus": max(A_all) / R_s / 1e9}}
-    for k in band:
-        band[k]["ratio"] = band[k]["B_plus"] / band[k]["B_minus"]
+    # band over the 7 rules and over rules + pool (at rate 1): B_c solves H(B) = R, R = N + F (propagation excluded);
+    # on chip H = A/B gives A/R in closed form; offloaded the hub plateau H(inf) = sum hub/C_hub may leave no finite boundary
+    def B_c(row, R):
+        if off is None:
+            return row["A_words"] / R / 1e9
+        if H_of(row, 1e9) >= R:            # the plateau alone exceeds R: no finite boundary
+            return None
+        lo, hi = 1e-4, 1e6
+        for _ in range(80):
+            mid = math.sqrt(lo * hi)
+            if H_of(row, mid) > R:
+                lo = mid
+            else:
+                hi = mid
+        return math.sqrt(lo * hi)
+    band = {}
+    for key, names in (("rules", rules), ("rules_plus_pool", list(cands))):
+        bcs = [B_c(rows[n], R_s) for n in names]
+        fin = [b for b in bcs if b is not None]
+        band[key] = {"B_minus": min(fin) if fin else None, "B_plus": max(fin) if fin else None,
+                     "no_finite_boundary": sum(1 for b in bcs if b is None), "n": len(bcs)}
+        band[key]["ratio"] = (band[key]["B_plus"] / band[key]["B_minus"]) if fin else None
+    if band["rules"]["B_minus"] is None:
+        band["rules"]["B_minus"] = band["rules"]["B_plus"] = float("nan")
     # cost grid: ordering invariance and G at every (rate, B) for the frozen pair (strongest, headline)
     grid_pts = []
     for rate in RATES:
-        for B in sorted(set(BWS) | {band["rules"]["B_minus"] * rate, band["rules"]["B_plus"] * rate,
-                                   math.sqrt(band["rules"]["B_minus"] * band["rules"]["B_plus"]) * rate}):
+        extra = ({band["rules"]["B_minus"] * rate, band["rules"]["B_plus"] * rate, math.sqrt(band["rules"]["B_minus"] * band["rules"]["B_plus"]) * rate}
+                 if band["rules"]["B_minus"] == band["rules"]["B_minus"] else set())      # NaN-safe
+        for B in sorted(set(BWS) | extra):
             def T(row):
-                return N_s / rate + F_s + row["prop_s"] + row["A_words"] / (B * 1e9)
+                return N_s / rate + F_s + row["prop_s"] + H_of(row, B)
             Tb = {n: T(rows[n]) for n in cands}
             sb_pt = min(Tb, key=Tb.get)
             T0p, T1p = Tb[strongest], T(h)
             grid_pts.append({"rate": rate, "bw": B, "strongest": sb_pt, "same_strongest": sb_pt == strongest,
-                             "T_base_s": T0p, "T_sel_s": T1p, "r": (rows[strongest]["A_words"] / (B * 1e9)) / T0p,
+                             "T_base_s": T0p, "T_sel_s": T1p, "r": H_of(rows[strongest], B) / T0p,
                              "G_pct": (1 - T1p / T0p) * 100,
-                             "region": ("below" if B < band["rules"]["B_minus"] * rate else
+                             "region": ("no finite boundary" if band["rules"]["B_minus"] != band["rules"]["B_minus"] else
+                                        "below" if B < band["rules"]["B_minus"] * rate else
                                         "above" if B > band["rules"]["B_plus"] * rate else "inside")})
     rec = {"config_id": spec["config_id"], "spec": spec, "status": "done",
            "account_status": account_status, "fabric": fab.name, "grid": grid, "n_dies": n_dies,
            "dies_per_layer": dies_per_layer, "chain": [(e["name"], e["n_dies"], e["split"]) for e in chain],
-           "empty_slots": grid[0] * grid[1] - n_dies, "kappa": spec["kappa"], "bw_gbps": bw, "rule_failures": rule_failures,
+           "empty_slots": grid[0] * grid[1] - n_dies - (len(off.reserved_slots()) if off is not None else 0), "kappa": spec["kappa"], "bw_gbps": bw, "rule_failures": rule_failures,
            "N_s": N_s, "F_s": F_s, "write_s_per_layer": wr, "elementwise_s_per_layer": elw,
            "n_random": n_random, "candidates": rows,
            "strongest_rule": strongest_rule, "strongest_random": strongest_random, "strongest": strongest,
            "T_base_s": t_base, "random_best_of": best_of,
            "random_median_s": statistics.median(rows[n]["T_s"] for n in randoms),
            "random_spread_pct": (max(rows[n]["T_s"] for n in randoms) / min(rows[n]["T_s"] for n in randoms) - 1) * 100,
-           "search": {"starts": starts, "seeds": list(seeds), "steps": steps, "t0_norm": T0_NORM, "alpha": ALPHA,
+           "search": {"starts": starts, "seeds": list(seeds), "steps": steps, "t0_norm": T0_NORM, "alpha": ALPHA, "objective": objective,
                       "runs": runs, "per_seed_best": {s: per_seed[s][1] for s in seeds},
                       "headline": headline, "headline_T_s": h["T_s"], "gain_median_pct": statistics.median(gains),
                       "gain_min_pct": min(gains), "gain_max_pct": max(gains), "best_run": min(runs, key=lambda n: runs[n]["T_s"]),
                       "gain_best_pct": max(r_["gain_pct"] for r_ in runs.values()), "wall_s": time.perf_counter() - t_search},
            "metrics": {"eta_comm": eta, "r0": r0, "G_e2e": G, "eta_times_r": eta * r0,
-                       "g_bw_eq": A0 / A1 - 1 if A1 else None, "B_eq_gbps": bw * A0 / A1 if A1 else None,
+                       "g_bw_eq": (A0 / A1 - 1 if A1 else None) if off is None else ((B_eq_off / bw - 1) if B_eq_off else None),
+                       "B_eq_gbps": (bw * A0 / A1 if A1 else None) if off is None else B_eq_off,
+                       "B_eq_note": None if off is None else ("mesh bandwidth alone cannot reach the selected layout's communication time (hub plateau)" if B_eq_off is None else "solved H_base(B_eq) = H_sel(B_ref) with C_hub fixed"),
                        "bw_reduction": 1 - A1 / A0 if A0 else None,
                        "gain_vs_default_pct": (1 - h["T_s"] / rows["sequential"]["T_s"]) * 100 if "sequential" in rows else None,
                        "gain_vs_strongest_rule_pct": (1 - h["T_s"] / rows[strongest_rule]["T_s"]) * 100,
                        "dE_pct": (h["E_J"] / rows[strongest]["E_J"] - 1) * 100,
                        "dE_comm_pct": (h["E_comm_J"] / rows[strongest]["E_comm_J"] - 1) * 100 if rows[strongest]["E_comm_J"] else None},
            "band": band, "cost_grid": grid_pts,
+           "attention": ({"mode": "die", "note": "attention on one ReRAM die per layer, K/V programmed into the arrays"} if off is None else
+                         {"mode": "unit", **off.to_json(), "kv_capacity": offload_mod.kv_capacity(cfg, S, off, phase=phase), "unit_layer_cost": W.unit_terms(phase),
+                          "layer_breakdown_s": W.layer_breakdown_s(phase), "reserved_slots": sorted(off.reserved_slots())}),
+           "unified": unified_metrics({"candidates": rows, "strongest": strongest, "T_base_s": t_base, "search": {"runs": runs, "headline": headline}}),
            "ordering_invariant_over_grid": all(p["same_strongest"] for p in grid_pts),
            "timing": {"candidates_s": t_cand, "full_score_ms": full_score_ms,
                       "ms_per_sa_step_median": statistics.median(r_["ms_per_step"] for r_ in runs.values()),
@@ -468,10 +559,10 @@ def write_tables(out):
                         f"{r['T_base_s']*1e3:.3f}", f"{bo.get(5, 0)*1e3:.3f}", f"{bo.get(20, 0)*1e3:.3f}", f"{bo.get(100, 0)*1e3:.3f}",
                         f"{r['random_spread_pct']:.3f}", sr["steps"], sr["headline"], f"{sr['headline_T_s']*1e3:.3f}",
                         f"{sr['gain_median_pct']:.3f}", f"{sr['gain_min_pct']:.3f}", f"{sr['gain_max_pct']:.3f}", f"{sr['gain_best_pct']:.3f}",
-                        f"{m['eta_comm']*100:.3f}", f"{m['r0']*100:.3f}", f"{(m['g_bw_eq'] or 0)*100:.3f}", f"{m['B_eq_gbps'] or 0:.4f}",
+                        f"{m['eta_comm']*100:.3f}", f"{m['r0']*100:.3f}", f"{(m['g_bw_eq'] or 0)*100:.3f}", f"{(m['B_eq_gbps'] or 0):.4f}",
                         f"{m['gain_vs_default_pct']:.3f}" if m['gain_vs_default_pct'] is not None else "", f"{m['dE_pct']:.3f}",
-                        f"{b['rules']['B_minus']:.4f}", f"{b['rules']['B_plus']:.4f}", f"{b['rules']['ratio']:.3f}",
-                        f"{b['rules_plus_pool']['ratio']:.3f}", r["ordering_invariant_over_grid"],
+                        f"{b['rules']['B_minus']:.4f}", f"{b['rules']['B_plus']:.4f}", f"{(b['rules']['ratio'] or float('nan')):.3f}",
+                        f"{(b['rules_plus_pool']['ratio'] or float('nan')):.3f}", r["ordering_invariant_over_grid"],
                         f"{t['full_score_ms']:.2f}", f"{t['ms_per_sa_step_median']:.3f}", f"{sr['wall_s']:.1f}", f"{t['config_wall_s']:.1f}", ""])
     with open(os.path.join(out, "runs.csv"), "w", newline="") as f:
         w = csv.writer(f)

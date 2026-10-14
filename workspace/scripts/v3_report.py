@@ -8,6 +8,10 @@ import csv
 import glob
 import json
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts.v3_sweep import unified_metrics  # noqa: E402
+import os
 import statistics
 import sys
 
@@ -43,6 +47,7 @@ def flat(r):
                  "steps": sr["steps"], "headline_T_ms": sr["headline_T_s"] * 1e3, "G_median": sr["gain_median_pct"], "G_min": sr["gain_min_pct"],
                  "G_max": sr["gain_max_pct"], "G_best": sr["gain_best_pct"], "G_range": sr["gain_max_pct"] - sr["gain_min_pct"],
                  "eta": m["eta_comm"] * 100, "r0": m["r0"] * 100, "g_bw_eq": (m["g_bw_eq"] or 0) * 100, "B_eq": m["B_eq_gbps"],
+                 "eta_P": unified_metrics(r)["eta_P"] * 100, "r0_P": unified_metrics(r)["r0_P"] * 100, "G_headline": unified_metrics(r)["G_headline"] * 100,
                  "G_vs_default": m["gain_vs_default_pct"], "G_vs_rule": m["gain_vs_strongest_rule_pct"], "dE": m["dE_pct"], "dE_comm": m["dE_comm_pct"],
                  "B_minus": b["rules"]["B_minus"], "B_plus": b["rules"]["B_plus"], "band_ratio": b["rules"]["ratio"],
                  "band_ratio_pool": b["rules_plus_pool"]["ratio"], "region_at_bw": ("below" if s["bw"] < b["rules"]["B_minus"] else "above" if s["bw"] > b["rules"]["B_plus"] else "inside"),

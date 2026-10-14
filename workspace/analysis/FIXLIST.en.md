@@ -7403,3 +7403,44 @@ span 48 dies, a 3/4x die OPT-13B's 80). The variants now declare a
 per-operator account. V3 unit e4 'row' records re-run under the unified
 hand-off convention (see the previous entry); the whole-tensor rows are
 kept in analysis/v3/e4/configs_row_whole_tensor_convention.jsonl.
+ATTENTION OFFLOAD 2026-10-13 (Isobar_attention_offload_experiments.md):
+every placement result so far (the draft's main configuration, V3, the
+next-round units e7/e8) runs the attention on one ReRAM die per layer
+with the K/V programmed into the arrays (block_chain on_chip=True, hard
+wired in search_eval, search_space, cimsim_cli, v3_sweep); the agreed
+setting is the digital unit in the package (O9 / DR-9), which only the
+closed-form "offloaded twin" of C39 used. The evaluator now carries the
+offloaded setting end to end (analysis/v5/offload_model.md): unit nodes
+as reserved slots, the real qkv -> unit -> out_proj flows, hub ports at
+C_hub beside the mesh links and die ports, the unit's compute and K/V
+time in R, K/V capacity per unit, numeric boundaries and equivalent
+bandwidth under the hub plateau. Parameter provenance in
+analysis/v5/parameter_sources.md (all DR-9 values are public figures of
+device classes, i.e. explicit assumptions and scan axes). The on-chip
+path is unchanged (443 tests; reference layout to the digit). The e7/e8
+records are kept as the ReRAM-attention setting for paired comparison;
+new records go to analysis/v4/e9_* (attention: unit).
+Offload round additions 2026-10-13 (after the author's review of batch
+1): (1) the unit's working buffer and the attention algorithm
+(offload.attention_algorithm): one head's P x ctx scores (2 B) and
+probabilities (1 B) either fit the 8 MB buffer, or spill to the K/V
+memory (materialized: written and read once, one head's working set
+held beside the cache), or the queries are tiled (K and V re-read once
+per tile); 'auto' takes the cheaper memory traffic; the choice, spill,
+tile count and workspace are in every record and the K/V capacity check
+includes the workspace. (2) The head-split mode (OffloadConfig.split =
+'head'): every layer runs over all K units in complete K/V-head groups;
+the QKV -> unit flows carry each unit's Q, K and V column ranges (the
+overlap with the producers' column pieces, or the partial sums at the
+2-byte width under a row-split qkv_proj), the unit -> out_proj flows each
+unit's output share; the layer's unit time is one unit's share. The
+layer-group mode (one unit per layer) stays the main setting. (3)
+Parameter semantics recorded as reviewed: one GRS macro per direction
+per unit; two 32-bit LPDDR4 controller channels; 1 pJ/MAC as the digital
+compute subsystem's equivalent coefficient (internal buffers inside it).
+(4) scripts/v5_hub_checks.py: four hand-calculable hub cases
+(aggregation, distribution, shared die port, hub saturation) agree with
+load_components and the hand-off time rule to machine precision.
+E3 offload scenarios (offload6x6, offload_decode6x6, offload2_8x8) at
+kappa 4 with the unit's interface = kappa mesh links, so BookSim's c
+terminals per node express the hub port (analysis/v3/e3_offload/).
