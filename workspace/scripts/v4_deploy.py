@@ -131,6 +131,33 @@ def unit_specs(unit, macros=None):
         return out
     if unit == "e9_struct":   # batch 3: geometry x routing x port ratio under the central unit (Gemma-7B, OPT-13B)
         return [spec_for(m, aspect=a, routing=r, kappa=k, offload=OFF) for m in ("gemma7b", "opt13b") for a in (1.0, 2.0, 4.0) for r in ("xy", "yx") for k in (1, 2, 4)]
+    # ---- follow-up round (Isobar_followup_execution): offload backend throughout
+    if unit == "e10_cap":      # 6.1 CIM die capacity under the central unit (per macro count; CIMSIM_FABRIC set), natural near-square grid
+        n = macros or 8
+        models = {4: ("opt6.7b", "gemma7b"), 8: REAL, 16: REAL, 32: REAL}.get(n, ())     # OPT-13B at 4 macros: no static-operator account yet (mapper needed)
+        return [spec_for(m, account_suffix=("" if n == 8 else f"_m{n}"), macros=n, offload=OFF) for m in models]
+    if unit == "e10_cap_common":   # 6.1 common-grid control: Gemma on the reference 36 x 36 grid at 16 and 32 macros (8 is e9_ref)
+        n = macros or 8
+        return [spec_for("gemma7b", grid=(36, 36), account_suffix=("" if n == 8 else f"_m{n}"), macros=n, offload=OFF)] if n in (16, 32) else []
+    if unit == "e10_tiling":   # 6.2 OPT-13B legal QKV split: column-split input (_tlcol) vs the row-split colrow input, central unit
+        return [spec_for("opt13b", tiling="col", account_suffix="_tlcol", offload=OFF), spec_for("opt13b", offload=OFF)]
+    if unit == "e10_head":     # 7.1 distributed digital units: K = 4, fixed total resources, head groups, OPT-6.7B and OPT-13B (Gemma in e9_head); plus OPT-13B K = 4 per-unit layer groups for the expanded case
+        out = [spec_for(m, phase=ph, offload={**OFF, "K": 4, "resource_mode": "total", "split": "head"}) for m in ("opt6.7b", "opt13b") for ph in ("prefill", "decode")]
+        return out
+    if unit == "e10_ws":       # 9.2 workspace and length thresholds: Gemma K = 1 and K = 4 fixed-total head groups at S 1024 and 2048
+        out = []
+        for S in (1024, 2048):
+            for ph in ("prefill", "decode"):
+                out.append(spec_for("gemma7b", S=S, phase=ph, offload={**OFF, "K": 1, "resource_mode": "total"}))
+                out.append(spec_for("gemma7b", S=S, phase=ph, offload={**OFF, "K": 4, "resource_mode": "total", "split": "head"}))
+        return out
+    if unit == "e10_confirm":  # 7.2 representative configurations confirmed: 16-macro capacity (three models), K = 4 fixed-total head groups (three models), OPT-13B K = 4 per-unit layer groups, OPT-13B column-split QKV
+        out = [spec_for(m, offload={**OFF, "K": 4, "resource_mode": "total", "split": "head"}) for m in REAL]
+        out.append(spec_for("opt13b", offload={**OFF, "K": 4, "resource_mode": "per_unit"}))
+        out.append(spec_for("opt13b", tiling="col", account_suffix="_tlcol", offload=OFF))
+        return out
+    if unit == "e10_confirm_cap":   # the 16-macro points (CIMSIM_FABRIC = the 16-macro variant)
+        return [spec_for(m, account_suffix="_m16", macros=16, offload=OFF) for m in REAL]
     if unit == "e9_confirm":  # offload batch 4: the reference points under the central unit (500 fills, seeds 5-14, communication-normalised objective); representatives of the scans are appended by hand in analysis/v4/e9_confirm_specs.json
         out = [spec_for("ref2p7b", S=512, phase=ph, grid=(24, 24), offload=OFF) for ph in ("prefill", "decode")]
         out += [spec_for(m, S=512, phase=ph, offload=OFF) for m in REAL for ph in ("prefill", "decode")]
@@ -170,7 +197,7 @@ def main():
     ap.add_argument("--objective", default="t_norm", choices=("t_norm", "h_norm"), help="t_norm: T/T_base (V3); h_norm: (T-R)/(T_base-R), the temperature on the communication term")
     args = ap.parse_args()
     specs = unit_specs(args.unit, args.macros)
-    if args.unit in ("e8_cap", "e8_common", "e8_struct"):
+    if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common", "e10_confirm_cap"):
         from scripts import mlx_system as mlx
         assert mlx.N_MACROS_PER_DIE == (args.macros or 8), f"CIMSIM_FABRIC has {mlx.N_MACROS_PER_DIE} macros per die, --macros says {args.macros}"
     if args.only:
@@ -179,7 +206,7 @@ def main():
         for s in specs:
             print(s["config_id"])
         print(len(specs), "configs"); return
-    out = os.path.join(V4, args.unit + (f"_m{args.macros or 8}" if args.unit in ("e8_cap", "e8_common", "e8_struct") else "")); os.makedirs(out, exist_ok=True)
+    out = os.path.join(V4, args.unit + (f"_m{args.macros or 8}" if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common") else "")); os.makedirs(out, exist_ok=True)
     jl = os.path.join(out, "configs.jsonl")
     done = set()
     if os.path.exists(jl):

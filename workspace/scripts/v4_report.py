@@ -16,14 +16,21 @@ WS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, WS)
 from scripts import v3_sweep as v3s     # noqa: E402
 V4 = os.path.join(WS, "analysis", "v4")
-UNITS = ("e9_pair", "e9_ref", "e9_scan", "e9_hub", "e9_struct", "e9_confirm", "e7_ref", "e7_struct", "e7_len", "e7_lencap", "e7_geom", "e7_tiling") + tuple(f"e8_cap_m{n}" for n in (2, 4, 6, 8, 12, 16, 24, 32)) + tuple(f"e8_common_m{n}" for n in (8, 16, 24, 32))
+UNITS = ("e9_pair", "e9_ref", "e9_scan", "e9_hub", "e9_head", "e9_struct", "e9_confirm",
+         "e10_cap_m4", "e10_cap_m16", "e10_cap_m32", "e10_cap_common_m16", "e10_cap_common_m32", "e10_tiling", "e10_head", "e10_ws", "e10_confirm", "e7_ref", "e7_struct", "e7_len", "e7_lencap", "e7_geom", "e7_tiling") + tuple(f"e8_cap_m{n}" for n in (2, 4, 6, 8, 12, 16, 24, 32)) + tuple(f"e8_common_m{n}" for n in (8, 16, 24, 32))
 TITLES = {"e7_ref": "Reference workpoint (prefill 512, kappa 2, XY, 0.4 GB/s), near-square and 2:1 grids",
           "e7_struct": "Port ratio x routing on the near-square grid (prefill 512)",
           "e7_len": "Lengths and phases on the near-square grid (kappa 2, XY, 0.4 GB/s)",
           "e7_lencap": "Lengths above the standard attention die, with the attention die ASSUMED larger (declared in the account; static operators on the standard die)",
           "e7_geom": "Geometry (2:1, 4:1) x routing x port ratio (prefill 512)",
           "e7_tiling": "Tiling variants with their own mapper accounts (row: row-split preference on every operator; mixed: ffn2 row-split; mixed2: ffn2 and out_proj row-split); colrow is e7_ref"}
-TITLES.update({"e9_pair": "OFFLOAD batch 1: the reference 2.7B and Gemma-7B, prefill / decode at S 512, ReRAM attention die vs the central digital unit (DR-9 reference values)",
+TITLES.update({"e9_head": "OFFLOAD batch 3 control: Gemma-7B, fixed total resources, K = 1 / 2 / 4, one unit per layer (layer groups) vs every layer over all units (head groups)",
+               "e10_cap_m4": "FOLLOW-UP 6.1: CIM die capacity under the central unit, 4 macros per die", "e10_cap_m16": "FOLLOW-UP 6.1: 16 macros per die", "e10_cap_m32": "FOLLOW-UP 6.1: 32 macros per die",
+               "e10_cap_common_m16": "FOLLOW-UP 6.1 common grid: Gemma on 36 x 36 at 16 macros", "e10_cap_common_m32": "FOLLOW-UP 6.1 common grid: Gemma on 36 x 36 at 32 macros",
+               "e10_tiling": "FOLLOW-UP 6.2: OPT-13B column-split QKV (_tlcol) vs row-split (colrow) under the central unit",
+               "e10_head": "FOLLOW-UP 7.1: K = 4 fixed-total head groups, OPT-6.7B and OPT-13B", "e10_ws": "FOLLOW-UP 9.2: Gemma K = 1 and K = 4 head groups at S 1024 / 2048",
+               "e10_confirm": "FOLLOW-UP 7.2: representative configurations confirmed (500 fills, seeds 5-14)",
+               "e9_pair": "OFFLOAD batch 1: the reference 2.7B and Gemma-7B, prefill / decode at S 512, ReRAM attention die vs the central digital unit (DR-9 reference values)",
                "e9_ref": "OFFLOAD batch 2: the three real models on the central unit, prefill / decode x lengths (K/V capacity of the unit decides feasibility)",
                "e9_scan": "OFFLOAD batch 2: Gemma-7B single-variable scans (unit rate, K/V bandwidth, hub interface, K/V capacity, mesh bandwidth)",
                "e9_hub": "OFFLOAD batch 3: hub position (center / edge / corner) and count (K = 2, 4; fixed total vs per-unit resources)",
@@ -40,7 +47,10 @@ def row_of(r, unit):
     base = {"unit": unit, "config_id": r["config_id"], "model": s["model"], "status": r["status"], "phase": s["phase"], "S": s["S"],
             "kappa": s["kappa"], "routing": s["routing"], "grid": "x".join(map(str, r["grid"])) if r.get("grid") else "", "reason": r.get("reason", ""),
             "die_macros": s.get("die_macros", 8), "account_suffix": s.get("account_suffix", ""), "chain": "; ".join(f"{n} {k}{(' ' + sp) if sp else ''}" for n, k, sp in r.get("chain", [])),
-            "attention": (r.get("attention") or {}).get("mode", "die"), "offload": s.get("offload") or ""}
+            "attention": (r.get("attention") or {}).get("mode", "die"), "offload": s.get("offload") or "",
+            "scan_axis": (next(iter((s.get("offload") or {}).get("unit", {}).keys()), "bw" if s["bw"] != 0.4 else "") if s.get("offload") else ""),
+            "scan_value": (next(iter((s.get("offload") or {}).get("unit", {}).values()), s["bw"] if s["bw"] != 0.4 else "") if s.get("offload") else ""),
+            "bw_gbps": s["bw"]}
     if r["status"] != "done":
         return base
     m, b, sr, t = r["metrics"], r["band"], r["search"], r["timing"]
@@ -87,7 +97,7 @@ def main():
         rs = [row_of(r, u) for r in recs]
         rows += rs
         md.append(f"## {u}: {TITLES[u]}\n")
-        md.append("| model | phase S | kappa | routing | dies / grid | chain (dies per operator) | strongest (rule) | T_base (ms) | headline T (ms) | G median [min, max] | G headline | eta (H = P + A/B) | r0 | g_BW (B_eq) | vs default | vs rule | dE | band of rules (ratio) | region at 0.4 GB/s | wall (s) | status |")
+        md.append("| model | phase S | kappa | routing | dies / grid | chain (dies per operator) | strongest (rule) | T_base (ms) | headline T (ms) | G median [min, max] | G headline | eta (H = P + A/B) | r0 | g_BW (B_eq) | vs default | vs rule | dE | band of rules (ratio) | region at the row's mesh bandwidth | wall (s) | status |")
         md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for x in rs:
             if x["status"] != "done":
