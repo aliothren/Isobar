@@ -39,6 +39,8 @@ services:
     volumes:
       - ./workspace:/home/workspace
       - ./io_study:/home/io_study
+      # IT (2026-10-13): random small-file writes go to the local disk, not the NFS /home; the mapper's outputs live on /data
+      - /data/yuxinr/cimloop/outputs:/home/workspace/outputs
     environment:
       - USER_UID=${USER_UID:-1000}
       - USER_GID=${USER_GID:-1000}

@@ -81,3 +81,4 @@ workspace/tools/*
 # folder guides inside otherwise ignored trees
 !workspace/outputs/README.md
 !workspace/tools/README.md
+workspace/outputs

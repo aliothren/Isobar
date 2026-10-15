@@ -131,6 +131,14 @@ def unit_specs(unit, macros=None):
         return out
     if unit == "e9_struct":   # batch 3: geometry x routing x port ratio under the central unit (Gemma-7B, OPT-13B)
         return [spec_for(m, aspect=a, routing=r, kappa=k, offload=OFF) for m in ("gemma7b", "opt13b") for a in (1.0, 2.0, 4.0) for r in ("xy", "yx") for k in (1, 2, 4)]
+    if unit == "e9_confirm":  # offload batch 4: the reference points under the central unit (500 fills, seeds 5-14, communication-normalised objective); representatives of the scans are appended by hand in analysis/v4/e9_confirm_specs.json
+        out = [spec_for("ref2p7b", S=512, phase=ph, grid=(24, 24), offload=OFF) for ph in ("prefill", "decode")]
+        out += [spec_for(m, S=512, phase=ph, offload=OFF) for m in REAL for ph in ("prefill", "decode")]
+        extra = os.path.join(V4, "e9_confirm_specs.json")
+        if os.path.exists(extra):
+            for s in json.load(open(extra)):
+                out.append(spec_for(**s))
+        return out
     if unit == "e7_confirm":  # confirmation of the real-model reference points and the new main-case candidates (500 fills, seeds 5-14, communication-normalised objective)
         return [spec_for("opt6.7b"), spec_for("gemma7b"), spec_for("opt13b"),
                 spec_for("opt13b", aspect=4.0, routing="xy", kappa=4), spec_for("gemma7b", aspect=4.0, routing="yx", kappa=4), spec_for("opt6.7b", aspect=4.0, routing="xy", kappa=4)]
@@ -184,7 +192,8 @@ def main():
                                                else " = (T - R) / (T_base - R): t0 on the communication term (item 1.3)"),
                 "budget_rule": "max(1200, ceil(1200 n/544))", "starts": "strongest rule, strongest random of the pool, random seed 0",
                 "seed_formula": "1000003 s + start index (starts sorted by name)", "protocol_id": protocol_id, "planned": [s["config_id"] for s in specs]}
-    json.dump(manifest, open(os.path.join(out, "manifest.json"), "w"), indent=1)
+    with open(os.path.join(out, "manifest.json"), "w") as mf:      # explicit close: a launch-time manifest was found empty
+        json.dump(manifest, mf, indent=1)
     with open(jl, "a") as f:
         for spec in specs:
             if spec["config_id"] in done:
@@ -194,8 +203,8 @@ def main():
             if spec["max_positions"] and spec["S"] > spec["max_positions"]:
                 rec = {"config_id": spec["config_id"], "spec": spec, "status": "not supported by the model",
                        "reason": f"S {spec['S']} > the model's positions {spec['max_positions']}"}
-            elif spec.get("offload") and not os.path.exists(spec["account_path"]) and spec["model"] != "ref2p7b" and \
-                    glob.glob(spec["account_path"].replace(".json", "_attn*.json")):
+            elif spec.get("offload") and spec["model"] != "ref2p7b" and glob.glob(spec["account_path"].replace(".json", "_attn*.json")) and \
+                    (not os.path.exists(spec["account_path"]) or not (json.load(open(spec["account_path"])).get("phases") or {}).get(spec["phase"])):
                 # offloaded: only the static operators are read from the account; the assumed-attention-die account of that
                 # length carries them (derived exactly by P scaling from the measured standard-die account)
                 spec["account_path"] = sorted(glob.glob(spec["account_path"].replace(".json", "_attn*.json")))[0]

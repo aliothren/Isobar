@@ -7444,3 +7444,15 @@ load_components and the hand-off time rule to machine precision.
 E3 offload scenarios (offload6x6, offload_decode6x6, offload2_8x8) at
 kappa 4 with the unit's interface = kappa mesh links, so BookSim's c
 terminals per node express the hub port (analysis/v3/e3_offload/).
+Offload round closed 2026-10-14: batches 1 to 4 of the request run
+(analysis/v4/e9_pair, e9_ref with the long contexts under the buffer
+model, e9_scan, e9_hub, e9_head, e9_struct, e9_confirm; BookSim hub
+scenarios analysis/v3/e3_offload); the status against every section of
+the request and the open items are in analysis/v4/NOTES.md. Driver fixes
+on the way: the attention-die capacity check is skipped under offload
+(it had rejected OPT-13B at S 1024); offloaded long-context deployments
+read the static operators from the assumed-attention-die accounts; the
+manifest file is closed explicitly. Storage (IT, 2026-10-13): the
+records and the mapper outputs moved to /data (local disk) behind
+symlinks, archives to /space; docker-compose bind-mounts
+/data/yuxinr/cimloop/outputs; workspace/outputs is no longer tracked.

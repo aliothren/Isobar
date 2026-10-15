@@ -228,7 +228,7 @@ def evaluate_config(spec, n_random, seeds, calib, log=print, objective="t_norm")
     # capacity of the attention die: both attention operators co-resident
     att_cells = sum(lw.op_weight_cells(o) for o in lw.block_ops(cfg, S, phase) if o.kind == "dynamic")
     att_cap = account.get("attention_die_capacity", {}).get("cells", lw.DIE_WEIGHT_CELLS)     # an assumed larger attention die is declared in the account
-    if att_cells > att_cap:
+    if att_cells > att_cap and not spec.get("offload"):      # offloaded: no attention die; the unit's K/V memory is checked below
         return {"config_id": spec["config_id"], "spec": spec, "status": "infeasible",
                 "reason": f"attention K/V arrays {att_cells} cells > die {att_cap}"}
     dims = TILINGS[spec["tiling"]]
