@@ -20,7 +20,7 @@ from scripts import v3_sweep as v3                       # noqa: E402
 
 FAMILIES = [  # (family, model, candidate units in order of preference, config id)
     *[("reference 8-macro central K=1", m, ["e9_confirm", "e9_ref"], f"{m}_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1") for m in ("opt6.7b", "gemma7b", "opt13b")],
-    *[("capacity 16-macro central K=1", m, ["e10_confirm_cap_m16", "e10_cap_m16"], f"{m}_prefill512_colrow_sq_mesh_xy_k2_b0.4_m16_offcenterK1") for m in ("opt6.7b", "gemma7b", "opt13b")],
+    *[("capacity 16-macro central K=1", m, ["e10_confirm_cap", "e10_confirm_cap_m16", "e10_cap_m16"], f"{m}_prefill512_colrow_sq_mesh_xy_k2_b0.4_m16_offcenterK1") for m in ("opt6.7b", "gemma7b", "opt13b")],
     *[("distributed K=4 fixed-total head groups", m, ["e10_confirm", "e10_head", "e9_head"], f"{m}_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK4TH") for m in ("opt6.7b", "gemma7b", "opt13b")],
     ("expanded: OPT-13B K=4 per-unit layer groups", "opt13b", ["e10_confirm", "e9_hub"], "opt13b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK4"),
     ("expanded: OPT-13B column-split QKV central K=1", "opt13b", ["e10_confirm", "e10_tiling"], "opt13b_prefill512_col_sq_mesh_xy_k2_b0.4_tlcol_offcenterK1"),
@@ -72,7 +72,7 @@ def main():
         reps.append({"family": fam, "model": model, "config_id": cid, "status": "done", "unit": unit, "protocol_id": prot, "n_dies": rec["n_dies"], "grid": "x".join(map(str, rec["grid"])), "n_units": K,
                      "grouping": att.get("split", "layer"), "resource_mode": s["offload"].get("resource_mode"), "die_macros": s.get("die_macros", 8),
                      "unit_mac_per_s_each": u["mac_per_second"], "total_mac_per_s": u["mac_per_second"] * K, "kv_gbps_each": u["kv_words_per_second"] / 1e9, "kv_capacity_bytes_each": u["kv_capacity_words"],
-                     "hub_gbps_per_direction_each": u["link_bandwidth_gbps"], "buffer_bytes_each": u["buffer_bytes"], "active_units_per_layer": K if att.get("split") == "head" else 1,
+                     "hub_gbps_per_direction_each": u["link_bandwidth_gbps"], "buffer_bytes_each": u.get("buffer_bytes", ""), "active_units_per_layer": K if att.get("split") == "head" else 1,
                      "R_s": R, "T_default_s": Td, "T_strongest_s": Tb, "T_search_s": Ts, "H_default_s": Hd, "H_strongest_s": Hb, "H_search_s": Hs, "strongest": strongest, "representative": rep})
         for role, name, row in (("default", default, lib[default]), ("strongest", strongest, lib[strongest]), ("search", rep, runs[rep])):
             cands.append({"family": fam, "model": model, "config_id": cid, "role": role, "layout": name, "T_s": row["T_s"], "H_full_s": Hf(row), "H_service_s": row["H_s"], "P_s": row["prop_s"], "E_J": row["E_J"], "protocol_id": prot})

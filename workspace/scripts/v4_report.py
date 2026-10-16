@@ -17,7 +17,7 @@ sys.path.insert(0, WS)
 from scripts import v3_sweep as v3s     # noqa: E402
 V4 = os.path.join(WS, "analysis", "v4")
 UNITS = ("e9_pair", "e9_ref", "e9_scan", "e9_hub", "e9_head", "e9_struct", "e9_confirm",
-         "e10_cap_m4", "e10_cap_m16", "e10_cap_m32", "e10_cap_common_m16", "e10_cap_common_m32", "e10_tiling", "e10_head", "e10_ws", "e10_confirm", "e7_ref", "e7_struct", "e7_len", "e7_lencap", "e7_geom", "e7_tiling") + tuple(f"e8_cap_m{n}" for n in (2, 4, 6, 8, 12, 16, 24, 32)) + tuple(f"e8_common_m{n}" for n in (8, 16, 24, 32))
+         "e10_cap_m4", "e10_cap_m16", "e10_cap_m32", "e10_cap_common_m16", "e10_cap_common_m32", "e10_tiling", "e10_head", "e10_ws", "e10_confirm", "e10_confirm_cap", "e7_ref", "e7_struct", "e7_len", "e7_lencap", "e7_geom", "e7_tiling") + tuple(f"e8_cap_m{n}" for n in (2, 4, 6, 8, 12, 16, 24, 32)) + tuple(f"e8_common_m{n}" for n in (8, 16, 24, 32))
 TITLES = {"e7_ref": "Reference workpoint (prefill 512, kappa 2, XY, 0.4 GB/s), near-square and 2:1 grids",
           "e7_struct": "Port ratio x routing on the near-square grid (prefill 512)",
           "e7_len": "Lengths and phases on the near-square grid (kappa 2, XY, 0.4 GB/s)",
@@ -29,7 +29,7 @@ TITLES.update({"e9_head": "OFFLOAD batch 3 control: Gemma-7B, fixed total resour
                "e10_cap_common_m16": "FOLLOW-UP 6.1 common grid: Gemma on 36 x 36 at 16 macros", "e10_cap_common_m32": "FOLLOW-UP 6.1 common grid: Gemma on 36 x 36 at 32 macros",
                "e10_tiling": "FOLLOW-UP 6.2: OPT-13B column-split QKV (_tlcol) vs row-split (colrow) under the central unit",
                "e10_head": "FOLLOW-UP 7.1: K = 4 fixed-total head groups, OPT-6.7B and OPT-13B", "e10_ws": "FOLLOW-UP 9.2: Gemma K = 1 and K = 4 head groups at S 1024 / 2048",
-               "e10_confirm": "FOLLOW-UP 7.2: representative configurations confirmed (500 fills, seeds 5-14)",
+               "e10_confirm": "FOLLOW-UP 7.2: representative configurations confirmed (500 fills, seeds 5-14)", "e10_confirm_cap": "FOLLOW-UP 7.2: the 16-macro capacity points confirmed (500 fills, seeds 5-14)",
                "e9_pair": "OFFLOAD batch 1: the reference 2.7B and Gemma-7B, prefill / decode at S 512, ReRAM attention die vs the central digital unit (DR-9 reference values)",
                "e9_ref": "OFFLOAD batch 2: the three real models on the central unit, prefill / decode x lengths (K/V capacity of the unit decides feasibility)",
                "e9_scan": "OFFLOAD batch 2: Gemma-7B single-variable scans (unit rate, K/V bandwidth, hub interface, K/V capacity, mesh bandwidth)",

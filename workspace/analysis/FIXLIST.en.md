@@ -7456,3 +7456,14 @@ manifest file is closed explicitly. Storage (IT, 2026-10-13): the
 records and the mapper outputs moved to /data (local disk) behind
 symlinks, archives to /space; docker-compose bind-mounts
 /data/yuxinr/cimloop/outputs; workspace/outputs is no longer tracked.
+Follow-up round 2026-10-15 (Isobar_followup_execution.md): P0 exporters
+(scripts/v6_manifest.py, v6_gemma_pair.py, v6_booksim_audit.py,
+v6_boundaries.py), P1 units (v4_deploy e10_cap / e10_cap_common /
+e10_tiling / e10_head / e10_ws / e10_confirm / e10_confirm_cap; the
+16-macro confirmation writes to analysis/v4/e10_confirm_cap/), the
+comparison export (v6_comparison.py), the P2 re-pricings
+(v6_hub_mesh_grid.py, v6_energy_coeff.py) and the timing script
+(v6_timing.py). Report analysis/v6/REPORT_followup.md. The
+representative OPT-13B configuration is the column-split QKV input
+(account opt13b_S512_tlcol.json); the row-split one stays as the record
+of the tiler's default order.
