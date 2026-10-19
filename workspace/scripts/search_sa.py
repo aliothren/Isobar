@@ -178,7 +178,7 @@ def anneal(J: Callable[[ss.Pi], float], pi0: ss.Pi, n_slots: int,
             continue
         j2 = J(pi2)
         dj = j2 - j
-        if dj < -1e-15 or (t > 0.0 and rng.random() < math.exp(-dj / t)):
+        if dj <= 0.0 or (t > 0.0 and rng.random() < math.exp(-dj / t)):   # dj <= 0 was always accepted (exp(-dj/t) >= 1); the explicit branch avoids the exp overflow at the tiny late-schedule temperatures of large budgets (OPT-13B 4-macro, 9706 steps)
             pi, j = pi2, j2
             res.accepted += 1
             if j < res.best_j - 1e-15:

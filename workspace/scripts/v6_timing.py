@@ -93,7 +93,7 @@ def main():
             samples.append({"config_id": cid, "repeat": "search", "init_s": "", "session_build_s": "", "full_eval_s": "", "incremental_per_move_s": "", "repricing_per_candidate_s": "", **s_})
         summary.append({"config_id": cid, "n_dies": rec["n_dies"], "n_flows": n_flows, "n_stages": n_stages, "path_total_hops": path_len, "init_s": t_init, "session_build_s": t_sess,
                         "full_eval_median_s": statistics.median(full), "full_eval_p10_s": q(full, .1), "full_eval_p90_s": q(full, .9),
-                        "incremental_median_s": statistics.median(inc), "incremental_p10_s": q(inc, .1), "incremental_p90_s": q(inc, .9), "incremental_vs_full_rel_err": max(inc_consistency),
+                        "incremental_median_s": statistics.median(inc), "incremental_p10_s": q(inc, .1), "incremental_p90_s": q(inc, .9), "incremental_relative_error": max(inc_consistency), "full_over_incremental_speedup": statistics.median(full) / statistics.median(inc),
                         "repricing_per_candidate_median_s": statistics.median(rep), "search_steps": steps, "search_wall_median_s": statistics.median(x["wall_s"] for x in search),
                         "search_evaluations": search[0]["evaluations"], "load_average": os.getloadavg()})
         print(f"{cid[:48]:48s} dies {rec['n_dies']} flows {n_flows} | init {t_init:.2f} s sess {t_sess:.2f} s | full {statistics.median(full)*1e3:.1f} ms | inc {statistics.median(inc)*1e3:.2f} ms | reprice {statistics.median(rep)*1e6:.0f} us/cand | search {steps} steps {statistics.median(x['wall_s'] for x in search):.1f} s | load {os.getloadavg()[0]:.1f}", flush=True)

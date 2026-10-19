@@ -32,6 +32,7 @@ from scripts import v4_models as vm         # noqa: E402
 V4 = os.path.join(WS, "analysis", "v4")
 ACC = os.path.join(V4, "accounts")
 REAL = ("opt6.7b", "gemma7b", "opt13b")
+SMALL = ("opt1.3b", "qwen2.5-1.5b")
 
 
 def offload_tag(o):
@@ -134,7 +135,7 @@ def unit_specs(unit, macros=None):
     # ---- follow-up round (Isobar_followup_execution): offload backend throughout
     if unit == "e10_cap":      # 6.1 CIM die capacity under the central unit (per macro count; CIMSIM_FABRIC set), natural near-square grid
         n = macros or 8
-        models = {4: ("opt6.7b", "gemma7b"), 8: REAL, 16: REAL, 32: REAL}.get(n, ())     # OPT-13B at 4 macros: no static-operator account yet (mapper needed)
+        models = {4: REAL, 8: REAL, 16: REAL, 32: REAL}.get(n, ())     # OPT-13B at 4 macros: account measured 2026-10-16 (container recreated with /data mounted)
         return [spec_for(m, account_suffix=("" if n == 8 else f"_m{n}"), macros=n, offload=OFF) for m in models]
     if unit == "e10_cap_common":   # 6.1 common-grid control: Gemma on the reference 36 x 36 grid at 16 and 32 macros (8 is e9_ref)
         n = macros or 8
@@ -183,6 +184,19 @@ def unit_specs(unit, macros=None):
     if unit == "e8_cap":      # the capacity axis: run one process per macro count with CIMSIM_FABRIC set to that variant (the tiler follows the fabric)
         n = macros or 8
         return [spec_for(m, aspect=a, account_suffix=("" if n == 8 else f"_m{n}"), macros=n) for m in REAL for a in (1.0, 2.0)]
+    if unit == "e11_small":    # next-tasks section 4, batch A: the two small models, prefill and decode 512, 8 macros, central K = 1 (run with --n-random 500 --seeds 5..14 --objective h_norm)
+        return [spec_for(m, S=512, phase=ph, offload=OFF) for m in SMALL for ph in ("prefill", "decode")]
+    if unit == "e11_small_cap":   # batch B: 16 macros per die (CIMSIM_FABRIC = the 16-macro variant), prefill 512, central K = 1
+        out = [spec_for(m, S=512, account_suffix="_m16", macros=16, offload=OFF) for m in SMALL]
+        out.append(spec_for("qwen2.5-1.5b", S=512, tiling="col", account_suffix="_m16_tlcol", macros=16, offload=OFF))   # colrow is infeasible on the 16-macro die (ffn1 would be row-split, which a gated FFN cannot be); col gives ffn1 4 dies column-split
+        return out
+    if unit == "e11_small_len":   # batch C: S 128 and 2048, prefill and decode, 8 macros, central K = 1 (exploration, h_norm)
+        return [spec_for(m, S=S, phase=ph, offload=OFF) for m in SMALL for ph in ("prefill", "decode") for S in (128, 2048)]
+    if unit == "e11_qkv_common":  # section 5: OPT-13B row-split QKV on the column-split's 49 x 49 grid (same central unit coordinate), confirmation protocol
+        return [spec_for("opt13b", grid=(49, 49), offload=OFF)]
+    if unit == "e11_hubmesh":     # section 6: fresh searches at the selected hub x mesh points (Gemma reference configuration), exploration with h_norm
+        pts = [("prefill", 12.5, 1.6), ("prefill", 0.2, 0.4), ("prefill", 0.8, 0.8), ("prefill", 12.5, 12.5), ("decode", 0.4, 0.4), ("decode", 1.6, 1.6)]
+        return [spec_for("gemma7b", phase=ph, bw=B, offload=with_unit(link_bandwidth_gbps=Ch)) for ph, Ch, B in pts]
     raise ValueError(unit)
 
 
@@ -197,7 +211,7 @@ def main():
     ap.add_argument("--objective", default="t_norm", choices=("t_norm", "h_norm"), help="t_norm: T/T_base (V3); h_norm: (T-R)/(T_base-R), the temperature on the communication term")
     args = ap.parse_args()
     specs = unit_specs(args.unit, args.macros)
-    if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common", "e10_confirm_cap"):
+    if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common", "e10_confirm_cap", "e11_small_cap"):
         from scripts import mlx_system as mlx
         assert mlx.N_MACROS_PER_DIE == (args.macros or 8), f"CIMSIM_FABRIC has {mlx.N_MACROS_PER_DIE} macros per die, --macros says {args.macros}"
     if args.only:

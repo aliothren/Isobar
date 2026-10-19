@@ -45,6 +45,19 @@ MODELS = {
                  {"url": "https://ai.google.dev/gemma/docs/core/distributed_tuning?hl=en", "retrieved": RETRIEVED,
                   "values": "weight shapes of the released checkpoint: gate_proj and up_proj 3072 x 24576 each, down_proj 24576 x 3072; q_proj 3072 x 4096, k_proj / v_proj 3072 x 4096, o_proj 4096 x 3072; embedding 256000 x 3072"}],
         notes="The paper's 'feedforward hidden dims 49152' is the two branches together (gate 24576 + up 24576); d_ff here is one branch (24576) and the mapped ffn1 has 2 x 24576 columns, ffn2 24576 rows. Attention width 16 x 256 = 4096 differs from d_model 3072: qkv_proj is 3072 x 12288, out_proj 4096 x 3072. 16 query heads and 16 K/V heads (MHA). Vocab 256000 in the released checkpoint vs 256128 in the paper's table; the embedding is tied to the LM head. Column order declared for the mapped ffn1: gate_j and up_j interleaved so that each die holds matching pairs and forms gelu(gate) x up locally before the hand-off (a declaration of column order on a weight-stationary array, no cost)."),
+    "opt1.3b": dict(
+        cfg=dict(d_model=2048, n_heads=32, d_ff=8192, n_layers=24, name="opt-1.3b", vocab=50272, activation="relu"),
+        max_positions=2048, positions="learned absolute (max_position_embeddings 2048)", norm="LayerNorm, pre-norm (do_layer_norm_before)",
+        sources=[{"url": "https://huggingface.co/facebook/opt-1.3b/blob/main/config.json", "retrieved": "2026-10-16",
+                  "values": "hidden_size 2048, ffn_dim 8192, num_attention_heads 32, num_hidden_layers 24, max_position_embeddings 2048, activation_function relu, vocab_size 50272, word_embed_proj_dim 2048, do_layer_norm_before true, torch_dtype float16, transformers_version 4.21.0.dev0"}],
+        notes="MHA (head_dim 64 = 2048 / 32); FFN two plain projections with ReLU; the same family as opt6.7b / opt13b (scale series). Nominal 1.3B parameters; the mapped block weights are 24 x (3 + 1 + 4 + 4) x 2048^2 = 1.21e9."),
+    "qwen2.5-1.5b": dict(
+        cfg=dict(d_model=1536, n_heads=12, d_ff=8960, n_layers=28, name="qwen2.5-1.5b", vocab=151936, head_dim=128, n_kv_heads=2, ffn_gated=True, activation="swiglu"),
+        max_positions=131072, positions="RoPE (theta 1e6; max_position_embeddings 131072, no sliding window)", norm="RMSNorm (eps 1e-6) on the input of each sub-layer",
+        sources=[{"url": "https://huggingface.co/Qwen/Qwen2.5-1.5B/blob/main/config.json", "retrieved": "2026-10-16",
+                  "values": "hidden_size 1536, intermediate_size 8960, num_attention_heads 12, num_key_value_heads 2, num_hidden_layers 28, hidden_act silu, max_position_embeddings 131072, vocab_size 151936, tie_word_embeddings true, torch_dtype bfloat16, transformers_version 4.40.1, rope_theta 1000000, rms_norm_eps 1e-6"},
+                 {"url": "https://huggingface.co/Qwen/Qwen2.5-1.5B", "retrieved": "2026-10-16", "values": "model card: 1.54B parameters in total, 1.31B non-embedding; 28 layers; GQA 12 query heads / 2 K/V heads; SwiGLU; tied embeddings"}],
+        notes="GQA: head_dim 128 (= 1536 / 12); q_proj 1536 x 1536, k_proj / v_proj 1536 x 256 each -> the mapped qkv_proj is 1536 x 2048; out_proj 1536 x 1536; gated FFN: gate_proj and up_proj 1536 x 8960 each (mapped ffn1 1536 x 17920 with gate_j / up_j columns interleaved), down_proj 8960 x 1536. The attention on the digital unit computes 12 query heads against the 2 physical K/V heads (each K/V head serves 6 query heads); the K/V cache holds 2 heads. Head groups need K | 12 and K | 2: K = 2 is legal, K = 4 is not."),
     "ref2p7b": dict(
         cfg=dict(d_model=2560, n_heads=32, d_ff=10240, n_layers=32, name="gpt-2.7B-class", vocab=50257),
         max_positions=None, positions="(class model, as in the V3 records)", norm="LayerNorm",
@@ -63,7 +76,7 @@ def block_params(cfg):
     per_layer = sum(ops[n].C * ops[n].M for n in ("qkv_proj", "out_proj", "ffn1", "ffn2"))
     return {"per_layer_matmul_params": per_layer, "block_params_all_layers": per_layer * cfg.n_layers,
             "embedding_params": cfg.vocab * cfg.d_model, "lm_head_params": cfg.vocab * cfg.d_model,
-            "lm_head_tied_to_embedding": cfg.name.startswith("gemma") or cfg.name.startswith("opt")}
+            "lm_head_tied_to_embedding": cfg.name.startswith(("gemma", "opt", "qwen"))}
 
 
 def snapshot(name):

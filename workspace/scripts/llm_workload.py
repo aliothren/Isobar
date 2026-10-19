@@ -89,7 +89,7 @@ class GptConfig:
     head_dim: int = None        # None -> d_model // n_heads (Gemma: 256 with d_model 3072, 16 heads)
     n_kv_heads: int = None      # None -> n_heads (grouped K/V: fewer resident K/V arrays)
     ffn_gated: bool = False     # GeGLU / SwiGLU: two up-projections (gate, up) of width d_ff each, gated product into ffn2
-    activation: str = "gelu"    # "gelu" | "relu" (OPT) | "geglu" (set with ffn_gated)
+    activation: str = "gelu"    # "gelu" | "relu" (OPT) | "geglu" / "swiglu" (set with ffn_gated)
 
     @property
     def dh(self) -> int:
@@ -200,7 +200,8 @@ def block_elementwise_ops(cfg: GptConfig, S: int, phase: str = "prefill"):
         # GeGLU (Gemma) reads gate and up, GELU on the gate, one product, writes
         {"gelu": ElementwiseOp("gelu", Pq * ff, 2, adds=2, muls=3, luts=1, after="ffn1"),
          "relu": ElementwiseOp("relu", Pq * ff, 2, adds=1, muls=0, luts=0, after="ffn1"),
-         "geglu": ElementwiseOp("geglu", Pq * ff, 3, adds=2, muls=4, luts=1, after="ffn1")}[cfg.activation],
+         "geglu": ElementwiseOp("geglu", Pq * ff, 3, adds=2, muls=4, luts=1, after="ffn1"),
+         "swiglu": ElementwiseOp("swiglu", Pq * ff, 3, adds=0, muls=2, luts=1, after="ffn1")}[cfg.activation],   # silu(gate) x up: one sigmoid lookup, two multiplies per element (Qwen2.5)
         # two LayerNorms per block (pre-attention, pre-FFN): mean pass, variance
         # pass, normalise pass; per element ~ 3 adds, 2 muls, and an rsqrt LUT
         # amortised over the row

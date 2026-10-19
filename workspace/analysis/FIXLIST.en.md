@@ -7467,3 +7467,82 @@ comparison export (v6_comparison.py), the P2 re-pricings
 representative OPT-13B configuration is the column-split QKV input
 (account opt13b_S512_tlcol.json); the row-split one stays as the record
 of the tiler's default order.
+
+Figure-data round 2026-10-16 (Isobar_next_tasks.md sections 2-3,
+Isobar_figure_table_plan.md): exporters scripts/v7_common.py,
+v7_fig1_phase.py (intra-die enumeration, Gemma package grid over device
+rate x mesh bandwidth re-priced from the stored seven-rule candidates,
+per-rule boundary status, 20% spread contour, hardware projections),
+v7_fig2_pipeline.py (one traceable offload example), v7_fig3_fig4_validation.py
+(silicon reference, per-candidate BookSim libraries with a common baseline,
+exact word-hops groups, selection by objective, per-stage tie diagnostics
+with targeted BookSim re-runs), v7_fig5_fig6_results.py (Gemma panel bars,
+local bandwidth curve, consistency checks; nine-cell data with actual pair
+and seed statistics separated), v7_fig7_mechanisms.py, v7_table1_setup.py,
+v7_plot_manifest.py. Outputs in analysis/v7/ (git-ignored like v6); index
+analysis/v7/plot_data_manifest.csv; report analysis/v7/REPORT_figure_data.md.
+Decisions and corrections of this round:
+- The nine-cell matrix keeps the OPT-13B row-split QKV as representative
+  (the 2026-10-15 note above recommending the column-split as the
+  representative is superseded); the column-split stays a mechanism
+  contrast (family 'expanded').
+- Statistics labels: the Gemma headline 18.57% is the actual layout pair
+  (random_s209 -> sa_random_best_s5); the ten-seed median is 18.61%; every
+  v7 metrics file carries a `statistic` column (actual_pair / seed_median /
+  seed_min / seed_max / deterministic).
+- Timing: the near-zero `incremental_vs_full_rel_err` column is a
+  consistency error, renamed `incremental_relative_error` (v6_timing.py and
+  the v7 copies); the full / incremental speed-up is its own column.
+- Energy coefficient naming: the code applies pj_per_mac = 1.0 to every
+  MAC-equivalent operation (QK^T / AV MACs and softmax element ops); the
+  labels '1 pJ/op' (reports) and '1 pJ/MAC' (parameter_sources.md) denote
+  this one coefficient. Unified name: '1 pJ per MAC-equivalent operation
+  (digital compute subsystem, equivalent; 2 TOPS/W = 1 pJ/MAC)'. No
+  coefficient or energy export changes.
+- The 81.8% exact word-hops group is layer6x6:wh1 of
+  analysis/v3/e3_k2/library_layer6x6.json (members sa_links_only_s2 and
+  random_s8, BookSim 14567 vs 26484 cycles); the per-stage BookSim re-runs
+  of all diagnostic candidates reproduce the recorded totals.
+- Selection regrets under the stable-id rule (Full objective): 0.3% /
+  12.2% / 1.1% on the offload libraries, 21.5% on the 4x4 example (a 25-way
+  exact tie), as the v6 audit; the first draft of the v7 selection file
+  wrote the tie-set minimum into the selected-candidate column (fixed
+  before delivery).
+- Fig. 1 package panel: at the reference rate the five constructible named
+  rules give B- 1.7602 / B+ 6.7875 GB/s (3.856x); with random_s0 as the
+  seventh rule B- is 1.6279 GB/s; clustered cannot be constructed on the
+  36x36 grid (recorded as rule_construction_failed). The 20% spread
+  contour lies at about 22.8 GB/s at the reference rate (the spread stays
+  above 20% up to there because H is link-bound far above B+).
+Still blocked: the OPT-13B 4-macro account (mapper in the container; the
+docker socket is root-owned after the reboot).
+
+Second batch 2026-10-16 (Isobar_next_tasks sections 4-6), after docker
+came back: the restarted container had only the NFS workspace mounted, so
+the symlinks workspace/outputs and workspace/analysis/v4 (both into /data)
+were dangling inside it and the mapper could not write; docker-compose.yaml
+now bind-mounts /data/yuxinr/cimloop at the same path (replacing the
+outputs-only mount) and the container was recreated; measurements run as
+the workspace owner (docker exec -u 1112:1112). v4_measure_accounts.py
+takes CIMSIM_ACCOUNTS_OUT (the e11 accounts were measured into
+outputs/accounts_e11 and copied to analysis/v4/accounts by
+analysis/v4/chain_e11_host.sh). New models in v4_models.py: opt1.3b and
+qwen2.5-1.5b (official config.json values retrieved 2026-10-16; Qwen is
+GQA 12 / 2 with head_dim 128 and SwiGLU -> llm_workload gains the "swiglu"
+element-wise entry: one lookup and two multiplies per element, three GLB
+passes). New deploy units e11_small (A), e11_small_cap (B, 16 macros),
+e11_small_len (C), e11_qkv_common (OPT-13B row-split on 49 x 49),
+e11_hubmesh (six selected points, exploration with h_norm, protocol id
+pool100_seeds0-4_objh_norm); e10_cap at 4 macros now includes OPT-13B
+(account opt13b_S512_m4.json). Exporters v7_small_models.py,
+v7_qkv_common.py, v7_hub_mesh_points.py; manifest rows added.
+
+2026-10-19: the OPT-13B 4-macro deployment (e10_cap_m4, ~4400 CIM dies,
+budget 9706 SA steps) died on 2026-10-16 with OverflowError in
+search_sa.anneal: at the late-schedule temperature (t0 0.996^k ~ 1e-19) a
+zero-change proposal with dj in (-1e-15, 0] made exp(-dj / t) overflow.
+Such proposals were always accepted (exp(-dj / t) >= 1), so the acceptance
+test now reads `dj <= 0 or ...` -- identical semantics, no overflow; no
+earlier record is affected (none reached that regime). Relaunched; the
+finish chain (analysis/v4/chain_e11_finish.sh) refreshes
+offload_capacity.csv, the manifest and the /space backup when it completes.

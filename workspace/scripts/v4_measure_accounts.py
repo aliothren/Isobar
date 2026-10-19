@@ -15,7 +15,7 @@ import sys
 
 WS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, WS)
-OUT = os.path.join(WS, "analysis", "v4", "accounts")
+OUT = os.environ.get("CIMSIM_ACCOUNTS_OUT") or os.path.join(WS, "analysis", "v4", "accounts")   # inside the container analysis/v4 (a symlink to /data) is not mounted: write under outputs/ and copy on the host
 BASE_MACROS = 8
 
 
