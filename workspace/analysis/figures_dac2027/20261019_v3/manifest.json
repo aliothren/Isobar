@@ -1,0 +1,15 @@
+{
+ "run_id": "20261019_v3",
+ "code_version": "b9e5416+uncommitted-scripts",
+ "products": [
+  {
+   "name": "fig7_mechanisms",
+   "kind": "composites",
+   "files": [
+    "composites/fig7_mechanisms.pdf",
+    "composites/fig7_mechanisms.svg",
+    "preview/fig7_mechanisms.png"
+   ]
+  }
+ ]
+}

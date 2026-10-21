@@ -1,0 +1,175 @@
+{
+ "figure": "fig3_validation",
+ "files": {
+  "pdf": "composites/fig3_validation.pdf",
+  "svg": "composites/fig3_validation.svg",
+  "png": "preview/fig3_validation.png"
+ },
+ "size_in": [
+  3.396,
+  2.676
+ ],
+ "sources": [
+  {
+   "path": "analysis/v7/silicon_reference.csv",
+   "sha256_16": "19247c5e364eeb06"
+  },
+  {
+   "path": "analysis/v7/booksim_candidate_costs.csv",
+   "sha256_16": "47a4338b6fdee208"
+  },
+  {
+   "path": "analysis/v7/booksim_library_summary.csv",
+   "sha256_16": "6336340a88d7e3fe"
+  },
+  {
+   "path": "analysis/v7/runtime_summary.csv",
+   "sha256_16": "40bee71c3488b1c7"
+  },
+  {
+   "path": "analysis/v7/runtime_samples.csv",
+   "sha256_16": "9cc8aab49e80593f"
+  },
+  {
+   "path": "analysis/v7/runtime_environment.json",
+   "sha256_16": "f184caecfb8f74b6"
+  },
+  {
+   "path": "analysis/v7/validation_protocols.json",
+   "sha256_16": "d25869f7fd018264"
+  },
+  {
+   "path": "analysis/v7/search_trajectories.csv",
+   "sha256_16": "fb224704d2b40a63"
+  },
+  {
+   "path": "analysis/v7/search_trajectories.json",
+   "sha256_16": "8c55073536f16de1"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "single column, 2x2: (a) Simba T1, (b) offload BookSim libraries + bound inset, (c) three operation costs, (d) best-so-far search progress against wall time",
+ "panel_a": {
+  "layer": "res4a_branch1",
+  "normalisation": "each series / its own value at the adjacent seating (index 0)",
+  "farthest": {
+   "measured_norm": "2.53",
+   "bound_series_norm": "1.0065581076994095",
+   "protocol_series_norm": "2.3986790938830937"
+  }
+ },
+ "panel_b": {
+  "offload6x6": {
+   "n_candidates": "73",
+   "baseline_id": "sequential",
+   "analytic_kappa": "4.0",
+   "booksim_concentration": "4",
+   "spearman_A_full_vs_booksim": "0.9662369500518719",
+   "booksim_over_bound_min": "1.015191933806574",
+   "booksim_over_bound_median": "1.1362099698813695",
+   "booksim_over_bound_max": "1.4559784698193003"
+  },
+  "offload_decode6x6": {
+   "n_candidates": "73",
+   "baseline_id": "sequential",
+   "analytic_kappa": "4.0",
+   "booksim_concentration": "4",
+   "spearman_A_full_vs_booksim": "0.983755223242966",
+   "booksim_over_bound_min": "1.0315686274509803",
+   "booksim_over_bound_median": "1.139576883384933",
+   "booksim_over_bound_max": "1.4607019278299556"
+  },
+  "offload2_8x8": {
+   "n_candidates": "74",
+   "baseline_id": "sequential",
+   "analytic_kappa": "4.0",
+   "booksim_concentration": "4",
+   "spearman_A_full_vs_booksim": "0.9734285292955552",
+   "booksim_over_bound_min": "1.036410785636792",
+   "booksim_over_bound_median": "1.1425108927761403",
+   "booksim_over_bound_max": "1.3829941860465116"
+  }
+ },
+ "normalisation_b": "each library: both axes / the library's default fill (sequential) in that evaluator",
+ "panel_c": {
+  "ref2p7b_prefill512_colrow_24x24_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "2.7B ref.",
+   "n_dies": "512",
+   "full_eval_median_s": "0.04456304099585395",
+   "incremental_median_s": "0.0013853221200042754",
+   "repricing_per_candidate_median_s": "2.3411942581360294e-05",
+   "full_over_incremental_speedup": "32.16799930670018"
+  },
+  "opt6.7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "OPT-6.7B",
+   "n_dies": "768",
+   "full_eval_median_s": "0.09496255400154041",
+   "incremental_median_s": "0.0029695949699816994",
+   "repricing_per_candidate_median_s": "2.364772079468677e-05",
+   "full_over_incremental_speedup": "31.978284904666857"
+  },
+  "gemma7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "Gemma-7B",
+   "n_dies": "1232",
+   "full_eval_median_s": "0.2575459259969648",
+   "incremental_median_s": "0.009924635850002233",
+   "repricing_per_candidate_median_s": "2.056078613323095e-05",
+   "full_over_incremental_speedup": "25.950163803431323"
+  },
+  "opt13b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "OPT-13B",
+   "n_dies": "2200",
+   "full_eval_median_s": "0.6098890580033185",
+   "incremental_median_s": "0.015866028249984083",
+   "repricing_per_candidate_median_s": "2.945528316973146e-05",
+   "full_over_incremental_speedup": "38.43993269102684"
+  }
+ },
+ "panel_d": {
+  "ref2p7b_prefill512_colrow_24x24_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "2.7B ref.",
+   "n_dies": 512,
+   "run": "sa_rule_s6",
+   "start_layout": "least_manhattan",
+   "steps": 1200,
+   "wall_s": 2.4881353370146826,
+   "best_norm": 0.841452304899983,
+   "reproduction_rel_err": 0.0,
+   "annealer_revision": "b9e5416"
+  },
+  "opt6.7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "OPT-6.7B",
+   "n_dies": 768,
+   "run": "sa_random_best_s6",
+   "start_layout": "random_s103",
+   "steps": 1695,
+   "wall_s": 8.126598455011845,
+   "best_norm": 0.7975325577576465,
+   "reproduction_rel_err": 0.0,
+   "annealer_revision": "b9e5416"
+  },
+  "gemma7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "Gemma-7B",
+   "n_dies": 1232,
+   "run": "sa_random_best_s5",
+   "start_layout": "random_s209",
+   "steps": 2718,
+   "wall_s": 43.942208550986834,
+   "best_norm": 0.7669699234791666,
+   "reproduction_rel_err": 0.0,
+   "annealer_revision": "b9e5416"
+  },
+  "opt13b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1": {
+   "model": "OPT-13B",
+   "n_dies": 2200,
+   "run": "sa_random_best_s13",
+   "start_layout": "random_s370",
+   "steps": 4853,
+   "wall_s": 127.74845492403256,
+   "best_norm": 0.8213108414988296,
+   "reproduction_rel_err": 1.5778020439635009e-16,
+   "annealer_revision": "b9e5416"
+  }
+ },
+ "note_d": "each configuration's headline search re-run with the annealer revision of the confirmation batch; endpoints reproduce the record; times are this run's own wall clock; budgets differ"
+}

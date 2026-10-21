@@ -1,0 +1,76 @@
+{
+ "figure": "fig1_phase_diagram",
+ "files": {
+  "pdf": "composites/fig1_phase_diagram.pdf",
+  "svg": "composites/fig1_phase_diagram.svg",
+  "png": "preview/fig1_phase_diagram.png"
+ },
+ "size_in": [
+  12.42,
+  4.541
+ ],
+ "sources": [
+  {
+   "path": "analysis/v7/intradie_phase_curves.csv",
+   "sha256_16": "fa33e6f6f16b5b03"
+  },
+  {
+   "path": "analysis/v7/phase_boundary_curves.csv",
+   "sha256_16": "a9ced7f6652debad"
+  },
+  {
+   "path": "analysis/v7/phase_projection_points.csv",
+   "sha256_16": "af4c4e10c7d714c9"
+  },
+  {
+   "path": "analysis/v7/phase_setup.json",
+   "sha256_16": "df418da9c6d086ac"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "(a) intra-die ffn die of the reference 2.7B account; (b) Gemma-7B package, six-layout set; type two points above the standing generator",
+ "panel_a": {
+  "instance": "ffn die of the reference 2.7B account, 2x4 macro mesh, operators ffn1 and ffn2 co-resident, 70 legal joint seatings (exhaustive)",
+  "B_minus_at_ref_gbps": 0.6059171597633136,
+  "B_plus_at_ref_gbps": 1.6157790927021696,
+  "ratio": 2.6666666666666665,
+  "B_spread20_at_ref_gbps": 1.1541164907275634
+ },
+ "panel_b": {
+  "config_id": "gemma7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1",
+  "protocol_id": "pool500_seeds5-14_objh_norm",
+  "candidate_set_id": "seven_rules",
+  "members": [
+   "sequential",
+   "snake",
+   "least_manhattan",
+   "nmap_greedy",
+   "heaviest_first",
+   "random"
+  ],
+  "failed": {
+   "clustered": "clustered: no divisor rectangle >= 44 slots tiles the 36x36 grid into >= 28 stages"
+  },
+  "B_minus_at_ref_gbps": 1.6279430766454062,
+  "B_plus_at_ref_gbps": 6.787457633128113,
+  "ratio": 4.169345802381847,
+  "B_spread20_at_ref_gbps": 22.93168728841253,
+  "R_model": "R(s) = N s_ref / s + F; N = CIM compute of the static operators at the reference row rate (scales with the device rate), F = digital element-wise + unit attention compute + K/V memory time (held fixed across the rate scan)",
+  "N_s": 0.58146816,
+  "F_s": 0.086267844096,
+  "H_model": "H(B) = P + sum_j max(link_j / B, dieport_j / (kappa B), hub_j / C_hub) from the stored per-hand-off components; kappa = 2; C_hub = 12.5 GB/s per direction fixed; propagation 20 ns per hop",
+  "boundary_status_in_scan": "finite at all 122 rates for all 6 members"
+ },
+ "s_ref_mrows_per_s": 0.09861932938856016,
+ "projection_points_drawn": [
+  "neurram a/b",
+  "hermes a 1-phase/4-phase (per physical link)",
+  "isaac a (c-mesh link) / b (off-chip link)",
+  "mythic_m1076 b (I/O-matched projection)",
+  "simba a (NoC link) / b (GRS max and experiment mode)"
+ ],
+ "units": {
+  "s": "Mrows/s (log)",
+  "B": "GB/s per direction (log)"
+ }
+}

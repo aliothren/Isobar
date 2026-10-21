@@ -1,0 +1,164 @@
+{
+ "figure": "fig5_gemma_result_stack",
+ "files": {
+  "pdf": "composites/fig5_gemma_result_stack.pdf",
+  "svg": "composites/fig5_gemma_result_stack.svg",
+  "png": "preview/fig5_gemma_result_stack.png"
+ },
+ "size_in": [
+  3.21,
+  4.166
+ ],
+ "sources": [
+  {
+   "path": "analysis/v7/gemma_panel_a.csv",
+   "sha256_16": "2e31e6c71b37f2cb"
+  },
+  {
+   "path": "analysis/v6/gemma_candidates.csv",
+   "sha256_16": "264980d380b19d08"
+  },
+  {
+   "path": "analysis/v6/gemma_stage_breakdown.csv",
+   "sha256_16": "78ebf526248e9b59"
+  },
+  {
+   "path": "analysis/v7/gemma_bandwidth_curve.csv",
+   "sha256_16": "7e7377bb614485c1"
+  },
+  {
+   "path": "analysis/v6/gemma_bandwidth_equivalence.csv",
+   "sha256_16": "d6ae4c794e9c935c"
+  },
+  {
+   "path": "analysis/v7/gemma_checks.json",
+   "sha256_16": "a5dcb816ac0d1dd6"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "single column: (a) communication time of all evaluated layouts with the random / search distributions inset, (b) baseline -> search per hand-off kind, (c) equivalent mesh bandwidth, (d) latency vs dynamic energy of all candidates",
+ "config_id": "gemma7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1",
+ "protocol_id": "pool500_seeds5-14_objh_norm",
+ "panel_order": "(a) latency ladder, (b) latency-energy with the clouds inset, (c) by hand-off kind, (d) bandwidth equivalent",
+ "panel_a": {
+  "bars": {
+   "sequential": {
+    "T_s": 11.996354964096,
+    "H_s": 11.32861896,
+    "non_comm_s": 0.6677360040959996
+   },
+   "snake": {
+    "T_s": 11.212534224095998,
+    "H_s": 10.544798219999999,
+    "non_comm_s": 0.6677360040959996
+   },
+   "nmap_greedy": {
+    "T_s": 4.334185704096,
+    "H_s": 3.6664497000000003,
+    "non_comm_s": 0.6677360040959996
+   },
+   "least_manhattan": {
+    "T_s": 4.248332604096,
+    "H_s": 3.5805966000000002,
+    "non_comm_s": 0.6677360040960001
+   },
+   "heaviest_first": {
+    "T_s": 3.6058060240959997,
+    "H_s": 2.93807002,
+    "non_comm_s": 0.6677360040959996
+   },
+   "random_s209": {
+    "T_s": 3.2902767040959997,
+    "H_s": 2.6225406999999996,
+    "non_comm_s": 0.6677360040960001
+   },
+   "sa_random_best_s5": {
+    "T_s": 2.679145844096,
+    "H_s": 2.01140984,
+    "non_comm_s": 0.6677360040960001
+   }
+  },
+  "random_fills": {
+   "n": 500,
+   "T_min_s": 3.2902767040959997,
+   "T_median_s": 3.4737763440959997,
+   "T_max_s": 3.684476124096
+  },
+  "search_endpoints": {
+   "n": 30,
+   "T_min_s": 2.6545682440959992,
+   "T_max_s": 2.771877184096
+  },
+  "best_random": "random_s209",
+  "representative": "sa_random_best_s5",
+  "G_pair_pct": 18.57384393352739,
+  "below_default_pct": 77.66700091724161
+ },
+ "panel_d": {
+  "best_random": "random_s209",
+  "representative": "sa_random_best_s5",
+  "dT_pct": -18.57384393352739,
+  "dE_pct": -0.6520064455050267,
+  "T_s": [
+   3.2902767040959997,
+   2.679145844096
+  ],
+  "E_J": [
+   7.13129166138624,
+   7.084795180106239
+  ]
+ },
+ "eta_pair": 0.2330300765208334,
+ "seed_statistics": {
+  "seed_H_min_s": "1.9868322399999996",
+  "seed_H_median_s": "2.01026068",
+  "seed_H_max_s": "2.0425407",
+  "n_seeds": "10"
+ },
+ "panel_b": {
+  "by_kind_ms": [
+   {
+    "kind": "out_proj->ffn1",
+    "baseline_ms": 1053.8472599999998,
+    "search_ms": 725.5084400000001,
+    "saved_ms": 328.3388199999997
+   },
+   {
+    "kind": "ffn1->ffn2",
+    "baseline_ms": 975.2085000000001,
+    "search_ms": 803.5039599999999,
+    "saved_ms": 171.70454000000018
+   },
+   {
+    "kind": "qkv->unit",
+    "baseline_ms": 267.40219999999994,
+    "search_ms": 220.21624,
+    "saved_ms": 47.18595999999994
+   },
+   {
+    "kind": "unit->out_proj",
+    "baseline_ms": 214.97026,
+    "search_ms": 167.78112000000002,
+    "saved_ms": 47.18913999999998
+   },
+   {
+    "kind": "ffn2->next qkv",
+    "baseline_ms": 111.11248,
+    "search_ms": 94.40007999999999,
+    "saved_ms": 16.712400000000017
+   }
+  ],
+  "total_baseline_ms": 2622.5406999999996,
+  "total_search_ms": 2011.40984,
+  "total_saved_ms": 611.1308599999995
+ },
+ "panel_c": {
+  "B_ref_gbps": "0.4",
+  "B_eq_gbps": "0.5215399465233344",
+  "g_bw": "0.30384986630833577",
+  "H_search_at_B_ref_s": "2.01140984",
+  "H_baseline_at_B_ref_s": "2.6225406999999996",
+  "held_fixed": "hub capacity, K/V and digital resources, the attention algorithm, the two layouts; die ports scale with the mesh bandwidth at the port ratio",
+  "dominant_resource_near_root": "link"
+ }
+}

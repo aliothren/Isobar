@@ -1,0 +1,33 @@
+{
+ "figure": "fig2_platform",
+ "files": {
+  "pdf": "composites/fig2_platform.pdf",
+  "svg": "composites/fig2_platform.svg",
+  "png": "preview/fig2_platform.png"
+ },
+ "size_in": [
+  9.56,
+  3.05
+ ],
+ "sources": [
+  {
+   "path": "scripts/plot_dac2027_v2.py",
+   "sha256_16": "98b012748fab2efa"
+  },
+  {
+   "path": "scripts/search_eval.py",
+   "sha256_16": "c86b8d6c97ad46e2"
+  },
+  {
+   "path": "scripts/interconnect.py",
+   "sha256_16": "a65e7c6115214af1"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "(b) keeps the v2 FFN 4x4 example (the plan's default)",
+ "panel_a": "schematic, the v2 hand-drawn layout with the v3 wording",
+ "panel_b": {
+  "instance": "FFN1 -> FFN2 hand-off of the reference 2.7B mapping on a 4x4 die mesh, compact fill; evaluated by search_eval",
+  "busiest_link_ms": null
+ }
+}

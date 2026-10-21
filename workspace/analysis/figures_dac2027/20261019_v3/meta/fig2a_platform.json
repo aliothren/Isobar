@@ -1,0 +1,20 @@
+{
+ "figure": "fig2a_platform",
+ "files": {
+  "pdf": "panels/fig2a_platform.pdf",
+  "svg": "panels/fig2a_platform.svg",
+  "png": "preview/fig2a_platform.png"
+ },
+ "size_in": [
+  5.022,
+  2.784
+ ],
+ "sources": [
+  {
+   "path": "scripts/plot_dac2027_v2.py",
+   "sha256_16": "98b012748fab2efa"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": ""
+}

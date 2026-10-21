@@ -1,0 +1,97 @@
+{
+ "figure": "fig2c_gemma_handoff",
+ "files": {
+  "pdf": "panels/fig2c_gemma_handoff.pdf",
+  "svg": "panels/fig2c_gemma_handoff.svg",
+  "png": "preview/fig2c_gemma_handoff.png"
+ },
+ "size_in": [
+  1.65,
+  2.552
+ ],
+ "sources": [
+  {
+   "path": "analysis/v7/pipeline_example.json",
+   "sha256_16": "fd7923047c220f34"
+  },
+  {
+   "path": "analysis/v7/example_flows.csv",
+   "sha256_16": "4b1f736de50651e4"
+  },
+  {
+   "path": "analysis/v7/example_resource_loads.csv",
+   "sha256_16": "edc898aaf0943689"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "Fig. 2(c): one hand-off of the Gemma main instance, schematic routing",
+ "config_id": "gemma7b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1",
+ "layer": 0,
+ "stage": {
+  "into": "attention@L0",
+  "stage": "qkv->unit",
+  "n_flows": 6,
+  "payload_words": 6291456.0,
+  "n_resources_loaded": 67,
+  "max_service_s": 0.00786432,
+  "max_resource": "mesh:seg(17, 15)-(17, 16)",
+  "max_resource_kind": "mesh link",
+  "propagation_s": 7.000000000000001e-07,
+  "max_hops": 35.0,
+  "stage_H_s": 0.007865019999999999,
+  "record_link_words": 3145728.0,
+  "record_dport_words_over_kappa": 524288.0,
+  "record_hub_words": 6291456.0,
+  "check_max_equals_record": true
+ },
+ "geometry": "schematic (merge structure from the recorded XY routes)",
+ "busiest_links_3_flows": [
+  [
+   17,
+   15,
+   17,
+   16,
+   "+"
+  ],
+  [
+   17,
+   16,
+   17,
+   17,
+   "+"
+  ],
+  [
+   17,
+   20,
+   17,
+   21,
+   "-"
+  ],
+  [
+   17,
+   19,
+   17,
+   20,
+   "-"
+  ],
+  [
+   17,
+   18,
+   17,
+   19,
+   "-"
+  ],
+  [
+   17,
+   17,
+   17,
+   18,
+   "-"
+  ]
+ ],
+ "resource_max_ms": {
+  "mesh link": 7.864319999999999,
+  "die port": 1.31072,
+  "hub port": 0.50331648
+ }
+}

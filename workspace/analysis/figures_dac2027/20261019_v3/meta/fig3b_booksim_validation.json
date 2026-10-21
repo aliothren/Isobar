@@ -1,0 +1,24 @@
+{
+ "figure": "fig3b_booksim_validation",
+ "files": {
+  "pdf": "panels/fig3b_booksim_validation.pdf",
+  "svg": "panels/fig3b_booksim_validation.svg",
+  "png": "preview/fig3b_booksim_validation.png"
+ },
+ "size_in": [
+  1.875,
+  1.656
+ ],
+ "sources": [
+  {
+   "path": "analysis/v7/booksim_candidate_costs.csv",
+   "sha256_16": "47a4338b6fdee208"
+  },
+  {
+   "path": "analysis/v7/booksim_library_summary.csv",
+   "sha256_16": "6336340a88d7e3fe"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "panel (b) of Fig. 3 alone, at the composite's panel size"
+}
