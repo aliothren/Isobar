@@ -1,0 +1,54 @@
+{
+ "id": "A5_col_grs_kv16",
+ "layout": "sa_random_best_s9",
+ "extended_grid_with_lm_head": [
+  50,
+  50
+ ],
+ "lm_head_dies": 64,
+ "slots_needed": 2465,
+ "lm_head_padding_scale": 0.76708984375,
+ "kv_bytes_per_element": 2.0,
+ "n_link_directions_extended_grid": 9802,
+ "scenario_all_links_on_power_W": 1715.35,
+ "E_scenario_all_links_on_J": 36715.47839413613,
+ "T512_check": [
+  1.0623549176,
+  4.099319371999999
+ ],
+ "H_prefill_512_s": 0.13432258560000002,
+ "H_decode_s": 0.0005008888000000001,
+ "unit": {
+  "mac_per_second": 2000000000000.0,
+  "pj_per_mac": 1.0,
+  "call_overhead_s": 0.0,
+  "kv_words_per_second": 25600000000.0,
+  "kv_pj_per_word_read": 50.0,
+  "kv_pj_per_word_write": 50.0,
+  "kv_capacity_words": 2000000000.0,
+  "link_bandwidth_gbps": 12.5,
+  "link_pj_per_word": 10.0,
+  "bytes_per_kv_element": 1,
+  "buffer_bytes": 8000000.0,
+  "score_bytes": 2,
+  "prob_bytes": 1,
+  "algorithm": "auto"
+ },
+ "bw_gbps": 12.5,
+ "kappa": 2.0,
+ "n_cim_dies": 2400,
+ "grid": [
+  49,
+  49
+ ],
+ "lm_head": {
+  "dies": 64,
+  "compute_s": 1.014e-05,
+  "write_s": 0.0,
+  "energy_J": 0.000508907,
+  "note": "one matmul for the last token (P = 1) per sequence; vocab padded to the next power of two for the residency tiler"
+ },
+ "weighted_mean_T_request_s": 21.40407403395,
+ "weighted_mean_E_request_J": 56.98580781418446,
+ "n_requests": 1
+}

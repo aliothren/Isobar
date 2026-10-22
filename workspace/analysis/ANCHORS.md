@@ -278,3 +278,5 @@ ms prefill at these generic values -- below the on-chip write wall (DR-5:
 13.32 / 78.8 ms) at every device tier, which is what the real DR-9
 numbers must keep beating; the two DR parameters set the two
 configurations' ceilings.
+
+**Amendment 2026-10-22 (GRS link energy model).** Gemini (HPCA 2024, section V-B2, evaluator) distinguishes clock-embedded links (SerDes: link count x power x time, power nearly independent of traffic) from clock-forwarding links (GRS, UCIe: low-power states, energy = traffic volume x unit energy) and prices its Simba/GRS baseline with the traffic-based model. The earlier registry note "link power traffic-independent, no sleep" attached to the GRS 0.82-1.75 pJ/bit band (SIMBA_PREREG.md T-table) is not supported by that reading and is treated as unverified until the JSSC passage is re-read; the standing per-word interconnect constant (10 pJ/word per hop = 1.25 pJ/bit, the band midpoint) is the traffic-based model.

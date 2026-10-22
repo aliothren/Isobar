@@ -1,0 +1,32 @@
+{
+ "id": "A5_col_grs",
+ "model": "opt13b",
+ "record_unit": "e10_confirm",
+ "config_id": "opt13b_prefill512_col_sq_mesh_xy_k2_b0.4_tlcol_offcenterK1",
+ "bw_gbps": 12.5,
+ "die_macros": 8,
+ "unit_overrides": {},
+ "rope": false,
+ "learned_positions": true,
+ "lengths": [
+  [
+   64,
+   1
+  ]
+ ],
+ "output_tokens": 1024,
+ "note": "column-split QKV at the GRS tier 12.5 GB/s, 8 macros",
+ "sources": {
+  "cim_device": "NeuRRAM-class RRAM macro, CiMLoop calibration (existing)",
+  "digital_unit": "DR-9 reference (2 TMAC/s, 25.6 GB/s K/V LPDDR4 two 32-bit channels, 2 GB, 12.5 GB/s hub = one Simba GRS macro, 8 MB buffer)",
+  "mesh_0.4": "HERMES-class analog link rate (3.2 Gbit/s per link) -- the reference tier",
+  "mesh_12.5": "Simba GRS package link, 25 Gb/s/pin x 4 lanes = 12.5 GB/s per direction (Zimmer et al., JSSC 2020) -- the upper evaluated tier",
+  "kv_51.2": "design assumption: two 32-bit LPDDR5-6400 channels = 51.2 GB/s raw (JEDEC LPDDR5 data rate), same channel organisation as the reference LPDDR4 point",
+  "die_16_macros": "capacity variant of the same die (2x macros), existing measured account"
+ },
+ "precision": "CIM: 8-bit weights and activations (accounts), 2-byte partial sums, 16-bit digital intermediates, K/V 1 byte per element; GPU: see gpu_baselines.csv",
+ "layout": null,
+ "fixed_mapping": "the prefill S=512 confirmation representative layout of the record, used for both phases (decode evaluated under the same seats)",
+ "lm_head_padding_correction": true,
+ "kv_bytes_per_element": 1
+}

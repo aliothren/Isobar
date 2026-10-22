@@ -1,0 +1,54 @@
+{
+ "id": "B0_ref",
+ "layout": "sa_random_best_s5",
+ "extended_grid_with_lm_head": [
+  37,
+  37
+ ],
+ "lm_head_dies": 128,
+ "slots_needed": 1361,
+ "lm_head_padding_scale": 0.9765625,
+ "kv_bytes_per_element": 1.0,
+ "n_link_directions_extended_grid": 5330,
+ "scenario_all_links_on_power_W": null,
+ "E_scenario_all_links_on_J": null,
+ "T512_check": [
+  2.679145844096,
+  2.679145844096
+ ],
+ "H_prefill_512_s": 2.01129984,
+ "H_decode_s": 0.00403832,
+ "unit": {
+  "mac_per_second": 2000000000000.0,
+  "pj_per_mac": 1.0,
+  "call_overhead_s": 0.0,
+  "kv_words_per_second": 25600000000.0,
+  "kv_pj_per_word_read": 50.0,
+  "kv_pj_per_word_write": 50.0,
+  "kv_capacity_words": 2000000000.0,
+  "link_bandwidth_gbps": 12.5,
+  "link_pj_per_word": 10.0,
+  "bytes_per_kv_element": 1,
+  "buffer_bytes": 8000000.0,
+  "score_bytes": 2,
+  "prob_bytes": 1,
+  "algorithm": "auto"
+ },
+ "bw_gbps": 0.4,
+ "kappa": 2.0,
+ "n_cim_dies": 1232,
+ "grid": [
+  36,
+  36
+ ],
+ "lm_head": {
+  "dies": 128,
+  "compute_s": 1.014e-05,
+  "write_s": 0.0,
+  "energy_J": 0.00101492,
+  "note": "one matmul for the last token (P = 1) per sequence; vocab padded to the next power of two for the residency tiler"
+ },
+ "weighted_mean_T_request_s": 4.246943054402733,
+ "weighted_mean_E_request_J": 9.739512297407211,
+ "n_requests": 541
+}

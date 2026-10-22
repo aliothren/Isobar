@@ -7546,3 +7546,47 @@ test now reads `dj <= 0 or ...` -- identical semantics, no overflow; no
 earlier record is affected (none reached that regime). Relaunched; the
 finish chain (analysis/v4/chain_e11_finish.sh) refreshes
 offload_capacity.csv, the manifest and the /space backup when it completes.
+
+GPU comparison round 2026-10-21 (Isobar_GPU_comparison_followup.md):
+workspace/gpu_comparison/ with the two literature baselines (A100 /
+CXL-PNM values as recorded by the author; AGX Thor / Hydra recomputed
+from the per-request CSV at commit 1879bf8, sha256 verified) and the
+full-request CIM cost engine (scripts/cim_request.py: prefill(L) +
+sum of O-1 decode forwards with growing context, priced from the S = 512
+confirmation records by the exact P-linearity of the accounts; model-end
+operators added: embedding read, positions / RoPE, final norm, LM head on
+extra CIM dies measured by the mapper on the 576-die fabric
+(analysis/v4/models/model_end_costs.json), argmax). Eight configurations
+(reference / 16 macros / GRS-tier mesh / + LPDDR5-class K/V) per model.
+Energies are dynamic only (no idle_power_w in the fabrics): the report
+gives P_remaining,max. Report workspace/gpu_comparison/REPORT_gpu_comparison.md.
+2026-10-21 (later): the A-group values verified against the paper PDF
+(section VII p. 978, VIII-A p. 979, Fig. 10 p. 980); gpu_comparison gains
+the OPT-13B column-split QKV configurations (A4 / A5: the row-split QKV
+sends ten 2-byte partial-sum rows per layer into the unit, 15.1 of the
+20.4 ms per decode token at 0.4 GB/s) and the 432-point sweep
+(scripts/sweep.py: macros x device rate x mesh x K/V bandwidth, device
+rate as a compute-time factor with energy per operation unchanged).
+2026-10-22 energy audit (gpu_comparison/AUDIT_energy.md): every model
+term is dynamic (Accelergy ERT leakage 0; fabric idle_power_w None;
+link / K/V / DRAM per-access constants; the unit's 1 pJ/MAC-eq is a
+full-load average) -> results labelled "modeled dynamic energy";
+energy_ledger.csv records formula / unit energy / source / coverage /
+double-count check per component. Corrections: the LM-head energy now
+excludes the padded vocabulary columns (vocab / 2^ceil(log2 vocab); the
+first draft scaled by the workload's default vocabulary 50257 and was
+fixed), the LM-head dies get an extended grid (48x48 / 37x37), a
+2-byte K/V sensitivity (A0_ref_kv16, B0_ref_kv16) is added because both
+GPU baselines keep a 16-bit cache, and the always-on GRS link power
+(1.75 pJ/bit x 100 Gb/s per link direction, JSSC 2020) is reported as a
+separate bound for the 12.5 GB/s configurations only.
+2026-10-22 (later, after review): the "GRS link power traffic-independent,
+no sleep" registry note was read as a static term; Gemini (HPCA 2024,
+section V-B2) classifies GRS / UCIe as clock-forwarding links with
+low-power states priced by traffic volume (its Simba baseline uses that
+model), so the per-bit interconnect line is the adopted model, the
+all-links-on figure is a scenario on the extended grid (4 n (n - 1) + 2
+hub ports) and not a result, and ANCHORS.md carries the amendment. Main
+comparison rows are the 16-bit K/V configurations (every configuration now
+has a _kv16 counterpart); P_remaining is named the remaining power budget.
+The LM-head correction history is spelled out in AUDIT_energy.md section 4.
