@@ -3,12 +3,21 @@
  "code_version": "b9e5416+uncommitted-scripts",
  "products": [
   {
-   "name": "fig7_mechanisms",
+   "name": "fig2_platform",
    "kind": "composites",
    "files": [
-    "composites/fig7_mechanisms.pdf",
-    "composites/fig7_mechanisms.svg",
-    "preview/fig7_mechanisms.png"
+    "composites/fig2_platform.pdf",
+    "composites/fig2_platform.svg",
+    "preview/fig2_platform.png"
+   ]
+  },
+  {
+   "name": "fig2a_platform",
+   "kind": "panels",
+   "files": [
+    "panels/fig2a_platform.pdf",
+    "panels/fig2a_platform.svg",
+    "preview/fig2a_platform.png"
    ]
   }
  ]

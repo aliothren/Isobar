@@ -190,6 +190,14 @@ def unit_specs(unit, macros=None):
         out = [spec_for(m, S=512, account_suffix="_m16", macros=16, offload=OFF) for m in SMALL]
         out.append(spec_for("qwen2.5-1.5b", S=512, tiling="col", account_suffix="_m16_tlcol", macros=16, offload=OFF))   # colrow is infeasible on the 16-macro die (ffn1 would be row-split, which a gated FFN cannot be); col gives ffn1 4 dies column-split
         return out
+    if unit == "e11_small_expl":   # Fig. 7(a): OPT-1.3B prefill 512 at 8 macros under the capacity curve's exploration protocol (defaults: pool 100, seeds 0-4, t_norm)
+        return [spec_for("opt1.3b", S=512, offload=OFF)]
+    if unit == "e11_small_cap_expl":   # Fig. 7(a): the same at 4 / 16 / 32 macros (CIMSIM_FABRIC = the matching variant, --macros)
+        n = macros or 16
+        return [spec_for("opt1.3b", S=512, account_suffix=f"_m{n}", macros=n, offload=OFF)]
+    if unit == "e11_small_head":   # Fig. 6(c): OPT-1.3B prefill 512, 8 macros, K = 4 fixed-total head groups (run with the confirmation protocol: --n-random 500 --seeds 5..14 --objective h_norm)
+        # the natural 13x13 grid holds 168 dies + 1 unit only; the four unit nodes need the next square (14x14, 28 empty slots)
+        return [spec_for("opt1.3b", S=512, grid=(14, 14), offload={**OFF, "K": 4, "resource_mode": "total", "split": "head"})]
     if unit == "e11_small_len":   # batch C: S 128 and 2048, prefill and decode, 8 macros, central K = 1 (exploration, h_norm)
         return [spec_for(m, S=S, phase=ph, offload=OFF) for m in SMALL for ph in ("prefill", "decode") for S in (128, 2048)]
     if unit == "e11_qkv_common":  # section 5: OPT-13B row-split QKV on the column-split's 49 x 49 grid (same central unit coordinate), confirmation protocol
@@ -211,7 +219,7 @@ def main():
     ap.add_argument("--objective", default="t_norm", choices=("t_norm", "h_norm"), help="t_norm: T/T_base (V3); h_norm: (T-R)/(T_base-R), the temperature on the communication term")
     args = ap.parse_args()
     specs = unit_specs(args.unit, args.macros)
-    if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common", "e10_confirm_cap", "e11_small_cap"):
+    if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common", "e10_confirm_cap", "e11_small_cap", "e11_small_cap_expl"):
         from scripts import mlx_system as mlx
         assert mlx.N_MACROS_PER_DIE == (args.macros or 8), f"CIMSIM_FABRIC has {mlx.N_MACROS_PER_DIE} macros per die, --macros says {args.macros}"
     if args.only:
@@ -220,7 +228,9 @@ def main():
         for s in specs:
             print(s["config_id"])
         print(len(specs), "configs"); return
-    out = os.path.join(V4, args.unit + (f"_m{args.macros or 8}" if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common") else "")); os.makedirs(out, exist_ok=True)
+    out = os.path.join(V4, args.unit + (f"_m{args.macros or 8}" if args.unit in ("e8_cap", "e8_common", "e8_struct", "e10_cap", "e10_cap_common") else "")
+                       + (f"_m{args.macros}" if args.unit == "e11_small_cap_expl" and args.macros in (4, 32) else ""))   # the 16-macro run keeps its original directory
+    os.makedirs(out, exist_ok=True)
     jl = os.path.join(out, "configs.jsonl")
     done = set()
     if os.path.exists(jl):

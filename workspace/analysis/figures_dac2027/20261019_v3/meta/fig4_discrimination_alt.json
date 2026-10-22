@@ -1,0 +1,38 @@
+{
+ "figure": "fig4_discrimination_alt",
+ "files": {
+  "pdf": "composites/fig4_discrimination_alt.pdf",
+  "svg": "composites/fig4_discrimination_alt.svg",
+  "png": "preview/fig4_discrimination_alt.png"
+ },
+ "size_in": [
+  2.592,
+  2.434
+ ],
+ "sources": [
+  {
+   "path": "analysis/v7/equivalent_candidate_groups.csv",
+   "sha256_16": "a3e27ef5295f02bb"
+  },
+  {
+   "path": "analysis/v3/e3_k2/library_layer6x6.json",
+   "sha256_16": "18f82493d2bbca3c"
+  },
+  {
+   "path": "analysis/v7/booksim_selection_by_objective.csv",
+   "sha256_16": "c7bdcd7977db5f91"
+  },
+  {
+   "path": "analysis/v7/booksim_candidate_costs.csv",
+   "sha256_16": "47a4338b6fdee208"
+  }
+ ],
+ "code_version": "b9e5416+uncommitted-scripts",
+ "note": "alternative layout of Fig. 4; the data and statistics are those of fig4_discrimination",
+ "layout": "maps A over B at the left; B / A bars over panel (b) at the right",
+ "ratios_B_over_A": {
+  "Word-hops": 1.0,
+  "Isobar cost": 1.9444444444444444,
+  "BookSim": 1.8180819660877325
+ }
+}

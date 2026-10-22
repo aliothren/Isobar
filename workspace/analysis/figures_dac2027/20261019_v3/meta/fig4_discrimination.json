@@ -6,8 +6,8 @@
   "png": "preview/fig4_discrimination.png"
  },
  "size_in": [
-  3.107,
-  2.48
+  2.672,
+  2.261
  ],
  "sources": [
   {
@@ -108,7 +108,8 @@
    "booksim_over_best": 1.0,
    "tie_set_size": 1,
    "tie_members": "sa_links_only_s1",
-   "tie_booksim_over_best": "1.0000",
+   "tie_min": 1.0,
+   "tie_max": 1.0,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -118,7 +119,8 @@
    "booksim_over_best": 1.0025114810562572,
    "tie_set_size": 1,
    "tie_members": "sa_full_s2",
-   "tie_booksim_over_best": "1.0025",
+   "tie_min": 1.0025114810562572,
+   "tie_max": 1.0025114810562572,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -128,7 +130,8 @@
    "booksim_over_best": 1.51650401836969,
    "tie_set_size": 1,
    "tie_members": "sa_word_hops_s2",
-   "tie_booksim_over_best": "1.5165",
+   "tie_min": 1.51650401836969,
+   "tie_max": 1.51650401836969,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -138,7 +141,8 @@
    "booksim_over_best": 1.3114236509758899,
    "tie_set_size": 2,
    "tie_members": "sa_max_hops_s1;sa_max_hops_s2",
-   "tie_booksim_over_best": "1.1993;1.3114",
+   "tie_min": 1.1993398392652124,
+   "tie_max": 1.3114236509758899,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -148,7 +152,8 @@
    "booksim_over_best": 1.0,
    "tie_set_size": 1,
    "tie_members": "sa_links_only_s1",
-   "tie_booksim_over_best": "1.0000",
+   "tie_min": 1.0,
+   "tie_max": 1.0,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -158,7 +163,8 @@
    "booksim_over_best": 1.1218678815489749,
    "tie_set_size": 4,
    "tie_members": "sa_full_s2;sa_links_only_s0;sa_links_only_s1;sa_links_only_s2",
-   "tie_booksim_over_best": "1.0000;1.0509;1.0672;1.1219",
+   "tie_min": 1.0,
+   "tie_max": 1.1218678815489749,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -168,7 +174,8 @@
    "booksim_over_best": 1.4195140470766894,
    "tie_set_size": 1,
    "tie_members": "sa_word_hops_s2",
-   "tie_booksim_over_best": "1.4195",
+   "tie_min": 1.4195140470766894,
+   "tie_max": 1.4195140470766894,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -178,7 +185,8 @@
    "booksim_over_best": 1.3215641609719058,
    "tie_set_size": 2,
    "tie_members": "sa_max_hops_s1;sa_max_hops_s2",
-   "tie_booksim_over_best": "1.2369;1.3216",
+   "tie_min": 1.2369020501138952,
+   "tie_max": 1.3215641609719058,
    "booksim_best": "sa_links_only_s1"
   },
   {
@@ -188,7 +196,8 @@
    "booksim_over_best": 1.0,
    "tie_set_size": 1,
    "tie_members": "sa_full_s0",
-   "tie_booksim_over_best": "1.0000",
+   "tie_min": 1.0,
+   "tie_max": 1.0,
    "booksim_best": "sa_full_s0"
   },
   {
@@ -198,7 +207,8 @@
    "booksim_over_best": 1.0106534325889165,
    "tie_set_size": 2,
    "tie_members": "sa_full_s1;sa_links_only_s0",
-   "tie_booksim_over_best": "1.0054;1.0107",
+   "tie_min": 1.0054259718775849,
+   "tie_max": 1.0106534325889165,
    "booksim_best": "sa_full_s0"
   },
   {
@@ -208,7 +218,8 @@
    "booksim_over_best": 1.4040033085194374,
    "tie_set_size": 1,
    "tie_members": "sa_word_hops_s0",
-   "tie_booksim_over_best": "1.4040",
+   "tie_min": 1.4040033085194374,
+   "tie_max": 1.4040033085194374,
    "booksim_best": "sa_full_s0"
   },
   {
@@ -218,9 +229,10 @@
    "booksim_over_best": 1.4040033085194374,
    "tie_set_size": 1,
    "tie_members": "sa_word_hops_s0",
-   "tie_booksim_over_best": "1.4040",
+   "tie_min": 1.4040033085194374,
+   "tie_max": 1.4040033085194374,
    "booksim_best": "sa_full_s0"
   }
  ],
- "rule_b": "lowest analytic score; exact ties broken by the stable candidate id; y = BookSim(candidate) / min_library BookSim - 1; open circles = the other exact-tie members"
+ "rule_b": "lowest analytic score; exact ties broken by the stable candidate id; bar = BookSim(selected) / min_library BookSim (the BookSim-best bar = 1); the T spans the BookSim time of every exact-tie member"
 }

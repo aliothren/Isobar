@@ -388,21 +388,63 @@ def fig2():
     from scripts import plot_dac2027_v2 as V2
     _FIG2A_SPEC_V2 = V2._fig2a_spec                 # the v2 layout, before the module is patched
     V2._fig2a_spec = _fig2a_spec_v3                 # the drawers read the spec through the module
+    V2.LOAD_BR = LOAD_BR_V3                         # the (b) and (c) lanes and bars on the v3 ramp
     I = V2._fig2_instance()
     XC, WC = 5.22 + 2.32 + 0.16, 1.90                 # (c) right of (b)
     Wt, Ht = XC + WC, 3.00
     fig = plt.figure(figsize=(Wt, Ht))
     axa = V2._inch_axes(fig, [0, 0, 5.02 / Wt, 1], 5.02, Ht); V2._fig2a(axa)
     axb = V2._inch_axes(fig, [5.22 / Wt, 0, 2.32 / Wt, 1], 2.32, Ht); V2._fig2b(axb, I)
-    for tx in axb.texts:                              # (b) and (c) titles name what each shows
+    for tx in axb.texts:                              # (b) and (c) titles in the other figures' style
         if tx.get_text() == "RESOURCE ACCOUNTING":
-            tx.set_text(FIG2B_TITLE)
+            tx.set_text(FIG2B_TITLE); tx.set_fontsize(FS2_TITLE); tx.set_fontweight("normal"); tx.set_x(0.02)
+            tx.set_color("black")
+        elif "transfers" in tx.get_text():            # the instance line: lower and a step larger
+            tx.set_fontsize(FS2_SUB); tx.set_y(tx.get_position()[1] - 0.06)
+        elif tx.get_fontweight() == "bold" and len(tx.get_text()) == 2:   # the node labels
+            tx.set_fontsize(FS2_NODE)
+        elif tx.get_fontsize() < FS2_TITLE:           # every other in-panel label at the instance line's size
+            tx.set_fontsize(FS2_SUB)
+    for ch in axb.child_axes:
+        ch.tick_params(labelsize=FS2_SUB)
+        ch.xaxis.label.set_fontsize(FS2_SUB); ch.yaxis.label.set_fontsize(FS2_SUB)
+        ch.title.set_fontsize(FS2_SUB)
+        for tx in ch.texts:
+            tx.set_fontsize(FS2_SUB)
+        if len(ch.patches) > 5:                       # the service-time profile: a shorter y axis, bars beneath the spines
+            ch.set_ylim(0, 24.0)
+            for pt in ch.patches:
+                pt.set_zorder(2)
+            bb = ch.get_position()                    # and flatter: 78 % of its height, the x axis where it was
+            ch.set_axes_locator(None)                 # an inset axes re-applies its locator at draw time
+            ch.set_position([bb.x0, bb.y0, bb.width, bb.height * 0.78])
     axc = V2._inch_axes(fig, [XC / Wt, 0, WC / Wt, 1], WC, Ht)
-    _gemma_panel(axc, WC, Ht, FIG2C_TITLE, title_x=0.245, title_y=0.02, y_bars=0.172)   # as (b)'s
+    _gemma_panel(axc, WC, Ht, FIG2C_TITLE, title_x=0.02, title_y=0.02, y_bars=0.172)   # as (b)'s
+    rend = fig.canvas.get_renderer(); fig.canvas.draw()          # verify: the two bar charts' x axes on one line
+    prof = next(ch for ch in axb.child_axes if len(ch.patches) > 5)
+    bars = next(ch for ch in axc.child_axes if 0 < len(ch.patches) < 5)
+    ax_y0 = lambda a_: a_.get_window_extent(rend).y0 / fig.dpi
+    assert abs(ax_y0(bars) - ax_y0(prof)) < 0.005, (ax_y0(bars), ax_y0(prof))
+    lab_y0 = lambda a_: a_.xaxis.label.get_window_extent(rend).y0 / fig.dpi
+    prof.xaxis.labelpad += (lab_y0(prof) - lab_y0(bars)) * 72     # (b)'s title pad grown so its bottom meets (c)'s
+    fig.canvas.draw()
+    assert abs(lab_y0(bars) - lab_y0(prof)) < 0.005, (lab_y0(bars), lab_y0(prof))
+    # both bar charts raised so their x titles' bottoms sit on panel (a)'s lowest ink
+    a_bottom = min(art.get_window_extent(rend).y0 for art in axa.lines + axa.patches + axa.texts
+                   if art.get_visible()) / fig.dpi
+    dy = (a_bottom - lab_y0(prof)) / Ht
+    for ch in (prof, bars):
+        bb = ch.get_position(); ch.set_axes_locator(None)
+        ch.set_position([bb.x0, bb.y0 + dy, bb.width, bb.height])
+    for tx in axc.texts:                              # the summary line above (c)'s bars moves with them
+        if tx.get_text().startswith("Stage communication"):
+            tx.set_y(tx.get_position()[1] + dy * Ht)
+    fig.canvas.draw()
+    assert abs(lab_y0(prof) - a_bottom) < 0.005 and abs(lab_y0(bars) - a_bottom) < 0.005, (lab_y0(prof), lab_y0(bars), a_bottom)
+    print(f"   bar-chart x axes: (b) {ax_y0(prof):.3f} in, (c) {ax_y0(bars):.3f} in; "
+          f"x titles' bottoms: (b) {lab_y0(prof):.3f} in, (c) {lab_y0(bars):.3f} in; (a) bottom {a_bottom:.3f} in")
     yl = (Ht - 0.02) / Ht
-    fig.text(0.006, yl, "(a)", fontsize=7.5, fontweight="bold", va="top")
-    fig.text(5.22 / Wt + 0.004, yl, "(b)", fontsize=7.5, fontweight="bold", va="top")
-    fig.text(XC / Wt + 0.004, yl, "(c)", fontsize=7.5, fontweight="bold", va="top")
+    fig.text(0.006, yl, "(a) Platform", fontsize=FS2_TITLE, va="top")
     save(fig, "fig2_platform", composite=True,
          sources=["scripts/plot_dac2027_v2.py", "scripts/search_eval.py", "scripts/interconnect.py"],
          meta={"panel_a": "schematic, the v2 hand-drawn layout with the v3 wording",
@@ -447,32 +489,32 @@ def _gemma_handoff():
 
 
 def _gemma_panel(ax, W, H, title, title_x=0.02, title_y=0.06, y_bars=None):
-    """The hand-off as a routing schematic in the Fig. 2(b) / Fig. 5 idiom
-    (roads with a dark rim filled by the load ramp, white nodes with black
-    labels, the digital unit hatched), the stage's three resource classes as
-    bars. y_bars: inch height of the bar chart's x axis; when given, the
-    schematic and the bars scale together to reach it (the composite aligns
-    it with panel (b)'s profile axis)."""
+    """The hand-off as a routing schematic in the Fig. 2(b) idiom (roads
+    with a dark rim filled by the load ramp, white nodes with black labels,
+    the digital unit hatched), laid out horizontally: the unit in the
+    middle, the QKV producers to its left and right, the busiest lane
+    (e*) between the right junction and the unit; the stage's three
+    resource classes as bars. y_bars: inch height of the bar chart's x axis
+    (the composite aligns it with panel (b)'s profile axis)."""
     from scripts import plot_dac2027_v2 as V2
     from matplotlib.patches import Circle, FancyBboxPatch, Polygon
     from matplotlib.colors import Normalize
     G = _gemma_handoff()
     B, wpf, link, best, stage = G["B"], G["wpf"], G["link"], G["best"], G["stage"]
-    TXT, EDGE, TITLE = "#24313c", "#2b2f33", "#2b3a4f"
+    TXT, EDGE = "#24313c", "#2b2f33"
     CM = V2.LOAD_BR; vmax = G["hot_words"] / B * 1e3; norm = Normalize(0, vmax)
-    LANE, RIM, NODE_LW, FS_N = 3.6, 0.4, 0.6, 5.4
-    ax.text(title_x, H - title_y, title, fontsize=6.2, color=TITLE, ha="left", va="top", fontweight="bold")
-    ax.text(title_x - 0.015, H - title_y - 0.13, f"Gemma-7B: QKV → attention unit · {len(G['flows'])} dies",
-            fontsize=5.6, color=TXT, ha="left", va="top")
-    # vertical budget: top nodes at H - 0.32; schematic 5 L1 + 2 r; summary line 0.22; bars hb
-    r = 0.09
-    s = 1.0 if y_bars is None else (H - 0.32 - 2 * r - 0.22 - y_bars) / (5 * 0.25 + 0.40)
-    L1, hb = 0.25 * s, 0.40 * s                      # one unit for a plain route, two for a shortened one
-    ux = 0.05 + 2 * L1 + r
-    U = (ux, H - 0.32 - r - 2 * L1)
-    Js, Jn = (ux, U[1] - L1), (ux, U[1] + L1)
-    Q = {1: (ux, Js[1] - 2 * L1), 2: (ux + L1, Js[1]), 3: (ux - 2 * L1, Js[1]),
-         4: (ux - L1, Jn[1]), 5: (ux, Jn[1] + L1), 6: (ux - 2 * L1, Jn[1] + L1)}
+    LANE, RIM, NODE_LW, FS_N = 4.9, 0.4, 0.85, FS2_NODE   # the lanes and node edges of panel (b)
+    ax.text(title_x, H - title_y, title, fontsize=FS2_TITLE, color="black", ha="left", va="top")
+    ax.text(title_x - 0.015, H - title_y - 0.19, f"Gemma-7B: QKV → attention unit · {len(G['flows'])} dies",
+            fontsize=FS2_SUB, color=TXT, ha="left", va="top")
+    # the vertical layout of the earlier version, turned a quarter turn counter-clockwise about the unit:
+    # (dx, dy) -> (-dy, dx); L1 = one plain route, two for a shortened one
+    L1, r = 0.30, 0.15                               # fills the panel width: Q6 / Q5 at the bars' left edge, Q1 at the right
+    top = 1.556 + 2 * 0.47 + 0.144                   # (b)'s top node row (its mesh origin, pitch and node radius)
+    U = (0.04 + 2 * L1 + r, top - L1 - r)
+    R = lambda dx, dy: (U[0] - dy, U[1] + dx)
+    Js, Jn = R(0, -L1), R(0, L1)                       # the junctions: right and left of the unit
+    Q = {1: R(0, -3 * L1), 2: R(L1, -L1), 3: R(-2 * L1, -L1), 4: R(-L1, L1), 5: R(0, 2 * L1), 6: R(-2 * L1, 2 * L1)}
     hj = (LANE / 2 + RIM) / 72                        # half-size of a junction square, inches
 
     def road(p0, p1, n, brk=False, trim0=0.0, trim1=0.0):
@@ -494,8 +536,9 @@ def _gemma_panel(ax, W, H, title, title_x=0.02, title_y=0.06, y_bars=None):
 
     def junction(J, arms):
         """Each side arm's colour fills its quadrant of the junction square
-        (through lanes drawn untrimmed, so a T shows no seam)."""
-        dirs = {"up": (0, 1), "down": (0, -1), "left": (-1, 0), "right": (1, 0)}
+        (through lanes drawn untrimmed, so a T shows no seam); the arm names
+        are those of the vertical layout, turned with it."""
+        dirs = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
         for name, n in arms.items():
             dx, dy = dirs[name]; px, py = -dy, dx
             c1 = (J[0] + hj * (dx + px), J[1] + hj * (dy + py))
@@ -519,36 +562,41 @@ def _gemma_panel(ax, W, H, title, title_x=0.02, title_y=0.06, y_bars=None):
     ax.add_patch(Circle(U, r, fc="none", ec=EDGE, lw=NODE_LW, zorder=6.2))
     ax.text(U[0], U[1], "U", fontsize=FS_N, color="black", ha="center", va="center_baseline",
             fontweight="bold", zorder=7, bbox=dict(fc="white", ec="none", pad=0.4))
-    ax.text(ux + r + 0.03, Js[1] + 0.92 * r + 0.012,
-            f"e* · {G['n_hot']} flows\n{G['hot_words'] / 1e6:.1f} M words", fontsize=5.2, color=TXT,
-            ha="left", va="bottom", linespacing=1.15, zorder=9)
-    # colour bar, bottom-aligned with the lowest node
-    cb_x = ux + L1 + 0.92 * r + 0.25
-    cbx = ax.inset_axes((cb_x, Q[1][1] - r, 0.066, 0.50 * s), transform=ax.transData)
+    ax.text(U[0] + 0.08, U[1] + r + 0.025, f"e* · {G['n_hot']} flows\n{G['hot_words'] / 1e6:.1f} M words",
+            fontsize=FS2_SUB, color=TXT, ha="right", va="bottom", linespacing=1.15, zorder=9)
+    # the ramp, horizontal beneath the schematic
+    y_lo = min(y for _, y in Q.values()) - r
+    cb_w, cb_h = 0.64, 0.076                          # (b)'s colour bar, turned
+    cb_x = 0.04                                       # left-aligned with the schematic
+    cbx = ax.inset_axes((cb_x, y_lo - 0.16 - cb_h, cb_w, cb_h), transform=ax.transData)
     vals = np.linspace(0, vmax, 512)
-    cbx.imshow(CM(norm(vals))[:, None, :], origin="lower", aspect="auto", extent=(0, 1, 0, vmax),
+    cbx.imshow(CM(norm(vals))[None, :, :], origin="lower", aspect="auto", extent=(0, vmax, 0, 1),
                interpolation="nearest")
-    cbx.set_xlim(0, 1); cbx.set_ylim(0, vmax); cbx.set_xticks([]); cbx.yaxis.tick_right()
-    cbx.set_yticks([0, vmax / 3, 2 * vmax / 3, vmax])
-    cbx.set_yticklabels(["0", f"{vmax / 3:.1f}", f"{2 * vmax / 3:.1f}", f"{vmax:.1f}"])
-    cbx.tick_params(labelsize=5.2, length=1.5, pad=1, width=0.5, colors=TXT)
+    cbx.set_xlim(0, vmax); cbx.set_ylim(0, 1); cbx.set_yticks([])
+    cbx.set_xticks([0, vmax / 3, 2 * vmax / 3, vmax])
+    cbx.set_xticklabels(["0", f"{vmax / 3:.1f}", f"{2 * vmax / 3:.1f}", f"{vmax:.1f}"])
+    cbx.tick_params(labelsize=FS2_SUB, length=1.5, pad=1, width=0.5, colors=TXT)
     for sp in cbx.spines.values():
         sp.set_linewidth(0.4)
-    cbx.set_title("ms", fontsize=5.2, color=TXT, pad=2)
+    ax.text(cb_x + cb_w + 0.05, y_lo - 0.16 - cb_h / 2, "ms", fontsize=FS2_SUB, color=TXT, ha="left", va="center")
+    x_right = Q[1][0] + 0.92 * r                      # the bars' right edge: the schematic's
     # one summary line, then the stage's three resource classes on the same ramp
     kinds = ["mesh link", "die port", "hub port"]
-    y_f = Q[1][1] - r - 0.09
-    ax.text(0.02, y_f, f"Stage communication: {stage['stage_H_s'] * 1e3:.2f} ms", fontsize=5.6,
+    hb = 3 * 0.129                                    # three rows at (b)'s bar pitch
+    y_b = y_bars if y_bars is not None else 0.172     # the x axis on (b)'s profile axis
+    y_f = y_b + hb + 0.16
+    ax.text(0.02, y_f, f"Stage communication: {stage['stage_H_s'] * 1e3:.2f} ms", fontsize=FS2_SUB,
             color=TXT, ha="left", va="top")
-    bx = ax.inset_axes((0.62, y_f - 0.13 - hb, cb_x + 0.066 - 0.62, hb), transform=ax.transData)
+    bx = ax.inset_axes((0.68, y_b, x_right - 0.68 - 0.24, hb), transform=ax.transData)   # the value labels end at the schematic's right edge
     ys = [2, 1, 0]
-    bx.barh(ys, [best[k] for k in kinds], color=[CM(norm(best[k])) for k in kinds], height=0.66, zorder=3)
+    bx.barh(ys, [best[k] for k in kinds], color=[CM(norm(best[k])) for k in kinds], height=0.74, zorder=2)
     for y, k in zip(ys, kinds):
-        bx.text(best[k] + 0.18, y, f"{best[k]:.2f} ms", fontsize=5.6, color=TXT, va="center")
-    bx.set_yticks(ys); bx.set_yticklabels(["Busiest link", "CIM die port", "Digital interface"], fontsize=5.6)
-    bx.set_xlim(0, 8.8); bx.set_xticks([0, 4, 8])
-    bx.tick_params(labelsize=5.2, length=1.5, pad=1, width=0.5, colors=TXT)
-    bx.set_xlabel("Service time (ms)", fontsize=5.6, labelpad=1.5, color=TXT)
+        bx.text(best[k] + 0.15, y, f"{best[k]:.2f} ms", fontsize=5.4, color=TXT, va="center")
+    bx.set_yticks(ys); bx.set_yticklabels(["Busiest link", "CIM die port", "Digital interface"], fontsize=5.4)
+    bx.set_xlim(0, 8.6); bx.set_xticks([0, 4, 8])
+    bx.tick_params(labelsize=FS2_SUB, length=1.5, pad=1.5, width=0.5, colors=TXT)
+    bx.tick_params(axis="y", labelsize=5.4)           # the row names a step smaller than the values
+    bx.set_xlabel("Service time (ms)", fontsize=FS2_SUB, labelpad=1.5, color=TXT)
     for sp_ in ("top", "right"):
         bx.spines[sp_].set_visible(False)
     for sp_ in ("left", "bottom"):
@@ -576,7 +624,18 @@ def fig2b_gemma():
              ["x0", "y0", "x1", "y1", "dir", "words", "service_ms"])
 
 
-FIG2B_TITLE, FIG2C_TITLE = "LINK LOADS", "HETEROGENEOUS HAND-OFF"
+FIG2B_TITLE, FIG2C_TITLE = "(b) Link loads", "(c) Heterogeneous hand-off"
+# the load ramp of Figs 2 and 4: the cold end midway between the card's deep (70,96,173) and light (104,180,206)
+# blues, white at the port bound, the Fig. 4 hot end
+LOAD_BR_V3 = matplotlib.colors.LinearSegmentedColormap.from_list(
+    "isobar_load_br_v3", [(pos, (r_ / 255, g_ / 255, b_ / 255)) for pos, (r_, g_, b_) in
+                          ((0.00, (87, 138, 190)), (0.20, (150, 198, 220)), (0.36, (200, 225, 236)),
+                           (0.50, (233, 241, 244)),                             # white exactly at the centre
+                           (0.62, (247, 203, 180)), (0.74, (246, 178, 147)), (0.86, (220, 109, 87)),
+                           (0.94, (183, 34, 48)), (1.00, (150, 20, 40)))])
+FS2_TITLE = 8.0                                        # the 9.56 in figure prints at x0.75: 6 pt, like the other figures
+FS2_SUB = 6.4                                          # the instance lines under the (b) / (c) titles
+FS2_NODE = 6.8                                         # the node labels of (b) and (c)
 
 
 # =====================================================================
@@ -810,9 +869,9 @@ def fig3():
            "analysis/v7/validation_protocols.json", "analysis/v7/search_trajectories.csv",
            "analysis/v7/search_trajectories.json"]
     W = 3.4
-    Lm, G, Rm = 0.40, 0.42, 0.04                      # left margin, column gap, right margin (in)
+    Lm, G, Rm = 0.40, 0.38, 0.04                      # left margin, column gap, right margin (in); the Fig. 7 gaps
     pw = (W - Lm - G - Rm) / 2
-    top, ph_t, ph_b, rgap, bot = 0.17, 1.00, 0.80, 0.48, 0.30   # the bottom row flatter than the top
+    top, ph_t, ph_b, rgap, bot = 0.17, 1.00, 0.80, 0.40, 0.30   # the bottom row flatter than the top
     H = top + ph_t + rgap + ph_b + bot
     fig = plt.figure(figsize=(W, H))
     yb_t = bot + ph_b + rgap
@@ -825,6 +884,9 @@ def fig3():
     axr = fig.add_axes([(Lm + pw - wr) / W, bot / H, wr / W, ph_b / H])
     axd = P(1, bot, ph_b)
     _fig3c(axm, axr, rt); traj = _fig3d(axd)
+    for ax_ in (axa, axb, axm, axr, axd):              # axis type at the Fig. 6 / 7 size (measured below for the y titles)
+        ax_.tick_params(axis="both", labelsize=4.8)
+        ax_.xaxis.label.set_fontsize(4.8); ax_.yaxis.label.set_fontsize(4.8)
     # y titles of each column on one vertical line, just left of the column's widest tick labels
     # (align_ylabels needs a gridspec; these are plain axes): measured, then placed
     from matplotlib.transforms import blended_transform_factory as _bt
@@ -837,7 +899,7 @@ def fig3():
             ax_.yaxis.set_label_coords(tick_left, 0.5, transform=tr)
             fig.canvas.draw()
             right = ax_.yaxis.label.get_window_extent(rend).x1 / fig.dpi
-            ax_.yaxis.set_label_coords(tick_left - 0.035 - (right - tick_left), 0.5, transform=tr)
+            ax_.yaxis.set_label_coords(tick_left - 0.06 - (right - tick_left), 0.5, transform=tr)   # the PDF backend sets the digits a little wider than Agg measures
     meta = {"panel_a": {"layer": rows[0]["layer"], "normalisation": rows[0]["normalisation"],
                         "farthest": {k: rows[-1][k] for k in ("measured_norm", "bound_series_norm",
                                                               "protocol_series_norm")}},
@@ -873,8 +935,9 @@ def fig3():
 F4 = dict(pre="#68b4ce", dec="#f3de67", two="#a5c582", A="#68b4ce", B="#a5c582", edge="#2b2f33")
 SCEN4 = [("offload6x6", "1-layer prefill", F4["pre"]), ("offload_decode6x6", "1-layer decode", F4["dec"]),
          ("offload2_8x8", "2-layer prefill", F4["two"])]
-OBJ4 = [("booksim", "BookSim best", "#4660ad"), ("A_full", "Isobar", F4["pre"]), ("word_hops", "Word-hops", F4["dec"]),
-        ("max_hops", "Max-hops", F4["two"])]
+# (b): dark to light across the four bars of a cluster
+OBJ4 = [("booksim", "BookSim best", "#4660ad"), ("A_full", "Isobar", "#68b4ce"), ("word_hops", "Word-hops", "#a5c582"),
+        ("max_hops", "Max-hops", "#f3de67")]
 ROLE4 = {"qkv_proj": "Q", "attention": "A", "out_proj": "O", "ffn1": "1", "ffn2": "2"}
 FS4_TITLE = FS3["title"]
 
@@ -972,110 +1035,121 @@ def _fig4a(ax, W, H):
     s, r = 0.142, 0.050
     oy = 0.21
     bounds = {}
-    for tag, ox in (("A", 0.10), ("B", 1.12)):
+    for tag, ox in (("A", 0.10), ("B", 0.98)):
         M = maps[tag]
         x0, x1, y0, y1 = _mesh_map(ax, ox, oy, s, M, norm, CM, r=r)
         bounds[tag] = (x0, x1, y0, y1)
-        ax.text(x0, y0 - 0.045, tag, fontsize=FS3["small"], color=TXT, ha="left", va="top", fontweight="bold")
-        ax.text(x0 + 0.11, y0 - 0.045, f"peak {M['peak'] / 1e6:.1f} M · {M['n_lanes']} lanes",
-                fontsize=FS3["tiny"], color=TXT, ha="left", va="top")
-    # the shared ramp
+        ax.text(x0 + 0.05, y0 - 0.045, tag, fontsize=4.8, color=TXT, ha="left", va="top", fontweight="bold")
+        ax.text(x0 + 0.16, y0 - 0.045, f"peak {M['peak'] / 1e6:.1f} M · {M['n_lanes']} lanes",
+                fontsize=4.8, color=TXT, ha="left", va="top")
+    # the right block: a horizontal colour bar over the B / A bars, both as wide as the block
     x0, x1, y0, y1 = bounds["B"]
-    cb_x, cb_w = x1 + 0.10, 0.065
-    cbx = ax.inset_axes((cb_x, y0, cb_w, y1 - y0), transform=ax.transData)
-    vals = np.linspace(0.0, vmax, 512)
-    cbx.imshow(CM(norm(vals))[:, None, :], origin="lower", aspect="auto", extent=(0, 1, 0, vmax),
-               interpolation="nearest")
-    cbx.set_xlim(0, 1); cbx.set_ylim(0, vmax)
-    cbx.set_xticks([]); cbx.yaxis.tick_right()
-    cbx.set_yticks([0, tport, vmax]); cbx.set_yticklabels(["0", f"{tport:.1f}", f"{vmax:.1f}"])
-    cbx.tick_params(labelsize=FS3["tiny"], length=1.5, pad=1, width=0.5, colors=TXT)
-    for sp in cbx.spines.values():
-        sp.set_linewidth(0.4)
-    cbx.set_title("M words", fontsize=FS3["tiny"], color=TXT, pad=2)
-    # B / A under the three metrics
     A, B = maps["A"], maps["B"]
     ratios = [("Word-hops", B["word_hops"] / A["word_hops"]), ("Isobar cost", B["A_full"] / A["A_full"]),
               ("BookSim", B["booksim"] / A["booksim"])]
-    xt = cb_x + cb_w + 0.06
-    xl = xt + 0.48                                   # room for the row labels
-    xl = xt + 0.34
-    bx = ax.inset_axes((xl, y0, 0.62, y1 - y0), transform=ax.transData)   # as tall as the maps
-    yb = np.arange(len(ratios))[::-1]; hb_ = 0.30
-    bx.barh(yb + hb_ / 2, [1.0] * len(ratios), hb_, color=F4["A"], ec=F4["edge"], lw=0.25, zorder=3, label="A")
-    bx.barh(yb - hb_ / 2, [v for _, v in ratios], hb_, color=F4["B"], ec=F4["edge"], lw=0.25, zorder=3, label="B")
-    for y_, (nm, v) in zip(yb, ratios):
-        bx.text(v + 0.06, y_ - hb_ / 2, f"{v:.2f}", fontsize=FS3["tiny"], color=TXT, ha="left", va="center",
+    xl = x1 + 0.17                                   # the block's plot area (the bars' y ticks to its left)
+    wb = 0.72
+    cb_h = 0.045
+    cbx = ax.inset_axes((xl, y1 - 0.075 - cb_h, wb - 0.10, cb_h), transform=ax.transData)   # under the "M words" line; its last tick label ends at the bars' right edge
+    vals = np.linspace(0.0, vmax, 512)
+    cbx.imshow(CM(norm(vals))[None, :, :], origin="lower", aspect="auto", extent=(0, vmax, 0, 1),
+               interpolation="nearest")
+    cbx.set_xlim(0, vmax); cbx.set_ylim(0, 1); cbx.set_yticks([])
+    cbx.set_xticks([0, tport, vmax]); cbx.set_xticklabels(["0", f"{tport:.1f}", f"{vmax:.1f}"])
+    cbx.tick_params(labelsize=4.8, length=1.5, pad=1, width=0.5, colors=TXT)
+    for sp in cbx.spines.values():
+        sp.set_linewidth(0.4)
+    ax.text(xl, y1, "M words", fontsize=4.8, color=TXT, ha="left", va="top")   # its top on the maps' top edge
+    bx = ax.inset_axes((xl, y0, wb, y1 - y0 - cb_h - 0.38), transform=ax.transData)   # upright paired bars, on the maps' baseline
+    xb = np.arange(len(ratios)); wb_ = 0.28
+    bx.bar(xb - wb_ / 2, [1.0] * len(ratios), wb_, color=F4["A"], ec=F4["edge"], lw=0.25, zorder=2, label="A")
+    bx.bar(xb + wb_ / 2, [v for _, v in ratios], wb_, color=F4["B"], ec=F4["edge"], lw=0.25, zorder=2, label="B")
+    for x_, (nm, v) in zip(xb, ratios):
+        bx.text(x_ + wb_ / 2, v + 0.05, f"{v:.2f}", fontsize=FS3["tiny"], color=TXT, ha="center", va="bottom",
                 zorder=5)
-    bx.set_yticks(yb); bx.set_yticklabels(["Word-\nhops", "Isobar\ncost", "Book-\nSim"], linespacing=1.0)
-    bx.set_xlim(0, 2.75); bx.set_ylim(-0.6, len(ratios) - 0.4)
-    bx.set_xticks([0, 1, 2])
-    bx.tick_params(labelsize=FS3["tiny"], length=1.5, pad=1.5, width=0.5, colors=TXT)
-    bx.tick_params(axis="y", length=0)
+    bx.set_xticks(xb); bx.set_xticklabels(["Word\nhops", "Isobar", "Book\nSim"], linespacing=1.0, fontsize=4.2)
+    bx.set_xlim(-0.65, len(ratios) - 0.35)
+    bx.set_ylim(0, 2.5); bx.set_yticks([0, 1, 2])
+    bx.set_yticklabels(["0", "1×", "2×"])
+    bx.tick_params(axis="y", labelsize=4.8, length=1.5, pad=1.5, width=0.5, colors=TXT)
+    bx.tick_params(axis="x", length=0, labelsize=4.2, pad=1.5, colors=TXT)
     for sp in ("top", "right"):
         bx.spines[sp].set_visible(False)
     for sp in ("left", "bottom"):
         bx.spines[sp].set_linewidth(0.5)
     bx.set_facecolor("none")
-    bx.set_xlabel("Normalized to A", fontsize=FS3["tiny"], labelpad=1.5, color=TXT)
-    bx.legend(fontsize=FS3["tiny"], loc="upper right", frameon=False, ncol=2, handlelength=0.9, handletextpad=0.3,
-              columnspacing=0.7, borderaxespad=0.0, bbox_to_anchor=(1.0, 1.10))
-    ax.set_title("(a) Equal word-hops, unequal load", fontsize=FS4_TITLE, loc="left", pad=3)
-    return maps, ratios, xl + 0.62                  # the right edge of the panel's content (in)
+    bx.text(-0.04, 1.02, "B / A", transform=bx.transAxes, fontsize=4.4, color=TXT, ha="left", va="bottom")
+    bx.legend(fontsize=FS3["tiny"], loc="lower right", bbox_to_anchor=(1.0, 1.0), frameon=False, ncol=2,
+              handlelength=0.9, handletextpad=0.3, columnspacing=0.7, borderaxespad=0.0, borderpad=0.1)
+    ax.set_title("(a) Equal word-hops, unequal load", fontsize=FS4_TITLE, loc="left", pad=1.5)
+    return maps, ratios, xl + wb                    # the right edge of the panel's content (in)
 
 
-def _fig4b(ax):
-    """(b) Selection from each of the three offload BookSim libraries: per
-    library (cluster) the BookSim-best candidate and the candidate each
-    analytic metric picks (lowest score, exact ties broken by the sorted id)
-    as filled diamonds, the other members of a metric's exact-tie set as open
-    circles; y = BookSim time over the library's BookSim-best candidate."""
+def _fig4b(ax, w=0.15, pitch=0.15, legend_ncol=3, ymax=1.78, two_line=False, cstep=1.0, legend_fs=None):
+    """(b) Selection from each of the three offload BookSim libraries, in the
+    Fig. 6 idiom: per library (cluster) four thin bars, the BookSim-best
+    candidate (1x) and the candidate each analytic metric picks (lowest
+    score, exact ties broken by the sorted id), as BookSim time over the
+    library's best; a T in the bar's centre spans the BookSim times of
+    every exact-tie member (the range of tied optima)."""
     sel = read_csv(os.path.join(V7, "booksim_selection_by_objective.csv"))
     cyc = {(r["scenario_id"], r["candidate_id"]): int(r["booksim_cycles"])
            for r in read_csv(os.path.join(V7, "booksim_candidate_costs.csv"))}
     pick = {}
     for r in sel:                                      # the export repeats a row; one per (library, objective)
         pick.setdefault((r["scenario_id"], r["objective"]), r)
-    x = np.arange(len(SCEN4)); dxs = np.linspace(-0.21, 0.21, len(OBJ4))
-    rows = []; placed = []
+    x = np.arange(len(SCEN4)) * cstep                  # cluster centres
+    dxs = np.linspace(-1.5 * pitch, 1.5 * pitch, len(OBJ4))
+    ax.axhline(1.0, color="#8f949a", lw=0.7, ls=(0, (3, 2)), zorder=1.5)
+    rows = []
     for j, (s, name, _) in enumerate(SCEN4):
+        vals_prev = []                                  # (x, objective, selected, top of bar + range) per bar of the cluster
         for k, (obj, lab, col) in enumerate(OBJ4):
-            xx = x[j] + dxs[k]
+            r = pick[(s, "A_full" if obj == "booksim" else obj)]
+            best = int(r["booksim_best_cycles"])
             if obj == "booksim":
-                r = pick[(s, "A_full")]
-                vsel, chosen, members, others = 1.0, r["booksim_best_id"], [r["booksim_best_id"]], {}
+                chosen, members, vsel, tie = r["booksim_best_id"], [r["booksim_best_id"]], 1.0, [1.0]
             else:
-                r = pick[(s, obj)]
-                best = int(r["booksim_best_cycles"]); chosen = r["selected_id_stable_rule"]
-                members = r["min_score_tie_members"].split(";")
+                chosen = r["selected_id_stable_rule"]; members = r["min_score_tie_members"].split(";")
                 vsel = cyc[(s, chosen)] / best
                 assert abs(vsel - 1 - float(r["regret_selected"])) < 1e-9
-                others = {m: cyc[(s, m)] / best for m in members if m != chosen}
-            if others:
-                ax.plot([xx] * len(others), list(others.values()), ls="none", marker="o", ms=2.3, mfc="white",
-                        mec=col, mew=0.7, zorder=4)
-            ax.plot([xx], [vsel], ls="none", marker="D", ms=3.4, mfc=col, mec=col, zorder=5)
-            if obj != "booksim":                       # the reference is 1.00 by definition
-                yl = vsel + 0.02
-                while any(abs(px - xx) < 0.2 and abs(py - yl) < 0.05 for px, py in placed):
-                    yl += 0.05                         # an equal-height neighbour: stack the label
-                placed.append((xx, yl))
-                ax.text(xx, yl, f"{vsel:.2f}", fontsize=FS3["tiny"], color=INK, ha="center", va="bottom",
-                        zorder=6)
+                tie = [cyc[(s, m)] / best for m in members]
+            xx = x[j] + dxs[k]
+            ax.bar(xx, vsel - 0.8, w, bottom=0.8, color=col, ec="#2b2f33", lw=0.25, zorder=2,
+                   label=lab if j == 0 else None)   # bars rise from the axis floor at 0.8
+            if max(tie) - min(tie) > 0.003:            # the range of tied optima: stem + a cap at the end(s) away from the bar top
+                ax.plot([xx, xx], [min(tie), max(tie)], color=INK, lw=0.6, zorder=4, solid_capstyle="butt")
+                for v in (min(tie), max(tie)):
+                    if abs(v - vsel) > 0.003:
+                        ax.plot([xx - 0.3 * w, xx + 0.3 * w], [v, v], color=INK, lw=0.6, zorder=4,
+                                solid_capstyle="butt")
+            vals_prev.append((xx, obj, vsel, max([vsel] + tie)))
             rows.append({"library": s, "objective": obj, "selected": chosen, "booksim_over_best": vsel,
                          "tie_set_size": len(members), "tie_members": ";".join(members),
-                         "tie_booksim_over_best": ";".join(f"{v:.4f}" for v in sorted([vsel] + list(others.values()))),
-                         "booksim_best": pick[(s, "A_full")]["booksim_best_id"]})
-    ax.axhline(1.0, color=INK, lw=0.5, ls=(0, (3, 2)), zorder=2)
-    ax.set_xticks(x); ax.set_xticklabels([n for _, n, _ in SCEN4])
-    ax.set_xlim(-0.5, len(SCEN4) - 0.5); ax.set_ylim(0.88, 1.82); ax.set_yticks([1.0, 1.2, 1.4, 1.6, 1.8])
-    ax.set_ylabel("BookSim latency\n(norm. to best)", fontsize=FS3["axis"], labelpad=2, linespacing=1.1)
+                         "tie_min": min(tie), "tie_max": max(tie), "booksim_best": r["booksim_best_id"]})
+        placed = []
+        for k, (xx, obj, vsel, top) in enumerate(vals_prev):
+            if obj == "booksim":
+                continue
+            yl = top + 0.035
+            while any(abs(px - xx) < pitch + 0.02 and abs(py - yl) < 0.06 for px, py in placed):
+                yl += 0.06                             # an equal-height neighbour: stack the label
+            placed.append((xx, yl))
+            left_taller = k > 0 and vals_prev[k - 1][3] > yl
+            right_taller = k + 1 < len(vals_prev) and vals_prev[k + 1][3] > yl
+            xlab = xx + (0.035 if left_taller and not right_taller else -0.035 if right_taller and not left_taller else 0.0)
+            ax.text(xlab, yl, f"{vsel:.2f}", fontsize=FS3["tiny"], color=INK, ha="center", va="bottom", zorder=6)
+    ax.set_xticks(x); ax.set_xticklabels([(n.replace(" ", "\n", 1) if two_line else n) for _, n, _ in SCEN4], linespacing=1.0)
+    ax.set_xlim(-0.6 * cstep, x[-1] + 0.6 * cstep); ax.set_ylim(0.8, ymax); ax.set_yticks([1.0, 1.2, 1.4, 1.6])
+    ax.set_yticklabels(["1.0×", "1.2×", "1.4×", "1.6×"])
+    ax.set_ylabel("BookSim latency\n(norm. to best in pool)", fontsize=FS3["axis"], labelpad=2, linespacing=1.1)
     _title3(ax, "(b) BookSim performance of selected mappings")
     from matplotlib.lines import Line2D
-    h = [Line2D([], [], ls="none", marker="D", ms=3.0, mfc=c, mec=c, label=n) for _, n, c in OBJ4]
-    h += [Line2D([], [], ls="none", marker="o", ms=2.3, mfc="white", mec="#8a8f94", mew=0.7, label="tied")]
-    ax.legend(handles=h, fontsize=FS3["tiny"], loc="upper right", frameon=False, ncol=2, handlelength=1.0,
-              handletextpad=0.3, labelspacing=0.2, columnspacing=0.8, borderaxespad=0.1)
+    h, l = ax.get_legend_handles_labels()
+    h.append(Line2D([], [], color=INK, lw=0.6, marker="_", ms=4, label="Range of tied optima"))
+    ax.legend(handles=h, fontsize=legend_fs or FS3["tiny"], loc="upper right", frameon=False, ncol=legend_ncol,
+              handlelength=0.8, handletextpad=0.3, labelspacing=0.2, columnspacing=0.5, borderaxespad=0.1,
+              handleheight=0.7)
     _tidy(ax, grid="y")
     return rows
 
@@ -1086,15 +1160,17 @@ def fig4():
            "analysis/v7/booksim_selection_by_objective.csv", "analysis/v7/booksim_candidate_costs.csv"]
     W = 3.4
     Lm, Rm = 0.46, 0.04
-    top, ha, rgap, hb, bot = 0.17, 1.04, 0.22, 0.95, 0.36
+    top, ha, rgap, hb, bot = 0.17, 1.04, 0.16, 0.82, 0.36
     H = top + ha + rgap + hb + bot
     fig = plt.figure(figsize=(W, H))
     axa = V2._inch_axes(fig, [0, (bot + hb + rgap) / H, 1, ha / H], W, ha)
     maps, ratios, xr = _fig4a(axa, W, ha)
     axb = fig.add_axes([Lm / W, bot / H, (xr - Lm) / W, hb / H])   # as wide as panel (a)'s content
     rows = _fig4b(axb)
+    axb.tick_params(axis="both", labelsize=4.8)       # axis type at the Fig. 6 / 7 size
+    axb.xaxis.label.set_fontsize(4.8); axb.yaxis.label.set_fontsize(4.8)
     axb.set_title(axb.get_title(loc="left"), loc="left", fontsize=FS4_TITLE, pad=0,
-                  x=-Lm / (xr - Lm), y=1.0 + 0.09 / hb)   # starts at the figure's left edge, like (a)'s
+                  x=-Lm / (xr - Lm), y=1.0 + 0.06 / hb)   # starts at the figure's left edge, like (a)'s
     meta = {"panel_a": {"group": "layer6x6:wh1",
                         **{t: {"id": m["id"], "class": m["cls"], "word_hops": m["word_hops"], "A_full": m["A_full"],
                                "booksim_cycles": m["booksim"], "peak_lane_words": m["peak"], "lanes_used": m["n_lanes"],
@@ -1102,8 +1178,8 @@ def fig4():
                         "ratios_B_over_A": dict(ratios),
                         "lane_value": "peak stage load per directed link (max over the layer's four hand-offs)"},
             "panel_b": rows,
-            "rule_b": "lowest analytic score; exact ties broken by the stable candidate id; y = "
-                      "BookSim(candidate) / min_library BookSim - 1; open circles = the other exact-tie members"}
+            "rule_b": "lowest analytic score; exact ties broken by the stable candidate id; bar = BookSim(selected) / "
+                      "min_library BookSim (the BookSim-best bar = 1); the T spans the BookSim time of every exact-tie member"}
     save(fig, "fig4_discrimination", composite=True, sources=SRC, meta=meta,
          note="single column, two rows: (a) link-load maps of the strict word-hops tie A / B with B/A ratios, "
               "(b) four-objective selection in three offload libraries with tie members")
@@ -1129,6 +1205,92 @@ F5A = dict(fam={"stacked": "#f3de67", "heuristic": "#4660ad", "random": "#a5c582
            txt={"stacked": "#8a7a2a", "heuristic": "#34488a", "random": "#6f8f52", "search": "#3f7f93"},
            comm="#68b4ce", noncomm="#dfe4e8")
 
+
+
+def _fig4_ratio_bars(ax, bx_rect, cb_rect, maps, vmax, tport, norm, CM, TXT):
+    """The B / A paired bars with the horizontal load ramp above them, at
+    the given inch rects of the inch axes (shared by the two Fig. 4 layouts)."""
+    A, B = maps["A"], maps["B"]
+    ratios = [("Word-hops", B["word_hops"] / A["word_hops"]), ("Isobar cost", B["A_full"] / A["A_full"]),
+              ("BookSim", B["booksim"] / A["booksim"])]
+    cbx = ax.inset_axes(cb_rect, transform=ax.transData)
+    vals = np.linspace(0.0, vmax, 512)
+    cbx.imshow(CM(norm(vals))[None, :, :], origin="lower", aspect="auto", extent=(0, vmax, 0, 1), interpolation="nearest")
+    cbx.set_xlim(0, vmax); cbx.set_ylim(0, 1); cbx.set_yticks([])
+    cbx.set_xticks([0, tport, vmax]); cbx.set_xticklabels(["0", f"{tport:.1f}", f"{vmax:.1f}"])
+    cbx.tick_params(labelsize=4.8, length=1.5, pad=1, width=0.5, colors=TXT)
+    for sp in cbx.spines.values():
+        sp.set_linewidth(0.4)
+    ax.text(cb_rect[0], cb_rect[1] + cb_rect[3] + 0.03, "M words", fontsize=4.8, color=TXT, ha="left", va="bottom")
+    bx = ax.inset_axes(bx_rect, transform=ax.transData)
+    xb = np.arange(len(ratios)); wb_ = 0.28
+    bx.bar(xb - wb_ / 2, [1.0] * len(ratios), wb_, color=F4["A"], ec=F4["edge"], lw=0.25, zorder=2, label="A")
+    bx.bar(xb + wb_ / 2, [v for _, v in ratios], wb_, color=F4["B"], ec=F4["edge"], lw=0.25, zorder=2, label="B")
+    for x_, (nm, v) in zip(xb, ratios):
+        bx.text(x_ + wb_ / 2, v + 0.05, f"{v:.2f}", fontsize=FS3["tiny"], color=TXT, ha="center", va="bottom", zorder=5)
+    bx.set_xticks(xb); bx.set_xticklabels(["Word\nhops", "Isobar", "Book\nSim"], linespacing=1.0, fontsize=4.2)
+    bx.set_xlim(-0.65, len(ratios) - 0.35); bx.set_ylim(0, 2.5); bx.set_yticks([0, 1, 2])
+    bx.set_yticklabels(["0", "1×", "2×"])
+    bx.tick_params(axis="y", labelsize=4.8, length=1.5, pad=1.5, width=0.5, colors=TXT)
+    bx.tick_params(axis="x", length=0, labelsize=4.2, pad=1.5, colors=TXT)
+    for sp in ("top", "right"):
+        bx.spines[sp].set_visible(False)
+    for sp in ("left", "bottom"):
+        bx.spines[sp].set_linewidth(0.5)
+    bx.set_facecolor("none")
+    bx.text(-0.04, 1.02, "B / A", transform=bx.transAxes, fontsize=4.4, color=TXT, ha="left", va="bottom")
+    bx.legend(fontsize=FS3["tiny"], loc="lower right", bbox_to_anchor=(1.0, 1.0), frameon=False, ncol=2,
+              handlelength=0.9, handletextpad=0.3, columnspacing=0.7, borderaxespad=0.0, borderpad=0.1)
+    return ratios
+
+
+def fig4_alt():
+    """The alternative layout: the two link-load maps stacked at the left,
+    the B / A bars (with the ramp) over panel (b) at the right."""
+    from scripts import plot_dac2027_v2 as V2
+    from matplotlib.colors import TwoSlopeNorm
+    TXT = INK
+    maps = _fig4a_maps()
+    CM = matplotlib.colors.LinearSegmentedColormap.from_list(
+        "isobar_load_br_light", [(r_ / 255, g_ / 255, b_ / 255) for r_, g_, b_ in
+                                 ((104, 180, 206), (160, 205, 222), (205, 228, 236), (233, 241, 244),
+                                  (247, 203, 180), (246, 178, 147), (220, 109, 87), (183, 34, 48), (150, 20, 40))])
+    vmax = max(m["peak"] for m in maps.values()) / 1e6
+    tport = max(max(m["ports"].values()) for m in maps.values()) / 1e6
+    norm = TwoSlopeNorm(vmin=0.0, vcenter=tport, vmax=vmax)
+    W, H = 3.0, 2.55
+    s, r = 0.142, 0.050
+    mh = 5 * s + 2 * r                                 # a map's height
+    fig = plt.figure(figsize=(W, H))
+    ax = V2._inch_axes(fig, [0, 0, 1, 1], W, H)
+    oyA, oyB = H - 0.22 - mh + r, 0.30 + r             # map A above map B
+    for tag, oy in (("A", oyA), ("B", oyB)):
+        M = maps[tag]
+        x0, x1, y0, y1 = _mesh_map(ax, 0.10, oy, s, M, norm, CM, r=r)
+        ax.text(x0 + 0.05, y0 - 0.045, tag, fontsize=4.8, color=TXT, ha="left", va="top", fontweight="bold")
+        ax.text(x0 + 0.16, y0 - 0.045, f"peak {M['peak'] / 1e6:.1f} M · {M['n_lanes']} lanes", fontsize=4.8,
+                color=TXT, ha="left", va="top")
+    ax.text(0.0, H - 0.02, "(a) Equal word-hops, unequal load", fontsize=FS4_TITLE, color="black", ha="left", va="top")
+    # the right column: the ramp and the B / A bars at the top, panel (b) below
+    xr0 = x1 + 0.62; wr = W - 0.04 - xr0
+    cb_h = 0.045; wbar = 0.98                           # the ramp and the bars: as wide as (b), left-aligned with it
+    cb_rect = (xr0, H - 0.22 - 0.075 - cb_h, wbar - 0.10, cb_h)
+    bx_rect = (xr0, H - 0.22 - mh + 0.04, wbar, mh - cb_h - 0.42)
+    ratios = _fig4_ratio_bars(ax, bx_rect, cb_rect, maps, vmax, tport, norm, CM, TXT)
+    hb = 0.95; wb_axes = 0.98
+    axb = fig.add_axes([xr0 / W, 0.32 / H, wb_axes / W, hb / H])
+    rows = _fig4b(axb, w=0.11, pitch=0.11, legend_ncol=2, ymax=2.0, two_line=True, cstep=0.52, legend_fs=3.6)
+    axb.tick_params(axis="both", labelsize=4.8)
+    axb.xaxis.label.set_fontsize(4.8); axb.yaxis.label.set_fontsize(4.8)
+    fig.canvas.draw()                                   # the title starts at the y title's left edge
+    yl_x0 = axb.yaxis.label.get_window_extent(fig.canvas.get_renderer()).x0 / fig.dpi
+    axb.set_title("(b) Selected mappings in BookSim", fontsize=FS4_TITLE, loc="left", pad=3,
+                  x=(yl_x0 - xr0) / wb_axes)
+    SRC = ["analysis/v7/equivalent_candidate_groups.csv", "analysis/v3/e3_k2/library_layer6x6.json",
+           "analysis/v7/booksim_selection_by_objective.csv", "analysis/v7/booksim_candidate_costs.csv"]
+    save(fig, "fig4_discrimination_alt", composite=True, sources=SRC,
+         meta={"layout": "maps A over B at the left; B / A bars over panel (b) at the right", "ratios_B_over_A": dict(ratios)},
+         note="alternative layout of Fig. 4; the data and statistics are those of fig4_discrimination")
 
 def _fam5(layout):
     if layout in ("sequential", "snake"):
@@ -1164,11 +1326,12 @@ def _fig5a(ax, note=None, leg=None, bracket_dx=0.95, arrow_drop=0.95):
     ys = np.arange(len(order))[::-1]
     for y, r in zip(ys, order):
         R, H = r["T"] - r["H"], r["H"]
-        ax.barh(y, R, color=F5A["noncomm"], ec="none", height=0.62, zorder=3)
-        ax.barh(y, H, left=R, color=F5A["comm"], ec="none", height=0.62, zorder=3)
+        ax.barh(y, R, color=F5A["noncomm"], ec="none", height=0.62, zorder=2)      # below the spine (2.5)
+        ax.barh(y, H, left=R, color=F5A["comm"], ec="none", height=0.62, zorder=2)
         ax.text(r["T"] + 0.12, y, f"{r['T']:.2f}", va="center", ha="left", fontsize=FS5_NOTE,
                 color=F5A["txt"][_fam5(r["layout"])], zorder=4)
-    ax.set_yticks(ys); ax.set_yticklabels([names.get(r["layout"]) or RULE5[r["layout"]] for r in order])
+    ax.set_yticks(ys); ax.set_yticklabels([names.get(r["layout"]) or RULE5[r["layout"]] for r in order],
+                                          rotation=45, ha="right", va="center", rotation_mode="anchor")
     for tick, r in zip(ax.get_yticklabels(), order):
         tick.set_color(F5A["txt"][_fam5(r["layout"])])
     ax.set_xlabel("Whole-model prefill latency T (s)", fontsize=FS3["axis"], labelpad=1.5)
@@ -1377,6 +1540,13 @@ def _fig5c(ax, title="(d) Bandwidth equivalent"):
     return eq
 
 
+def _fig5_xtype(axes, size=4.8):
+    """The x tick labels and x-axis titles at the Fig. 6 / 7 size; the y axes keep theirs."""
+    for ax in axes:
+        ax.tick_params(axis="x", labelsize=size)
+        ax.xaxis.label.set_fontsize(size)
+
+
 PANEL_ORDER = "(a) latency ladder, (b) by hand-off kind, (c) latency-energy with the clouds inset, (d) bandwidth equivalent"
 
 
@@ -1387,7 +1557,7 @@ def fig5():
     # page width, like the v2 Fig. 4: (a) wide and short over (d); (b) over (c);
     # the left column's axes share their left and right edges, so do the right column's
     W = 6.3
-    L1, R1 = 0.82, 4.02                              # (a) / (c)
+    L1, R1 = 0.62, 4.02                              # (a) / (c)
     L2, R2 = 4.48, 5.78                              # (b) / (d)
     top, ha, rgap, hd, bot = 0.26, 1.10, 0.46, 1.05, 0.30
     H = top + ha + rgap + hd + bot
@@ -1399,6 +1569,7 @@ def fig5():
     axc = fig.add_axes([L2 / W, bot / H, (R2 - L2) / W, hd / H])
     order, base, rep, dist = _fig5a(axa); rows_b, tot_b, tot_s = _fig5b(axb); eq = _fig5c(axc); d = _fig5d(axd)
     eta = 1 - rep["H"] / base["H"]
+    _fig5_xtype((axa, axb, axc, axd))
     pa = read_csv(os.path.join(V7, "gemma_panel_a.csv"))
     prow = next(r for r in pa if r["role"].startswith("search representative"))
     meta = {"config_id": prow["config_id"], "protocol_id": prow["protocol_id"],
@@ -1434,13 +1605,49 @@ def fig5():
 FAM6 = [("reference 8-macro central K=1", "(a) Reference: 8 macros/die, central unit"),
         ("capacity 16-macro central K=1", "(b) Capacity: 16 macros/die, central unit"),
         ("distributed K=4 fixed-total head groups", "(c) Distributed: 8 macros/die, 4 head-group units")]
-MOD6 = [("opt6.7b", "OPT-6.7B"), ("gemma7b", "Gemma-7B"), ("opt13b", "OPT-13B")]
+MOD6 = [("opt1.3b", "OPT-1.3B"), ("opt6.7b", "OPT-6.7B"), ("gemma7b", "Gemma-7B"), ("opt13b", "OPT-13B")]
+# OPT-1.3B per family: (unit, config id, summary row source); the e11 confirmation units, the nine cells' protocol
+SMALL6 = {FAM6[0][0]: ("e11_small", "opt1.3b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1", "manifest"),
+          FAM6[1][0]: ("e11_small_cap", "opt1.3b_prefill512_colrow_sq_mesh_xy_k2_b0.4_m16_offcenterK1", "manifest"),
+          FAM6[2][0]: ("e11_small_head", "opt1.3b_prefill512_colrow_14x14_mesh_xy_k2_b0.4_offcenterK4TH", "record")}
 # the card's four-bar example: deep blue (72,80,152), blue (90,150,204), green (165,197,130); thin dark edges
 # yellow (249,239,124) / green (165,197,130) / blue (90,150,204) from the card's example, no edges
 F6C = dict(rule="#f9ef7c", rule_txt="#8a7a2a", random="#a5c582", random_txt="#6f8f52", best="#3f7f93",
            search="#68b4ce", search_txt="#3f7f93", default="#8f949a", edge="#2b2f33")
-MOD6_SHORT = {"opt6.7b": "OPT\n6.7B", "gemma7b": "Gemma\n7B", "opt13b": "OPT\n13B"}
+MOD6_SHORT = {"opt1.3b": "OPT\n1.3B", "opt6.7b": "OPT\n6.7B", "gemma7b": "Gemma\n7B", "opt13b": "OPT\n13B"}
 RAW6 = "/data/yuxinr/cimloop/analysis_v4"                 # the confirmation units' candidate tables
+
+
+def _small6_from_record(unit, cid):
+    """A nine-cell-style summary straight from a v4 deployment record: the
+    deterministic quantities and the per-seed best-of-three runs (the
+    speed-up, eta and G against the best baseline), as the v7 exporters
+    compute them. None when the unit has not been run."""
+    from scripts import v7_common as V
+    from scripts import v6_common as C
+    try:
+        rec = C.find_record(unit, cid)
+    except (KeyError, FileNotFoundError):
+        return None, None
+    if rec.get("status") not in (None, "done", "ok") and "candidates" not in rec:
+        return None, None
+    Hf = lambda r: r["H_s"] + r["prop_s"]
+    lib, runs = rec["candidates"], rec["search"]["runs"]
+    Hd, Hb = Hf(lib["sequential"]), Hf(lib[rec["strongest"]])
+    R = rec["N_s"] + rec["F_s"]; Tb = R + Hb
+    best = {}
+    for n, r in runs.items():
+        if r["sa_seed"] not in best or r["T_s"] < runs[best[r["sa_seed"]]]["T_s"]:
+            best[r["sa_seed"]] = n
+    sd = [{"config_id": cid, "seed": s, "best_run": n, "H_full_s": Hf(runs[n]), "T_s": runs[n]["T_s"],
+           "comm_speedup_H_default_over_H": Hd / Hf(runs[n]), "eta_vs_best_baseline": 1 - Hf(runs[n]) / Hb,
+           "G_vs_best_baseline": 1 - runs[n]["T_s"] / Tb} for s, n in sorted(best.items())]
+    gx, gy = rec["grid"]
+    row = {"n_cim_dies": rec["n_dies"], "grid": f"{gx}x{gy}", "n_units": len(rec["attention"]["hubs"]),
+           "strongest_named_rule": rec["strongest_rule"], "best_baseline": rec["strongest"],
+           "search_representative": rec["search"]["headline"], "protocol_id": V.protocol_id(rec),
+           "H_default_s": Hd, "speedup_best": Hd / Hb}
+    return row, sd
 
 
 def _fig6_cells():
@@ -1450,11 +1657,36 @@ def _fig6_cells():
     best of three starts; median, quartiles), all as H_default / H; eta of
     the search against the best random (seed median) for the label."""
     cfg = [r for r in read_csv(os.path.join(V7, "ninecell_configurations.csv")) if r["panel"] in ("a", "b", "c")]
-    assert len(cfg) == 9
+    assert len(cfg) == 9                              # the nine cells; OPT-1.3B is appended below
     met = {}
     for r in read_csv(os.path.join(V7, "ninecell_metrics.csv")):
         met[(r["config_id"], r["quantity"], r["statistic"])] = float(r["value"])
     seeds = read_csv(os.path.join(V7, "ninecell_seed_statistics.csv"))
+    # OPT-1.3B, reference configuration (8 macros / die, central K = 1, prefill 512): the small-model batch, same protocol
+    sm_man = {r["config_id"]: r for r in read_csv(os.path.join(V7, "small_model_manifest.csv"))}
+    sm_seeds = read_csv(os.path.join(V7, "small_model_seed_statistics.csv"))
+    for fam, (unit, cid, source) in SMALL6.items():
+        if source == "manifest":                      # exported by the small-model batch
+            m = sm_man[cid]
+            assert m["protocol_id"] == cfg[0]["protocol_id"], (m["protocol_id"], cfg[0]["protocol_id"])
+            row = {"n_cim_dies": m["n_cim_dies"], "grid": m["grid"], "n_units": m["n_units"],
+                   "strongest_named_rule": m["strongest_named_rule"], "best_baseline": m["best_baseline"],
+                   "search_representative": m["search_representative"], "protocol_id": m["protocol_id"],
+                   "H_default_s": float(m["H_default_s"]), "speedup_best": float(m["comm_speedup_default_over_best"])}
+            sd = [r for r in sm_seeds if r["config_id"] == cid]
+        else:                                         # straight from the deployment record (the K = 4 head-group run)
+            row, sd = _small6_from_record(unit, cid)
+            if row is None:
+                continue
+            assert row["protocol_id"] == cfg[0]["protocol_id"], (row["protocol_id"], cfg[0]["protocol_id"])
+        cfg.append({"family": fam, "model": "opt1.3b", "config_id": cid, "record_unit": unit,
+                    **{k: row[k] for k in ("n_cim_dies", "grid", "n_units", "strongest_named_rule", "best_baseline",
+                                           "search_representative", "protocol_id")}})
+        met[(cid, "H_default_s", "deterministic")] = row["H_default_s"]
+        met[(cid, "comm_speedup_H_default_over_H_best_baseline", "deterministic")] = row["speedup_best"]
+        for q in ("comm_speedup_H_default_over_H", "eta_vs_best_baseline", "G_vs_best_baseline"):
+            met[(cid, q, "seed_median")] = float(np.median([float(r[q]) for r in sd]))
+        seeds += sd
     cells = []
     for c in cfg:
         cid = c["config_id"]
@@ -1488,27 +1720,30 @@ def _fig6_cells():
 
 def _fig6_panel(ax, cells, title, bottom, short=False, ylabel_ticks=True):
     """Per model: the best heuristic, the random pool median and the search
-    seed median as bars (thin dark edges, as in the card's example); a T
-    from the median up to the best result of the pool / of the seeds."""
-    x = np.arange(len(MOD6)); w = 0.26
-    ax.axhline(1.0, color=F6C["default"], lw=0.7, ls=(0, (3, 2)), zorder=2)
-    for j, (mod, _) in enumerate(MOD6):
+    seed median as bars; a T from the median up to the best result of the
+    pool / of the seeds. The models present in the family, in MOD6 order."""
+    mods = [(m, n) for m, n in MOD6 if any(c["model"] == m for c in cells)]
+    x = np.arange(len(mods)); w = 0.26
+    ax.axhline(1.0, color=F6C["default"], lw=0.7, ls=(0, (3, 2)), zorder=1.5)      # beneath the bars
+    for j, (mod, _) in enumerate(mods):
         c = next(c_ for c_ in cells if c_["model"] == mod)
-        ax.bar(x[j] - w, c["best_rule_speedup"], w, color=F6C["rule"], ec=F6C["edge"], lw=0.25, zorder=3)
-        ax.bar(x[j], c["random_median"], w, color=F6C["random"], ec=F6C["edge"], lw=0.25, zorder=3)
-        ax.bar(x[j] + w, c["search_median"], w, color=F6C["search"], ec=F6C["edge"], lw=0.25, zorder=3)
+        ax.bar(x[j] - w, c["best_rule_speedup"], w, color=F6C["rule"], ec=F6C["edge"], lw=0.25, zorder=2)   # below the spine
+        ax.bar(x[j], c["random_median"], w, color=F6C["random"], ec=F6C["edge"], lw=0.25, zorder=2)
+        ax.bar(x[j] + w, c["search_median"], w, color=F6C["search"], ec=F6C["edge"], lw=0.25, zorder=2)
         for xx, lo, hi in ((x[j], c["random_median"], c["random_best"]), (x[j] + w, c["search_median"], c["search_max"])):
-            ax.plot([xx, xx], [lo, hi], color=INK, lw=0.6, zorder=4)
-            ax.plot([xx - 0.3 * w, xx + 0.3 * w], [hi, hi], color=INK, lw=0.6, zorder=4)
-        ax.text(x[j] + w, c["search_max"] + 0.12, f"+{100 * c['eta_vs_random_median']:.1f}%", fontsize=FS3["tiny"],
+            if hi - lo > 0.03:                           # the T from just above the bar top to the best value
+                ax.plot([xx, xx], [lo + 0.02, hi], color=INK, lw=0.6, zorder=4)
+                ax.plot([xx - 0.3 * w, xx + 0.3 * w], [hi, hi], color=INK, lw=0.6, zorder=4)
+        v = 100 * c["eta_vs_random_median"]
+        ax.text(x[j] + w, c["search_max"] + 0.12, (f"+{v:.1f}%" if v >= 0.05 else f"{abs(v):.1f}%"), fontsize=FS3["tiny"],
                 color=F6C["search_txt"], ha="center", va="bottom", zorder=6)
     ax.set_xticks(x)
-    ax.set_xticklabels([(MOD6_SHORT[m] if short else n) for m, n in MOD6] if bottom else [], linespacing=1.0)
-    ax.set_xlim(-0.6, len(MOD6) - 0.4); ax.set_ylim(0, 7.6); ax.set_yticks([0, 2, 4, 6])
+    ax.set_xticklabels([(MOD6_SHORT[m] if short else n) for m, n in mods] if bottom else [], linespacing=1.0)
+    ax.set_xlim(-0.6, len(mods) - 0.4); ax.set_ylim(0, 7.15); ax.set_yticks([0, 2, 4, 6])
     ax.set_yticklabels(["0", "2×", "4×", "6×"] if ylabel_ticks else [])
     _title3(ax, title)
     _tidy(ax, grid="y")
-    ax.tick_params(axis="x", length=0 if not bottom else 2.0)
+    ax.tick_params(axis="x", length=0 if not bottom else 2.0, labelsize=FS3["tick"] - (0.8 if short else 0))
 
 
 def _fig6_legend(fig, W, x0):
@@ -1528,7 +1763,12 @@ def _fig6_meta(cells):
             "statistics": "Default and Best heuristic deterministic; bars = medians (500 random fills of the pool; "
                           "ten confirmation seeds, per seed the best of three starts); the T reaches the best of "
                           "the 500 / of the ten seeds; the label is the saving of the Isobar median over the random "
-                          "median (1 - median speed-up ratio)",
+                          "median (1 - median speed-up ratio); every cell normalised to its own default fill",
+            "baseline_per_panel": "the nine cells from the e9/e10 confirmation units; OPT-1.3B from the e11_small "
+                                  "(reference: 8 macros, central K = 1), e11_small_cap (capacity: 16 macros, K = 1) and "
+                                  "e11_small_head (distributed: 8 macros, K = 4 fixed-total head groups, on the 14x14 grid "
+                                  "since 168 dies + 4 unit nodes do not fit 13x13) confirmation units, prefill 512, the same "
+                                  "pool500_seeds5-14_objh_norm protocol; every cell normalised to its own default fill",
             "eta_vs_best_random_range_pct": [100 * min(c["eta_vs_best_random_median"] for c in cells),
                                              100 * max(c["eta_vs_best_random_median"] for c in cells)],
             "eta_vs_random_median_range_pct": [100 * min(c["eta_vs_random_median"] for c in cells),
@@ -1569,13 +1809,15 @@ def fig6_row():
     cells = _fig6_cells()
     W = 3.4
     Lm, Rm, G = 0.38, 0.04, 0.10
-    pw = (W - Lm - Rm - 2 * G) / 3
-    top, ph, bot = 0.17, 1.05, 0.44                          # bot holds the two-line x labels and the legend
+    n_cl = [sum(1 for c in cells if c["family"] == fam) for fam, _ in FAM6]      # clusters per panel (4, 3, 3)
+    pw = [(W - Lm - Rm - 2 * G) * n / sum(n_cl) for n in n_cl]
+    top, ph, bot = 0.17, 0.945, 0.38                         # bot holds the two-line x labels and the legend
     H = top + ph + bot
     fig = plt.figure(figsize=(W, H))
     short = ["(a) Reference", "(b) Capacity", "(c) Distributed"]
+    x0 = Lm
     for i, (fam, _) in enumerate(FAM6):
-        ax = fig.add_axes([(Lm + i * (pw + G)) / W, bot / H, pw / W, ph / H])
+        ax = fig.add_axes([x0 / W, bot / H, pw[i] / W, ph / H]); x0 += pw[i] + G
         _fig6_panel(ax, [c for c in cells if c["family"] == fam], short[i], bottom=True, short=True,
                     ylabel_ticks=(i == 0))
         if i == 0:
@@ -1597,12 +1839,14 @@ F7 = dict(nat="#4660ad", common="#a5c582", R="#aeb4ba", Rother="#dfe4e8", Hb="#a
 # the v2 Fig. 6 line / marker scale as printed (lw 1.4, circle 4.5, square 3.5, diamond 3.7 at 4.78 in -> x0.73)
 LW7 = 1.0
 FS7_NOTE = 4.8                                         # in-panel annotations of (c)
-MS7 = {"o": 3.3, "s": 2.6, "^": 3.3, "D": 2.7}
+MS7 = {"o": 3.3, "s": 2.6, "^": 3.3, "v": 3.3, "D": 2.7}
 EXPL = "exploration"                                  # one protocol for every point of the three panels
 
 
-MODEL7 = [("opt6.7b", "OPT-6.7B", "#f3de67", "o"), ("gemma7b", "Gemma-7B", "#68b4ce", "s"),
-          ("opt13b", "OPT-13B", "#4660ad", "^")]
+# light to dark with the model size (yellow, green, light blue, deep blue); drawn dark first so lighter lines lie on top
+MODEL7 = [("opt1.3b", "OPT-1.3B", "#f3de67", "v"), ("opt6.7b", "OPT-6.7B", "#80cdbb", "o"),
+          ("gemma7b", "Gemma-7B", "#68b4ce", "s"), ("opt13b", "OPT-13B", "#4660ad", "^")]
+MACROS7 = {m: [4, 8, 16, 32] for m in ("opt1.3b", "opt6.7b", "gemma7b", "opt13b")}
 
 
 def _fig7a(ax):
@@ -1610,7 +1854,7 @@ def _fig7a(ax):
     for the three models on their natural grids (solid), and Gemma on the
     common 36x36 grid (dashed) as the control; exploration protocol
     throughout, each point against its own best baseline."""
-    cap = [r for r in read_csv(os.path.join(V7, "offload_capacity.csv"))
+    cap = [r for r in read_csv(os.path.join(V7, "offload_capacity.csv")) + read_csv(os.path.join(V7, "offload_capacity_small.csv"))
            if r["protocol_group"] == EXPL and r["status"] == "done"]
     com = [r for r in read_csv(os.path.join(V7, "offload_capacity_common_grid.csv"))
            if r["model"] == "gemma7b" and r["protocol_group"] == EXPL and r["grid_kind"] == "common 36x36"]
@@ -1618,20 +1862,26 @@ def _fig7a(ax):
     xm = lambda rows: [np.log2(int(r["die_macros"])) for r in rows]
     ye = lambda rows: [100 * float(r["eta_comm"]) for r in rows]
     nat = {}
-    for mod, name, col, mk in MODEL7:
+    for z, (mod, name, col, mk) in enumerate(reversed(MODEL7)):
         rows = sorted((r for r in cap if r["model"] == mod), key=lambda r: int(r["die_macros"]))
-        assert [int(r["die_macros"]) for r in rows] == [4, 8, 16, 32], mod
+        assert [int(r["die_macros"]) for r in rows] == MACROS7[mod], mod
         nat[mod] = rows
-        ax.plot(xm(rows), ye(rows), color=col, lw=LW7, marker=mk, ms=MS7[mk], zorder=4, label=name)
-    ax.plot(xm(com), ye(com), color=F7["common"], lw=LW7, marker="D", ms=MS7["D"], zorder=5,
-            label="Gemma, 36×36 grid")
+        ax.plot(xm(rows), ye(rows), color=col, lw=LW7, marker=mk, ms=MS7[mk], zorder=4 + z, label=name,
+                clip_on=False)
+    ax.plot(xm(com), ye(com), color=F7["common"], lw=LW7, marker="D", ms=MS7["D"], zorder=9,
+            label="Gemma, 36×36")
     ax.set_xticks([2, 3, 4, 5]); ax.set_xticklabels(["4", "8", "16", "32"])
-    ax.set_xlim(1.6, 5.4); ax.set_ylim(8, 32); ax.set_yticks([10, 20, 30])
+    ax.set_xlim(1.6, 5.4); ax.set_ylim(0, 42); ax.set_yticks([0, 10, 20, 30])
     ax.set_xlabel("Macros per die", fontsize=FS3["axis"], labelpad=1.5)
     ax.set_ylabel("Comm. saving η (%)", fontsize=FS3["axis"], labelpad=2)
     _title3(ax, "(a) CIM capacity")
-    ax.legend(fontsize=FS3["tiny"], loc="lower center", frameon=False, handlelength=1.0, handletextpad=0.3,
-              labelspacing=0.2, borderaxespad=0.1, ncol=2, columnspacing=0.5)
+    hl, ll = ax.get_legend_handles_labels()            # two right-aligned rows: the three OPT models, then Gemma and its control
+    kw = dict(fontsize=3.6, frameon=False, handlelength=0.8, handletextpad=0.2, columnspacing=0.5, borderaxespad=0.0,
+              markerscale=0.85, borderpad=0.0)
+    r1 = ["OPT-1.3B", "OPT-6.7B", "OPT-13B"]; r2 = ["Gemma-7B", "Gemma, 36×36"]
+    leg1 = ax.legend([hl[ll.index(n)] for n in r1], r1, loc="upper right", bbox_to_anchor=(1.0, 0.99), ncol=3, **kw)
+    ax.add_artist(leg1)
+    ax.legend([hl[ll.index(n)] for n in r2], r2, loc="upper right", bbox_to_anchor=(1.0, 0.90), ncol=2, **kw)
     _tidy(ax)
     return nat, com
 
@@ -1655,9 +1905,9 @@ def _fig7b(ax):
         Rother = (float(r["R_digital_elementwise_s"]) + float(r["R_unit_compute_s"]) + float(r["R_unit_kv_s"])) * 1e3
         assert abs(Rcim + Rother - R) < 1e-6
         for dx, H, col in ((-(w + seam) / 2, Hb, F7["Hb"]), ((w + seam) / 2, Hs, F7["Hs"])):
-            ax.bar(x[j] + dx, Rcim, w, color=F7["R"], lw=0, zorder=3)
-            ax.bar(x[j] + dx, Rother, w, bottom=Rcim, color=F7["Rother"], lw=0, zorder=3)
-            ax.bar(x[j] + dx, H, w, bottom=R, color=col, lw=0, zorder=3)
+            ax.bar(x[j] + dx, Rcim, w, color=F7["R"], lw=0, zorder=2)        # below the spine (2.5)
+            ax.bar(x[j] + dx, Rother, w, bottom=Rcim, color=F7["Rother"], lw=0, zorder=2)
+            ax.bar(x[j] + dx, H, w, bottom=R, color=col, lw=0, zorder=2)
             ax.text(x[j] + dx, R + H + 40, f"{(R + H) / 1e3:.2f}", fontsize=FS3["tiny"], color="#555b61",
                     ha="center", va="bottom")
         out.append({"organisation": r["organisation"], "R_ms": R, "R_cim_ms": Rcim, "R_other_ms": Rother,
@@ -1771,13 +2021,14 @@ def _fig7d(ax, legend=True):
 
 
 def fig7():
-    SRC = ["analysis/v7/offload_capacity.csv", "analysis/v7/offload_capacity_common_grid.csv",
+    SRC = ["analysis/v7/offload_capacity.csv", "analysis/v7/offload_capacity_small.csv",
+           "analysis/v7/offload_capacity_common_grid.csv",
            "analysis/v7/resource_organization_comparison.csv", "analysis/v7/gemma_bandwidth_response.csv",
            "analysis/v7/gemma_bandwidth_response.json", "analysis/v7/workload_length_sweep.csv"]
     W = 3.4
     L1, R1 = 0.40, 1.60                               # (a) / (c)   both columns 1.20 in wide
     L2, R2 = 1.98, 3.18                               # (b) / (d)
-    top, h1, rgap, h2, bot = 0.17, 0.855, 0.46, 0.855, 0.30
+    top, h1, rgap, h2, bot = 0.17, 0.855, 0.40, 0.855, 0.30
     H = top + h1 + rgap + h2 + bot
     fig = plt.figure(figsize=(W, H))
     y1 = bot + h2 + rgap
@@ -1786,9 +2037,15 @@ def fig7():
     axc = fig.add_axes([L1 / W, bot / H, (R1 - L1) / W, h2 / H])
     axd = fig.add_axes([L2 / W, bot / H, (R2 - L2) / W, h2 / H])
     nat, com = _fig7a(axa); org = _fig7b(axb); bw = _fig7c(axc, legend=True); sweep = _fig7d(axd, legend=True)
-    meta = {"protocol_ab_d": "exploration (pool100_seeds0-4_objt_norm) for every point of (a), (b), (d)",
-            "panel_a": {"natural": {m: [{k: r[k] for k in ("config_id", "die_macros", "grid", "n_cim_dies", "n_flows_total",
-                                                             "n_handoffs_total", "eta_comm", "G", "r0", "H_search_s", "T_search_s")}
+    for ax in (axa, axb, axc, axd):                   # axis type as printed in the (wider) Fig. 6 row
+        ax.tick_params(axis="both", labelsize=4.8)
+        ax.xaxis.label.set_fontsize(4.8); ax.yaxis.label.set_fontsize(4.8)
+    meta = {"protocol_ab_d": "exploration (pool100_seeds0-4_objt_norm) for every point of (a), (b), (d); the OPT-1.3B "
+                             "points of (a) from the e11_small_expl / e11_small_cap_expl deployments under the same protocol "
+                             "at 4 / 8 / 16 / 32 macros (accounts measured in the container, no extrapolation)",
+            "panel_a": {"natural": {m: [{k: r.get(k, "") for k in ("config_id", "protocol_id", "die_macros", "grid", "n_cim_dies",
+                                                                     "n_flows_total", "n_handoffs_total", "eta_comm", "G", "r0",
+                                                                     "H_search_s", "T_search_s")}
                                         for r in rows] for m, rows in nat.items()},
                         "common_36x36": [{k: r[k] for k in ("config_id", "die_macros", "grid", "n_cim_dies", "eta_comm", "G")}
                                          for r in com]},
@@ -1825,7 +2082,7 @@ def fig5_stack():
            "analysis/v7/gemma_bandwidth_curve.csv", "analysis/v6/gemma_bandwidth_equivalence.csv",
            "analysis/v7/gemma_checks.json"]
     W = 3.4
-    L1, R1 = 0.82, 3.36                              # (a), (c)
+    L1, R1 = 0.62, 3.36                              # (a), (c)
     Lb, Rb = 0.66, 1.83                              # (b)   (b) and (d): equal width and height
     Ld, Rd = 2.19, 3.36                              # (d)
     top, ha, g1, hc, g2, hbd, bot = 0.26, 1.05, 0.46, 0.95, 0.46, 0.85, 0.30
@@ -1841,6 +2098,7 @@ def fig5_stack():
     rows_b, tot_b, tot_s = _fig5b(axb, note=5.2, pad_right=560, xmax=1700, label_drop=0.8, title="(c) By hand-off kind")
     eq = _fig5c(axd, title="(d) Bandwidth equivalent")
     d = _fig5d(axc, note=5.2, inset_note=4.4, title="(b) Latency and dynamic energy")
+    _fig5_xtype((axa, axb, axc, axd))
     eta = 1 - rep["H"] / base["H"]
     pa = read_csv(os.path.join(V7, "gemma_panel_a.csv"))
     prow = next(r for r in pa if r["role"].startswith("search representative"))
@@ -1868,7 +2126,7 @@ def fig5_stack():
               "(d) latency vs dynamic energy of all candidates")
 
 
-FIGS = {"fig3b": fig3b_alone, "fig1": fig1, "fig2": fig2, "fig2c": fig2b_gemma, "fig3": fig3, "fig4": fig4, "fig5": fig5, "fig5stack": fig5_stack, "fig6": fig6, "fig6row": fig6_row, "fig7": fig7}
+FIGS = {"fig3b": fig3b_alone, "fig1": fig1, "fig2": fig2, "fig2c": fig2b_gemma, "fig3": fig3, "fig4": fig4, "fig4alt": fig4_alt, "fig5": fig5, "fig5stack": fig5_stack, "fig6": fig6, "fig6row": fig6_row, "fig7": fig7}
 
 
 def main():
