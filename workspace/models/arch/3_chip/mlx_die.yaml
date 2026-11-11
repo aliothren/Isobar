@@ -1,0 +1,52 @@
+{{include_text('defines.yaml')}}
+
+# =============================================================================
+# MLX-style DIE: 8 macros + 8 MB on-chip SRAM.
+#   die
+#    +-- glb               : 8 MB shared on-chip SRAM (inputs/outputs)
+#    +-- macro_in_die (x8) : 8 macros per die
+#    |     +-- router      : inter-macro interconnect (distance acts here)
+#    +-- core_in_macro (x4): 4 cores per macro
+#         (a core's local 2M buffer + crossbars live in the tile file, mlx_core)
+#
+# Modeled on 3_chip/large_router_glb.yaml (verified). The package level
+# (256 dies) is intentionally NOT modeled yet.
+# =============================================================================
+architecture:
+  nodes:
+  - !Container # Die top-level
+    name: die
+    <<<: [*container_defaults]
+    attributes: {has_power_gating: True}
+
+  - !Component # 8 MB on-chip global buffer (inputs & outputs)
+    name: glb
+    <<<: [*component_defaults]
+    subclass: smartbuffer_sram
+    attributes:
+      width: 2048
+      depth: 1024 * 1024 * 8 * 8 // width # 8 MB
+    constraints:
+      dataspace: {keep_only: [Inputs, Outputs]}
+      temporal:
+        factors: !nomerge [Q=0, M=-1, C=-1, X=1]
+        no_iteration_over_dataspaces: !nomerge []
+        permutation: [N, M, C, Q, P]
+
+  - !Container # 8 macros per die
+    name: macro_in_die
+    <<<: [*container_defaults, *spatial_map_all_weights]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: 8}
+
+  - !Component # Inter-macro interconnect (the on-die NoC; distance acts here)
+    name: router
+    <<<: [*component_defaults, *keep_inputs, *keep_outputs, *no_temporal_reuse]
+    subclass: isaac_router_shared_by_four
+    attributes: {depth: INF, width: 128}
+
+  - !Container # 4 cores per macro
+    name: core_in_macro
+    <<<: [*container_defaults, *spatial_map_all_weights]
+    attributes: {has_power_gating: True}
+    spatial: {meshX: 4}

@@ -1,0 +1,171 @@
+--- traffic.hpp.orig
++++ traffic.hpp
+@@ -160,6 +160,21 @@
+   virtual int dest(int source);
+ };
+ 
++// Isobar patch (workspace/scripts/booksim_patches/): exact
++// per-pair BATCH traffic from a file of "<src> <dst> <count>" lines.
++// dest(src) serves the expanded destination list round-robin
++// (deterministic); count(src) is the per-source packet quota that
++// BatchTrafficManager picks up in place of the uniform batch_size.
++class FileTrafficPattern : public TrafficPattern {
++private:
++  vector<vector<int> > _dests;
++  vector<int> _next;
++public:
++  FileTrafficPattern(int nodes, string const & filename);
++  virtual int dest(int source);
++  int count(int source) const;
++};
++
+ class HotSpotTrafficPattern : public TrafficPattern {
+ private:
+   vector<int> _hotspots;
+--- traffic.cpp.orig
++++ traffic.cpp
+@@ -29,6 +29,7 @@
+ #include <sstream>
+ #include <ctime>
+ #include "random_utils.hpp"
++#include <fstream>
+ #include "traffic.hpp"
+ 
+ TrafficPattern::TrafficPattern(int nodes)
+@@ -173,6 +174,12 @@
+     } else if(pattern_name == "badperm_yarc") {
+       result = new BadPermYarcTrafficPattern(nodes, k, n, xr);
+     }
++  } else if(pattern_name == "file") {
++    if(params.empty()) {
++      cout << "Error: Missing parameter for file traffic pattern: filename" << endl;
++      exit(-1);
++    }
++    result = new FileTrafficPattern(nodes, params[0]);
+   } else if(pattern_name == "hotspot") {
+     if(params.empty()) {
+       params.push_back("-1");
+@@ -487,6 +494,42 @@
+   return RandomInt((_xr * _k) - 1) * (_xr * _k) + row;
+ }
+ 
++FileTrafficPattern::FileTrafficPattern(int nodes, string const & filename)
++  : TrafficPattern(nodes), _dests(nodes), _next(nodes, 0)
++{
++  ifstream f(filename.c_str());
++  if(!f) {
++    cout << "Error: cannot open traffic file " << filename << endl;
++    exit(-1);
++  }
++  int s, d, c;
++  while(f >> s >> d >> c) {
++    if(s < 0 || s >= nodes || d < 0 || d >= nodes || c < 0) {
++      cout << "Error: bad traffic file entry: " << s << " " << d << " " << c << endl;
++      exit(-1);
++    }
++    for(int i = 0; i < c; ++i) {
++      _dests[s].push_back(d);
++    }
++  }
++}
++
++int FileTrafficPattern::dest(int source)
++{
++  assert((source >= 0) && (source < _nodes));
++  if(_dests[source].empty()) {
++    return source;   // zero-quota source: never actually issued
++  }
++  int d = _dests[source][_next[source] % (int)_dests[source].size()];
++  _next[source]++;
++  return d;
++}
++
++int FileTrafficPattern::count(int source) const
++{
++  return (int)_dests[source].size();
++}
++
+ HotSpotTrafficPattern::HotSpotTrafficPattern(int nodes, vector<int> hotspots, 
+ 					     vector<int> rates)
+   : TrafficPattern(nodes), _hotspots(hotspots), _rates(rates), _max_val(-1)
+--- batchtrafficmanager.hpp.orig
++++ batchtrafficmanager.hpp
+@@ -40,6 +40,7 @@
+ 
+   int _max_outstanding;
+   int _batch_size;
++  vector<int> _batch_quota;   // Isobar patch: per-source quotas (file traffic)
+   int _batch_count;
+   int _last_id;
+   int _last_pid;
+--- batchtrafficmanager.cpp.orig
++++ batchtrafficmanager.cpp
+@@ -43,6 +43,18 @@
+   _max_outstanding = config.GetInt ("max_outstanding_requests");  
+ 
+   _batch_size = config.GetInt( "batch_size" );
++  // Isobar patch: a file-based traffic pattern supplies exact per-source
++  // quotas; every other pattern keeps the uniform batch_size.
++  _batch_quota.assign(_nodes, _batch_size);
++  {
++    FileTrafficPattern const * ftp =
++      dynamic_cast<FileTrafficPattern const *>(_traffic_pattern[0]);
++    if(ftp) {
++      for(int i = 0; i < _nodes; ++i) {
++        _batch_quota[i] = ftp->count(i);
++      }
++    }
++  }
+   _batch_count = config.GetInt( "batch_count" );
+ 
+   _batch_time = new Stats( this, "batch_time", 1.0, 1000 );
+@@ -80,7 +92,7 @@
+ 	result = -1;
+       }
+     } else {
+-      if((_packet_seq_no[source] < _batch_size) && 
++      if((_packet_seq_no[source] < _batch_quota[source]) && 
+ 	 ((_max_outstanding <= 0) || 
+ 	  (_requestsOutstanding[source] < _max_outstanding))) {
+ 	
+@@ -91,7 +103,7 @@
+       }
+     }
+   } else { //normal
+-    if((_packet_seq_no[source] < _batch_size) && 
++    if((_packet_seq_no[source] < _batch_quota[source]) && 
+        ((_max_outstanding <= 0) || 
+ 	(_requestsOutstanding[source] < _max_outstanding))) {
+       result = _GetNextPacketSize(cl);
+@@ -125,7 +137,7 @@
+       _Step();
+       batch_complete = true;
+       for(int i = 0; i < _nodes; ++i) {
+-	if(_packet_seq_no[i] < _batch_size) {
++	if(_packet_seq_no[i] < _batch_quota[i]) {
+ 	  batch_complete = false;
+ 	  break;
+ 	}
+--- networks/kncube.cpp.orig
++++ networks/kncube.cpp
+@@ -116,7 +116,9 @@
+       //
+ 
+       // torus channel is longer due to wrap around
+-      int latency = _mesh ? 1 : 2 ;
++      // Isobar patch: configurable mesh channel latency (wire cycles per
++      // hop); default 1 preserves stock behaviour. Torus keeps 2.
++      int latency = _mesh ? config.GetInt("mesh_channel_latency") : 2 ;
+ 
+       //get the input channel number
+       right_input = _LeftChannel( right_node, dim );
+--- booksim_config.cpp.orig
++++ booksim_config.cpp
+@@ -56,6 +56,7 @@
+ 
+   //simulator tries to correclty adjust latency for node/router placement 
+   _int_map["use_noc_latency"] = 1;
++  _int_map["mesh_channel_latency"] = 1; // Isobar patch: wire cycles per mesh hop
+ 
+ 
+   //used for noc latency calcualtion for network with concentration

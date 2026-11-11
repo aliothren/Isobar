@@ -1,0 +1,21 @@
+# Container with CiMLoop / Timeloop / Accelergy for the CiMLoop measurements
+# (per-operator accounts). The evaluation, search and exports also run on the
+# host with Python >= 3.10, numpy and pyyaml (docs/01_setup.md).
+#
+#   USER_UID=$(id -u) USER_GID=$(id -g) docker compose up -d   # add DOCKER_ARCH=arm64 on Apple silicon
+#   docker exec -it -u $(id -u):$(id -g) isobar bash
+#   cd /home/workspace
+#
+# Run docker exec with -u $(id -u):$(id -g) so that the files written in workspace/ belong to you.
+
+services:
+  isobar:
+    container_name: isobar
+    hostname: isobar
+    image: timeloopaccelergy/timeloop-accelergy-pytorch:latest-${DOCKER_ARCH:-amd64}
+    restart: unless-stopped
+    volumes:
+      - ./workspace:/home/workspace
+    environment:
+      - USER_UID=${USER_UID:-1000}
+      - USER_GID=${USER_GID:-1000}

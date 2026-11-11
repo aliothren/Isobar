@@ -1,0 +1,72 @@
+# Simba (NVIDIA's 36-chiplet MCM inference prototype) in the fabric schema, at
+# the operating point of its published experiments, not the chip's maximum:
+#   core 0.72 V, PE clock 1.03 GHz, GRS 11 Gb/s mode, X-Y routing,
+#   batch 1, weights preloaded, layer-sequential  [Shao et al., MICRO'19, 4.1]
+# Used by scripts/run_simba_reference.py (Fig. 3(a)); every value is taken
+# from the Simba papers (MICRO'19; Zimmer et al., JSSC'20) and none is fitted.
+#
+# Level mapping: chiplet -> "die"; PE -> "macro"; the Global PE is the
+# die-level hub. Simba's digital MACs are declared as an equivalent-throughput
+# device (device_class: digital_throughput): there is no CiMLoop macro behind
+# the leaf, and the macro-cycle check is a declared no-op.
+
+fabric:
+  name: simba-repro
+  schedule_slack: 1.0        # the busiest-wire bound itself: an optimistic lower
+                             # bound for Simba's hybrid wormhole / cut-through NoC
+  # One "cycle" = one PE clock at the experiment point: 1 / 1.03 GHz.
+  # input_slices_per_mvm = 1: the leaf's throughput is 1,024 MACs per chiplet
+  # per cycle (16 PEs x 8 vector MACs x 8-wide, 8-bit) => 2.11 TOPS per
+  # chiplet at 1.03 GHz [MICRO'19 Tab. 2, 3.1; JSSC'20 Tab. I].
+  device:
+    name: "Simba PE array (equivalent throughput, 16 nm digital)"
+    device_class: digital_throughput
+    cycle_seconds: 9.70873786407767e-10     # 1 / 1.03 GHz  [MICRO'19 4.1]
+    input_slices_per_mvm: 1
+    calibration: "MICRO'19 4.1 experiment operating point; Tab. 2 microarchitecture"
+  # partial sums are 24-bit on Simba's wires [MICRO'19 Tab. 2] = 3 activation words
+  psum_word_bytes: 3.0
+  levels:
+    - name: package
+      per_parent: 1
+
+    # chiplet <-> "die": 6x6 network-on-package mesh, one router per chiplet.
+    # Slot pitch: 47.5 mm package edge / 6 chiplet columns [MICRO'19 Tab. 2].
+    # Link = the package link in the experiments' GRS mode: 4 lanes x 11 Gb/s
+    # = 5.5 GB/s per direction (the 25 Gb/s maximum mode gives 12.5 GB/s).
+    # 20 ns per hop [Tab. 2]; energy 10 pJ per 8-bit word = the midpoint of the
+    # measured GRS band 0.82-1.75 pJ/bit [JSSC'20 V-B], as in the mlx fabrics
+    # (a 24-bit partial sum costs 3x through psum_word_bytes). Energy is not
+    # part of the seating comparison.
+    - name: die
+      slot_pitch_um: 7916.7
+      per_parent: 36
+      mesh: [6, 6]
+      link: {name: "die<->die", topology: mesh, params: {routing: xy, hub: center},
+             ns_per_hop: 20.0, pj_per_word: 10.0, reference_hops: 1.0,
+             bandwidth_gbps: 5.5,
+             # packet model: 17-flit packets = 1 header + 16 x 64-bit payload
+             # flits -> 128 B payload, 17/16 wire overhead [JSSC'20 II-C, III-D]
+             packet_payload_bytes: 128, packet_wire_overhead: 1.0625,
+             calibration: "MICRO'19 4.1 (11 Gb/s mode) + Tab. 2 (20 ns/hop); JSSC'20 V-B (pJ/bit)"}
+
+    # PE <-> "macro": 16 PEs on the chiplet's 4x5 NoC mesh; the four spare
+    # slots are the Global PE's 3 router stops and the RISC-V controller
+    # [MICRO'19 Tab. 2; JSSC'20 II-C: 20 NoC destinations]. The hub sits at
+    # the mesh centre. Link = the NoC: 70 Gb/s per link at 0.72 V = 8.75 GB/s
+    # [JSSC'20 II-C], 10 ns per hop [Tab. 2]. pj_per_word 0.0: the NoC link
+    # energy is not published and not charged.
+    # Slot pitch: chiplet 2.4 mm / 4 PE columns = 600 um [Tab. 2].
+    - name: macro
+      slot_pitch_um: 600.0
+      per_parent: 16
+      mesh: [4, 5]
+      link: {name: "glb<->macro", topology: mesh, params: {routing: xy, hub: center},
+             ns_per_hop: 10.0, pj_per_word: 0.0, reference_hops: 1.0,
+             bandwidth_gbps: 8.75,
+             packet_payload_bytes: 128, packet_wire_overhead: 1.0625,
+             calibration: "JSSC'20 II-C (70 Gb/s @ 0.72 V); MICRO'19 Tab. 2 (10 ns/hop)"}
+
+  # no CiMLoop architecture is bound to this preset: the leaf is the
+  # closed-form equivalent-throughput device above
+  cimloop: {}

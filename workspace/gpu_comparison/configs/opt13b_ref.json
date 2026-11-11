@@ -1,0 +1,29 @@
+{
+ "id": "opt13b_ref",
+ "group": "opt13b_a100",
+ "model": "opt13b",
+ "record_experiment": "reference",
+ "config_id": "opt13b_prefill512_colrow_sq_mesh_xy_k2_b0.4_offcenterK1",
+ "bw_gbps": 0.4,
+ "die_macros": 8,
+ "unit_overrides": {},
+ "rope": false,
+ "learned_positions": true,
+ "lengths": [
+  [
+   64,
+   1
+  ]
+ ],
+ "output_tokens": 1024,
+ "note": "8 macros per die: 2200 CIM dies on a 47x47 mesh, central digital unit, mesh 0.4 GB/s",
+ "precision": "CIM: 8-bit weights and activations, 2-byte partial sums, 16-bit digital intermediates; K/V cache 2 bytes per element (as the GPU baselines' 16-bit cache)",
+ "fixed_mapping": "the representative search layout of the record (prefill, 512 tokens), used for every forward of the request",
+ "lm_head_padding_correction": true,
+ "kv_bytes_per_element": 2,
+ "sources": {
+  "cim_device": "NeuRRAM-class RRAM macro (Wan et al., Nature 2022), CiMLoop calibration; 10.14 us per input row",
+  "digital_unit": "central digital unit: 2 TMAC/s, 1 pJ per MAC-equivalent operation, K/V memory 2 GB at 25.6 GB/s (LPDDR4, two 32-bit channels), 12.5 GB/s hub interface (one Simba GRS transceiver), 8 MB working buffer",
+  "mesh": "0.4 GB/s per direction per link (HERMES-class analog-chip link rate, 3.2 Gbit/s), die ports at kappa = 2"
+ }
+}

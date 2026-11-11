@@ -1,0 +1,46 @@
+--- networks/cmesh.cpp.orig
++++ networks/cmesh.cpp
+@@ -237,8 +237,8 @@
+       _chan[px_out]->SetLatency( px_latency );
+       _chan_cred[px_out]->SetLatency( px_latency );
+     } else {
+-      _chan[px_out]->SetLatency( 1 );
+-      _chan_cred[px_out]->SetLatency( 1 );
++      _chan[px_out]->SetLatency( config.GetInt("mesh_channel_latency") );   // Isobar patch
++      _chan_cred[px_out]->SetLatency( config.GetInt("mesh_channel_latency") );
+     }
+     _routers[node]->AddOutputChannel( _chan[px_out], _chan_cred[px_out] );
+     _routers[node]->AddInputChannel( _chan[px_in], _chan_cred[px_in] );
+@@ -253,8 +253,8 @@
+       _chan[nx_out]->SetLatency( nx_latency );
+       _chan_cred[nx_out]->SetLatency( nx_latency );
+     } else {
+-      _chan[nx_out]->SetLatency( 1 );
+-      _chan_cred[nx_out]->SetLatency( 1 );
++      _chan[nx_out]->SetLatency( config.GetInt("mesh_channel_latency") );   // Isobar patch
++      _chan_cred[nx_out]->SetLatency( config.GetInt("mesh_channel_latency") );
+     }
+     _routers[node]->AddOutputChannel( _chan[nx_out], _chan_cred[nx_out] );
+     _routers[node]->AddInputChannel( _chan[nx_in], _chan_cred[nx_in] );
+@@ -269,8 +269,8 @@
+       _chan[py_out]->SetLatency( py_latency );
+       _chan_cred[py_out]->SetLatency( py_latency );
+     } else {
+-      _chan[py_out]->SetLatency( 1 );
+-      _chan_cred[py_out]->SetLatency( 1 );
++      _chan[py_out]->SetLatency( config.GetInt("mesh_channel_latency") );   // Isobar patch
++      _chan_cred[py_out]->SetLatency( config.GetInt("mesh_channel_latency") );
+     }
+     _routers[node]->AddOutputChannel( _chan[py_out], _chan_cred[py_out] );
+     _routers[node]->AddInputChannel( _chan[py_in], _chan_cred[py_in] );
+@@ -285,8 +285,8 @@
+       _chan[ny_out]->SetLatency( ny_latency );
+       _chan_cred[ny_out]->SetLatency( ny_latency );
+     } else {
+-      _chan[ny_out]->SetLatency( 1 );
+-      _chan_cred[ny_out]->SetLatency( 1 );
++      _chan[ny_out]->SetLatency( config.GetInt("mesh_channel_latency") );   // Isobar patch
++      _chan_cred[ny_out]->SetLatency( config.GetInt("mesh_channel_latency") );
+     }
+     _routers[node]->AddOutputChannel( _chan[ny_out], _chan_cred[ny_out] );
+     _routers[node]->AddInputChannel( _chan[ny_in], _chan_cred[ny_in] );    

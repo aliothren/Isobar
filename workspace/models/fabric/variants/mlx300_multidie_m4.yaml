@@ -1,0 +1,114 @@
+# CAPACITY VARIANT: 4 macros per die (0.5 x the base die's
+# 8), macro mesh [2, 2]; everything else as in mlx300_multidie.yaml. The die's
+# weight capacity scales with the macro count (4 x 32 crossbars x 256 x 256 cells).
+# The multi-die fabric: MLX300-class analog CIM dies (NeuRRAM-class RRAM
+# macros) on a package mesh. The per-operator accounts are measured on this
+# die (select it with CIMSIM_FABRIC=models/fabric/mlx300_multidie.yaml);
+# models/fabric/variants/ holds the same die with 4, 16 and 32 macros, and
+# mlx300_multidie576.yaml is the package the deployments start from.
+#
+# The physical fabric is the single source of truth for level counts, grid
+# geometry and per-level link parameters. The CiMLoop arch YAMLs stay the
+# source of the logical hierarchy (storage levels, spatial fanouts);
+# scripts/fabric.py cross-checks the two and raises on a mismatch.
+#
+# Conventions:
+#   levels        top -> bottom. `per_parent` = instances of this level inside
+#                 one parent; `mesh` = the [X, Y] grid they occupy in the
+#                 parent (slots >= per_parent; spare slots stay empty).
+#   link          the network connecting this level's instances to their
+#                 parent's hub (`macro.link` is the die NoC, `die.link` the
+#                 die-to-die network). `cimloop_component` marks a link whose
+#                 energy is a calibrated CiMLoop component (re-priced by
+#                 distance); `pj_per_word: 0.0` marks a level that is not
+#                 charged.
+#   calibration   where the value comes from.
+#   bandwidth_gbps / bandwidth_words_per_cycle (link)  the link rate used by
+#                 the contention model, in GB/s (converted at the device cycle
+#                 at load) or in words per cycle, not both; null = no limit.
+#   hub_bandwidth_words_per_cycle (level)  storage bandwidth passed to
+#                 Timeloop (the die's global buffer); null = no limit.
+
+fabric:
+  name: mlx300-multidie-m4
+  # schedule_slack: the busiest-wire occupancy the model reports is the least
+  # time any schedule can spend on that wire for the given routing (exact for
+  # private links and a shared bus, optimistic for a routed grid). A schedule
+  # that cannot reach the bound is expressed as a factor >= 1 multiplying every
+  # occupancy; 1.0 = the bound.
+  schedule_slack: 1.0
+  # device: the analog device the die is built from -- the cycle per input bit
+  # slice and the slices per MVM row, so t_MVM = cycle x slices. Every latency
+  # and every GB/s <-> words/cycle conversion reads this; the CiMLoop macro's
+  # GLOBAL_CYCLE_SECONDS is checked against it on every run (Fabric.verify_cycle).
+  device:
+    name: "wan_nature_2022 (NeuRRAM class, 130 nm RRAM)"
+    cycle_seconds: 1.4485714285714284e-06   # = 10.14 us per MVM row / 7 slices
+    input_slices_per_mvm: 7                  # signed 8-bit inputs, encoded
+    calibration: "CiMLoop calibration of the macro (Wan et al., Nature 2022)"
+  levels:
+  # slot_pitch_um: centre-to-centre distance between adjacent slots of the
+  # level's grid, in micrometres (example values: crossbar 100 um base x each
+  # level's mesh X-extent; the die value is a package-level spacing example).
+    - name: package
+      per_parent: 1
+
+    - name: die
+      slot_pitch_um: 25000.0
+      per_parent: 144        # die slots for the per-operator runs; a CiMLoop run models one die,
+                            # the package dimension is added by the package model
+      mesh: [12, 12]
+      # die-to-die links, routed like the on-die NoC one level up.
+      # pj_per_word = 10.0: the midpoint of the measured band of Simba's
+      # package GRS links (0.82-1.75 pJ/bit = 6.6-14 pJ per 8-bit word;
+      # Zimmer et al., JSSC 2020). reference_hops: the traversals the flat
+      # CiMLoop charge already covers -- the package model bills only the
+      # surplus beyond it (a single die or adjacent dies add zero).
+      link: {name: "die<->die", topology: mesh, params: {routing: xy, hub: center},
+             ns_per_hop: 20.0, pj_per_word: 10.0, reference_hops: 1.0,
+             calibration: "GRS package link energy band (Zimmer et al., JSSC 2020), midpoint"}
+
+    - name: macro
+      slot_pitch_um: 800.0
+      per_parent: 4
+      mesh: [2, 2]          # 2x2 fills the 4 macro slots exactly
+      link: {name: "glb<->macro", topology: star, params: {}, cimloop_component: router,
+             reference_hops: 1.0, ns_per_hop: 5.0, calibration: "CiMLoop router component (calibrated macro)"}
+
+    - name: core
+      slot_pitch_um: 400.0
+      per_parent: 4
+      mesh: [2, 2]
+      link: {name: "macro<->core", topology: star, params: {}, ns_per_hop: 2.0, pj_per_word: 0.0,
+             calibration: "not charged"}
+
+    - name: crossbar
+      slot_pitch_um: 100.0
+      per_parent: 8
+      mesh: [4, 2]          # fills exactly
+      link: {name: "core<->crossbar", topology: star, params: {}, ns_per_hop: 1.0, pj_per_word: 0.0,
+             calibration: "not charged"}
+
+  # ---- the digital vector unit: element-wise operators (norms, activations,
+  # residual adds) next to the arrays. Generic example configuration: lanes x
+  # clock sized to the die's array output rate (~22.6 G results/s -> 64 lanes
+  # at 1 GHz keep pace with a 3-op softmax); per-op energies from the Horowitz
+  # ISSCC 2014 table at 16 bit. Replace with a real chip's values; every field
+  # is optional.
+  digital:
+    lanes: 64
+    clock_hz: 1.0e9
+    pj_add: 0.05
+    pj_mul: 0.6
+    pj_lut: 1.0
+    intermediate_bits: 16
+    calibration: "generic example values (Horowitz ISSCC 2014; sized to the array output rate)"
+  # off-chip port bandwidth (GB/s, or words/cycle at the device cycle) used
+  # only to time the model's embedding read; unset = priced, not timed.
+  # offchip_bandwidth_gbps: 11.3
+  # the CiMLoop configuration this fabric must stay consistent with
+  cimloop:
+    system: ws_chip2chip_link
+    chip: mlx_die
+    tile: mlx_core
+    macro: wan_nature_2022

@@ -1,0 +1,16 @@
+# outputs of the pipeline
+workspace/results/
+workspace/outputs/
+# BookSim 2 source and build (fetched and patched locally, see workspace/tools/README.md)
+workspace/tools/booksim2/
+# Python / editor / local environment
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+.cache/
+.vscode/
+.env
+.DS_Store
+*.swp
