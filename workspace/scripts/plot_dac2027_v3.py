@@ -887,6 +887,7 @@ def fig3():
     for ax_ in (axa, axb, axm, axr, axd):              # axis type at the Fig. 6 / 7 size (measured below for the y titles)
         ax_.tick_params(axis="both", labelsize=4.8)
         ax_.xaxis.label.set_fontsize(4.8); ax_.yaxis.label.set_fontsize(4.8)
+        ax_.title.set_fontsize(FS3["title"])
     # y titles of each column on one vertical line, just left of the column's widest tick labels
     # (align_ylabels needs a gridspec; these are plain axes): measured, then placed
     from matplotlib.transforms import blended_transform_factory as _bt
@@ -939,7 +940,7 @@ SCEN4 = [("offload6x6", "1-layer prefill", F4["pre"]), ("offload_decode6x6", "1-
 OBJ4 = [("booksim", "BookSim best", "#4660ad"), ("A_full", "Isobar", "#68b4ce"), ("word_hops", "Word-hops", "#a5c582"),
         ("max_hops", "Max-hops", "#f3de67")]
 ROLE4 = {"qkv_proj": "Q", "attention": "A", "out_proj": "O", "ffn1": "1", "ffn2": "2"}
-FS4_TITLE = FS3["title"]
+FS4_TITLE = 5.3                                    # the 2.7 in figure prints larger than the 3.4 in ones
 
 
 def _fig4a_maps():

@@ -24,6 +24,12 @@ git checkout bdac598da25aa5987217cf72921d7238b03827e8
 make            # builds the C++ NeuroSim
 ```
 
+## BookSim 2 (packet-level reference for the validation)
+
+- **Used by**: `workspace/scripts/v3_discrim.py` through `workspace/scripts/booksim_bridge.py` (Figs. 3(b) and 4).
+- **Location**: `workspace/tools/booksim2/` (not committed), built from https://github.com/booksim/booksim2 (master), with the patches in `workspace/scripts/booksim_patches/` applied before building (`patch -p0` in `src/`).
+- **Build**: `make` in `src/` (g++, flex, bison); `workspace/tools/booksim2/BUILD_NOTES.md` records the build used here.
+
 ## Upstream CiMLoop
 
 This repo is forked/derived from MIT-EMZE CiMLoop. Upstream is kept as the

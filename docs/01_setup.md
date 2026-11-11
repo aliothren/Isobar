@@ -1,96 +1,35 @@
 # 01 Setup
 
-## What you need
+## Container (CiMLoop measurements)
 
-- Docker with Compose. The image is the public CiMLoop image
-  `timeloopaccelergy/timeloop-accelergy-pytorch`, pulled on first start.
-- The repository checked out on the host. The `workspace/` folder is
-  mounted into the container at `/home/workspace`.
-- Nothing else. The simulator's own code is pure Python on top of the
-  image's Timeloop, Accelergy and Python packages. BookSim (page 08) is
-  built once from source inside the container and is optional.
-
-## Start the container
-
-From the repository root on the host:
+The CiMLoop stages (per-operator accounts, the intra-die instance, the LM head) run in the public CiMLoop image `timeloopaccelergy/timeloop-accelergy-pytorch`. From the repository root:
 
 ```bash
 DOCKER_ARCH=amd64 USER_UID=$(id -u) USER_GID=$(id -g) docker compose up -d
-```
-
-Use `DOCKER_ARCH=arm64` on Apple silicon. The service is called `tutorial`
-in `docker-compose.yaml`, so the container is `cimloop-tutorial-1` when the
-Compose project is named after the folder `cimloop`. Check with
-`docker ps`. Port 8888 is exposed for the Jupyter server the image starts;
-nothing in this guide needs it.
-
-Open a shell in the container:
-
-```bash
-docker exec -it cimloop-tutorial-1 bash
+docker exec -it -u $(id -u):$(id -g) cimloop-tutorial-1 bash
 cd /home/workspace
 ```
 
-All later pages assume this shell and this directory.
+`docker-compose.yaml` mounts `workspace/` at `/home/workspace`. It also mounts `/data/yuxinr/cimloop` at the same path, because `workspace/analysis/v4` and `workspace/outputs` are symbolic links into `/data`, so the links resolve inside the container. Mapper outputs and the large records are written to the local disk `/data`, not the network home directory. Run as your own user (`-u`) so the files stay yours. Clear `__pycache__` inside the container before running a script edited on the host.
 
-## Confirm the installation
+## Host (everything else)
 
-```bash
-python3 tests/run_tests.py
-```
-
-Expected: a `PASS` line per test and the summary
-`443 passed, 0 failed, 0 expected-fail (known gaps), 0 XPASS, 0 skipped`
-(the count is that of the frozen tree; the suite grows with the code).
-The fast suite takes one to three minutes depending on the host's load.
-Add `--slow` to also run one real mapper job and the BookSim identity
-gates; that takes minutes and needs the BookSim binary for the last group
-(the gate tests are skipped, not failed, when the binary is absent).
-
-If the summary reports failures on a fresh checkout, the working tree and
-the frozen artifacts in `analysis/` are out of step. Do not proceed on
-that tree; see page 10.
-
-## Two rules that save an afternoon
-
-**Ownership.** Files the container writes belong to root on the host, so
-the host editor cannot save over them. Inside the container run
+Evaluation, search, the deployment experiments, the exports, the figures and the GPU comparison are pure Python with numpy, pyyaml and matplotlib. They run on the host as well:
 
 ```bash
-chown -R $(id -u):$(id -g) /home/workspace/analysis
+/home/yuxinr/miniforge3/envs/far/bin/python scripts/v7_fig5_fig6_results.py      # from workspace/
 ```
 
-(or the folder in question) before editing on the host. The compose file
-passes your user and group ids in for this purpose.
+On a host without `pytimeloop`, `scripts/__init__.py` leaves `scripts.utils` unset, so the evaluation modules import normally.
 
-**Stale bytecode.** Python keeps compiled files in `__pycache__`. When a
-script is edited on the host and the cached file is newer by the
-container's clock, the old code runs. Before running an edited script:
+## BookSim 2
+
+The validation libraries need the BookSim 2 binary at `workspace/tools/booksim2/src/booksim`. The source is not committed. Fetch it, apply `scripts/booksim_patches/0001-file-traffic-batch.patch` and `0002-cmesh-channel-latency.patch`, and build it as described in [`workspace/tools/README.md`](../workspace/tools/README.md).
+
+## Tests
 
 ```bash
-find /home/workspace/scripts -name __pycache__ -exec rm -rf {} +
+python3 tests/run_tests.py          # container, from /home/workspace
 ```
 
-## Layout inside the container
-
-| path | content |
-|---|---|
-| `/home/workspace/scripts/` | the platform modules and every experiment script |
-| `/home/workspace/models/fabric/` | the fabric files, page 03 |
-| `/home/workspace/analysis/` | results, records, figures; also the place to put your own scratch scripts (ignored by git) |
-| `/home/workspace/tests/` | the guardrail suite |
-| `/home/workspace/tools/booksim2/` | BookSim, if built |
-| `/home/workspace/outputs/` | Timeloop mapper output directories |
-
-## Running a snippet
-
-The pages that follow give short Python snippets. Save one as, for
-example, `analysis/my_probe.py` and run `python3 analysis/my_probe.py`.
-Every snippet starts with
-
-```python
-import sys
-sys.path.insert(0, "/home/workspace")
-```
-
-so that `from scripts import ...` resolves.
+The suite covers the platform modules (fabric, interconnect, traffic, evaluator, search) and the reference numbers of the 2.7B-class instance.

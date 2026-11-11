@@ -1,92 +1,47 @@
-# scripts: the platform and the analyses
+# scripts: the framework and the analyses
 
-All scripts run inside the container from `/home/workspace`
-(`python3 scripts/<name>.py`). Each writes its outputs under `analysis/`
-with the same base name and prints where. The docstring at the top of each
-file states what it does and, for an experiment, the pre-registration it
-follows.
-
-## The command line
-
-`cimsim_cli.py` is the user entry: `baseline`, `evaluate`, `search`,
-`phase` and `booksim` subcommands on any fabric file and any per-operator
-account, wrapping the modules below without adding a model. The user
-guide at the repository root (`docs/`) documents it page by page.
+The scripts run from `workspace/`, as `python3 scripts/<name>.py`. The CiMLoop measurements run in the container; everything else runs on the host or in the container. The docstring at the top of each file states what it computes, its inputs and outputs, and how to run it. [`../../docs/02_final_pipeline.md`](../../docs/02_final_pipeline.md) gives the commands that produced the paper.
 
 ## The platform
 
 | module | role |
 |---|---|
-| `fabric.py` | the physical fabric: the schema and loader for `models/fabric/*.yaml`, the single source of truth for levels, grids, links and ports |
-| `placement.py` | the placement object: who occupies which slot at every level, serializable, verified |
-| `interconnect.py` | the interconnect schemes (star, mesh, torus, ring, tree, bus, switch, concentrated and express meshes): how data physically travels and which links it loads |
-| `traffic.py` | the communication structure derived from the mapping: multicast, reduction and hand-off flows |
-| `llm_workload.py` | the GPT-style workload generator, the block chain of operators, and the attention write-cost overlay |
-| `anchors.py` | the registry of published bandwidths, device row times and chip reference points, with sources and statuses |
-| `crossbar_stats.py`, `crossbar_comm.py`, `crossbar_value.py`, `crossbar_value_real.py`, `value_stats.py` | crossbar-level statistics, per-pair communication and value-dependent energy |
-| `mlx_system.py`, `placement_aware.py`, `op_breakdown.py` | the system model, the placement-aware cost overlay and the per-operator ledger |
-| `figstyle.py`, `make_figures.py` | figure rules and the driver that regenerates the standing figures |
+| `fabric.py` | the physical fabric: schema and loader of `models/fabric/*.yaml` (levels, grids, links, ports, device, digital units) |
+| `placement.py`, `interconnect.py` | slot tables; the interconnect schemes (star, mesh, torus, ring, tree, bus, concentrated and express meshes) with their routes and loaded resources |
+| `mlx_system.py`, `llm_workload.py` | the CiMLoop die configuration and the runner of one operator; transformer operators, legal tilings, die chains, the attention write cost |
+| `traffic.py`, `crossbar_stats.py`, `crossbar_comm.py`, `crossbar_value.py`, `value_stats.py`, `placement_aware.py` | the communication structure derived from the mapping, on-die flows and link occupancy, value-dependent energy |
+| `offload.py` | the digital attention units: positions, count, layer or head grouping, per-unit or divided resources, attention and K/V cost per layer |
+| `anchors.py` | the registry of published hardware reference points (phase-diagram projections, Simba) |
+| `v4_models.py` | the model registry (OPT-1.3B / 6.7B / 13B, Gemma-7B, Qwen2.5-1.5B, the 2.7B-class reference) |
 
-## The search
+## Evaluation and search
 
 | module | role |
 |---|---|
-| `search_space.py` | the deployment (partition, die placement), its legality and serialization |
-| `search_eval.py` | the evaluator: full and incremental scoring with the hand-off term over links and ports |
-| `search_dp.py` | the exact interval dynamic program over block cuts and group sizes |
-| `search_sa.py` | the annealer: move families, schedule, multistart |
-| `search_baselines.py` | the seven named placement rules and the random fills |
-| `search_withindie.py` | the intra-die instance: exhaustive macro assignment and its annealer |
-| `search_linkage.py` | the DP plus SA linkage on the whole-model payload |
-| `search_ordering.py`, `search_referee.py`, `search_s6.py` | the referee experiment: five objectives searched from the same starts and judged under the true cost |
+| `search_space.py` | the mapping (layer groups, die seats, macro assignment), its legality and serialisation |
+| `search_eval.py` | the package evaluator: hand-off flows, routing, resource loads over links, die ports and unit interfaces, latency and energy |
+| `v3_sweep.py` | the account-priced workload and the evaluation of one configuration: baseline pool, annealer runs, metrics, envelope, cost grid |
+| `cimsim_cli.py` | the incremental objective (`Objective`, re-scoring only the touched hand-offs) and the command-line entry |
+| `search_sa.py`, `search_dp.py`, `search_baselines.py`, `search_withindie.py` | annealing over die seats; the interval DP over layer groups; the default fill and the prescribed rules; exhaustive intra-die search |
 
-## The frozen results
+## The final pipeline
 
-| script | output |
+| stage | scripts |
 |---|---|
-| `kappa_geometry_sweep.py` | the search in six cells (two geometries, three port ratios); the runs behind the main configuration |
-| `main_config_export.py` | the main-configuration table and the ledger of every published percentage |
-| `rerun_seating_seeds.py` | the search's budget curves per start family and seed (`SEAT_KAPPA=2`) |
-| `mechanism_table.py` | per-boundary resource loads, hotspots and the ranking's mechanism |
-| `energy_export.py` | dynamic energy of the frozen layouts by term |
-| `objective_ablation.py` | the same-budget objective ablation |
-| `bw_slice_k2.py` | the frozen pair re-scored across bandwidth; the identity G = eta r |
-| `intra_die_integration.py`, `intra_die_correspondence.py` | the intra-die layer objective and its identity with the phase-diagram panel |
-| `pipe_caliber_search.py` | the pipeline caliber as an objective (project record) |
-| `timing_probe.py` | evaluator and search timings |
+| CiMLoop measurements | `run_2p7b_block.py`, `v4_measure_accounts.py`, `v4_model_end.py`, `analyze_contention_system.py`, `extract_opt2p7b_hists.py`, `v4_fabric_variants.py` |
+| reference instances and validation | `analyze_soft_lever.py`, `search_withindie.py`, `simba_targets.py` (+ `simba_workload.py`), `v3_discrim.py` (+ `booksim_bridge.py`, `booksim_patches/`) |
+| deployment experiments | `v4_deploy.py` (units `e9_*`, `e10_*`, `e11_*`), `v6_timing.py`, `v7_search_trajectory.py` |
+| exports | `v6_gemma_pair.py`, `v7_fig1_phase.py`, `v7_fig2_pipeline.py`, `v7_fig3_fig4_validation.py`, `v7_fig5_fig6_results.py`, `v7_small_models.py`, `v7_small_capacity_points.py`, `v7_fig7_mechanisms.py`, `v7_fig7_bandwidth_response.py`, `v7_qkv_common.py`, `v7_table1_setup.py` (helpers `v6_common.py`, `v7_common.py`, `v7_stage_worker.py`) |
+| figures | `plot_dac2027_v3.py --run-id 20261019_v3` |
 
-## The phase diagram and its inputs
+## Earlier stages
 
-| script | output |
-|---|---|
-| `fig_phase_isobar.py`, `fig_phase_isobar_print.py` | the phase diagram at the main configuration (`ISOBAR_KAPPA=2`), large and print versions, PNG and PDF |
-| `sweep_axes.py`, `analyze_phase_diagram.py`, `certified_regions.py` | the per-axis bandwidth sweeps, the device plane and the region classification behind it |
-| `run_scaling_probes.py`, `analyze_scaling_law.py` | the mapper-measured width law and its flip |
-| `analyze_anchored_sweep.py`, `analyze_soft_lever.py` | readouts at the published anchors |
+The remaining scripts belong to earlier stages of the work. They include:
 
-## External references
+- the single-model main configuration: `kappa_geometry_sweep.py`, `main_config_export.py`, `mechanism_table.py`, `energy_export.py`, `objective_ablation.py`, `bw_slice_k2.py`;
+- the earlier phase-diagram and probe scripts (`fig_phase_isobar*.py`, `sweep_axes.py`, `analyze_*.py`);
+- the earlier BookSim ranking checks (`b*_*.py`);
+- the earlier figure generators (`plot_dac2027_v1.py`, `plot_dac2027_v2.py`, `make_figures.py`);
+- the stage experiments named in `analysis/FIXLIST.en.md`.
 
-| script | output |
-|---|---|
-| `simba_workload.py`, `simba_targets.py`, `analyze_simba_validation.py`, `fig_simba_validation_color.py` | the Simba silicon reproduction and its figure |
-| `booksim_bridge.py`, `analyze_booksim_slack.py` | the BookSim bridge with its conversion table and identity gates |
-| `b7_handoff_probe.py`, `b7_s6_rerank.py`, `b3_shrunk_rerank.py`, `b_fanout_24x24_rerank.py`, `b_fanout_search.py`, `b_shrunk_fanout_rerank.py`, `b3_booksim_cost_probe.py` | the ranking checks of the hand-off term against the packet simulator |
-| `b5_joint_exact.py` | the two-stage solve against a certified joint optimum |
-
-## Paper figures
-
-`plot_dac2027_v2.py` (current) and `plot_dac2027_v1.py` write complete
-figure sets into `analysis/figures_dac2027/<run-id>/`; `fig_mechanism_ablation.py`,
-`fig_condition_axes.py`, `fig_weave_inversion.py`, `ladder_v0.py` and
-`check_c_crosstraffic.py` draw the standing exhibit figures.
-
-## Earlier analyses
-
-The `analyze_*.py` scripts not listed above (contention, offload, K/V
-write, sequence scaling, scale tiers, weaves, routing parameters, static
-energy, lower-link prices, robustness) are the studies that built and
-validated the platform level by level; their results are in
-`analysis/SUMMARY.en.md` and their standing figures in `analysis/`. The
-`a2_*`, `run_a2_row_split.py`, `rerun_a4_column.py`, `derive_lower_link_prices.py`,
-`tie_features.py`, `band_energy.py` and `a_bandwidth_slices.py` scripts are
-the stage experiments named in the record.
+Their outputs are not part of the paper's final numbers.

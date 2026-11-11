@@ -1,67 +1,151 @@
-# GPU 文献基线对照：执行报告
+# GPU literature-baseline comparison: report
 
-> 2026-10-22 能耗账本核查后：最终汇报量为 **modeled dynamic energy**（每请求能耗、每输出 token 能耗、GPU/CIM 能耗比、分项构成），见 `AUDIT_energy.md`、`energy_breakdown.csv`；本报告中的时延只用于内部核算。LM head 能量已按词表 / 补齐宽度修正（OPT-13B −0.26%，Gemma −0.11%），每个配置增加 16-bit KV 对应行并以其为主比较（OPT-13B 58.61 J、93×；Gemma 11.45 J、166×）；互联能耗采用按通信量计价的模型（与 Gemini HPCA 2024 对 GRS / UCIe clock-forwarding 链路的处理一致），“全部链路常开”只作为情景估算保留。
+> After the energy-ledger audit (2026-10-22), the reported quantity is **modeled dynamic energy**. That covers energy per request, energy per output token, the GPU/CIM energy ratio and the component breakdown; see `AUDIT_energy.md` and `energy_breakdown.csv`. Latencies in this report are for internal accounting only.
+>
+> The audit made three changes:
+>
+> - The LM-head energy is scaled by vocabulary / padded width (OPT-13B −0.26%, Gemma −0.11%).
+> - Every configuration has a 16-bit K/V row, which is the main comparison: OPT-13B 58.61 J, 93×; Gemma 11.45 J, 166×.
+> - Interconnect energy uses the traffic-based model, as Gemini (HPCA 2024) does for clock-forwarding GRS / UCIe links. "All links always on" is kept only as a scenario estimate.
+>
+> The table in section 3 is the 1-byte K/V set before the audit.
 
-日期：2026-10-21。目录 `workspace/gpu_comparison/`：`sources/`（来源记录、Hydra 原始 CSV 与长度频数）、`configs/`（8 个配置与资源表）、`scripts/`（取数 `gpu_baselines.py`、请求成本引擎 `cim_request.py`、`run_all.sh`、汇总 `summarize.py`）、`gpu_baselines.csv`、`cim_requests.csv`（每配置每输入长度一行，含阶段时间与能量分项）、`comparison_summary.csv`。复现：`python3 gpu_comparison/scripts/gpu_baselines.py && bash gpu_comparison/scripts/run_all.sh && python3 gpu_comparison/scripts/summarize.py`。
+Date: 2026-10-21. Directory `workspace/gpu_comparison/`:
 
-## 1. GPU 基线
+| path | content |
+| --- | --- |
+| `sources/` | source records, the Hydra raw CSV and the length frequencies |
+| `configs/` | 8 configurations and the resource table |
+| `scripts/` | `gpu_baselines.py` (baseline extraction), `cim_request.py` (request-cost engine), `run_all.sh`, `summarize.py` (summary) |
+| `gpu_baselines.csv` | the GPU baselines |
+| `cim_requests.csv` | one row per configuration and input length, with phase times and energy components |
+| `comparison_summary.csv` | the comparison summary |
 
-| 组 | 设备 / 后端 | 负载 | 请求时间 | 请求能耗 | J / 输出 token | 能量边界 |
+Reproduce: `python3 gpu_comparison/scripts/gpu_baselines.py && bash gpu_comparison/scripts/run_all.sh && python3 gpu_comparison/scripts/summarize.py`.
+
+## 1. GPU baselines
+
+| group | device / backend | workload | request time | request energy | J / output token | energy boundary |
 | --- | --- | --- | --- | --- | --- | --- |
-| A | A100 40 GB，FasterTransformer | OPT-13B，64:1024，单请求 | 21.635 s（1024 / 47.33） | 5473.74 J（253 W × T） | 5.345 | GPU 器件功耗 |
-| B | Jetson AGX Thor，llama.cpp Q8_0 | Gemma-7B，541 个 IFEval 请求，13–345 输入 token（84 种长度），各 500 输出 token | 24.82638 s（执行窗口 24.82547 s） | 1898.68 J（逐请求 vin_cur × 时间后取均值） | 3.797 | 整板输入；GPU 电源轨 794.70 J 仅作分项 |
+| A | A100 40 GB, FasterTransformer | OPT-13B, 64:1024, single request | 21.635 s (1024 / 47.33) | 5473.74 J (253 W × T) | 5.345 | GPU device power |
+| B | Jetson AGX Thor, llama.cpp Q8_0 | Gemma-7B, 541 IFEval requests, 13–345 input tokens (84 lengths), 500 output tokens each | 24.82638 s (execution window 24.82547 s) | 1898.68 J (per-request vin_cur × time, then averaged) | 3.797 | whole-board input; the GPU rail (794.70 J) only as a component |
 
-A 组数值已对照论文 PDF 核实：§VII（p. 978）DGX A100 40 GB / 1.55 TB/s、FasterTransformer、单设备、64 输入 / 最多 1024 输出；§VIII-A（p. 979）"253 Watts vs. 77.1 Watts"；Fig. 10（p. 980）GPU 在 [64:1024] 为 47.33 tokens/s、0.19 token/J；B 组由 CSV 原始字段重算，与待办文件的核对值逐位一致，CSV 哈希一致。
+The group A values were checked against the paper PDF:
 
-## 2. CIM 侧请求模型
+- §VII (p. 978): DGX A100 40 GB / 1.55 TB/s, FasterTransformer, single device, 64 input / up to 1024 output tokens.
+- §VIII-A (p. 979): "253 Watts vs. 77.1 Watts".
+- Fig. 10 (p. 980): the GPU at [64:1024] runs 47.33 tokens/s at 0.19 token/J.
 
-请求 = 一次 L token 的 prefill + (O−1) 次单 token forward，第 j 次 forward 的有效上下文为 L+j（首 token 复用 prefill logits，与 Hydra 的 `llama_n_eval` = 499 对应）。静态 CIM 算子、数字逐元素运算和交接流量与查询行数严格成正比（S=128/256/512/1024 的实测 account 核对：compute、能量、die flow 均 ×2 关系，decode 项恒定），因此各长度由 S=512 的确认记录定价，attention/KV 项按上下文闭式计算。固定映射为各记录 prefill 512 的确认代表布局，两阶段共用：在该布局下 decode 的通信时间与 decode 专门搜索的布局相差不到 1%（OPT-13B 20.37 对 20.42 ms/token，Gemma 4.04 对 4.07 ms/token），因此没有重新搜索。
+The group B values were recomputed from the CSV's raw fields. They match the expected values digit for digit, and the CSV hash matches.
 
-完整模型补齐项：embedding 读取（单元内存，50 pJ/word）、OPT 的位置嵌入加法、末端 norm、LM head（CIM 常驻，vocab 补到 2 的幂，OPT-13B 64 die、Gemma-7B 128 die，每生成 token 计算一行，含进出单元的接口估计）、argmax、Gemma 的 RoPE。KV 容量在最大上下文处均满足（OPT-13B 1087 token 0.445 GB，Gemma 845 token 0.19 GB），decode 全程为 materialized 算法、每层读一次 KV。
+## 2. The CIM request model
 
-能量为动态能量：CIM 阵列与外围（account）、数字逐元素、单元 attention 计算、KV 内存、互联（10 pJ/word 平摊 + 额外跳）、模型末端。**平台没有静态 / 后台功耗模型**（fabric 的 `idle_power_w` 未设定），因此给出已计能量和保留能效优势所容许的剩余平均功率 P_remaining,max = (E_GPU − E_CIM,accounted) / T_CIM。
+A request is one prefill of L tokens plus O − 1 single-token forwards. Forward j has an effective context of L + j; the first token reuses the prefill logits, matching Hydra's `llama_n_eval` = 499.
 
-## 3. 结果
+Static CIM operators, digital element-wise work and hand-off traffic are exactly proportional to the number of query rows. The measured accounts at S = 128 / 256 / 512 / 1024 confirm this: compute, energy and die flows scale by ×2 per doubling, and the decode terms stay constant. Every length is therefore priced from the S = 512 confirmation record; the attention and K/V terms are closed form per context.
 
-| 配置 | 要点 | T_CIM（s） | 其中 prefill | E_CIM（J） | J / token | 能效倍数 E_GPU/E_CIM | 节能 | 加速比 T_GPU/T_CIM | P_remaining,max |
+The fixed mapping is each record's prefill-512 confirmation representative, shared by both phases. Under that layout, the decode communication time is within 1% of a layout searched for decode (OPT-13B 20.37 vs. 20.42 ms/token, Gemma 4.04 vs. 4.07 ms/token), so no new search was run.
+
+The model is completed with:
+
+- the embedding read (unit memory, 50 pJ/word) and OPT's position-embedding add;
+- the final norm;
+- the LM head, resident on CIM with the vocabulary padded to a power of two (OPT-13B 64 dies, Gemma-7B 128 dies). One row is computed per generated token, including an estimate of the unit interface in and out;
+- the argmax;
+- Gemma's RoPE.
+
+The K/V capacity suffices at the largest context: OPT-13B 1087 tokens, 0.445 GB; Gemma 845 tokens, 0.19 GB. Decode uses the materialized algorithm throughout and reads the K/V once per layer.
+
+The energy is dynamic energy: CIM arrays and periphery (accounts), digital element-wise work, unit attention compute, K/V memory, interconnect (10 pJ/word flat plus surplus hops) and the model end. **The platform has no static or background power model** (the fabric's `idle_power_w` is unset). The report therefore gives the counted energy and the remaining average power that keeps the efficiency advantage, P_remaining,max = (E_GPU − E_CIM,accounted) / T_CIM.
+
+## 3. Results
+
+| configuration | setting | T_CIM (s) | of which prefill | E_CIM (J) | J / token | E_GPU/E_CIM | energy saving | T_GPU/T_CIM | P_remaining,max |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A0_ref | 8 macros，0.4 GB/s | 33.558 | 1.402 | 46.64 | 0.0455 | 117.4× | 99.15% | 0.64× | 161.7 W |
-| A1_m16 | 16 macros，0.4 GB/s | 24.758 | 0.886 | 36.56 | 0.0357 | 149.7× | 99.33% | 0.87× | 219.6 W |
-| A2_grs | 8 macros，12.5 GB/s | 12.914 | 0.186 | 46.64 | 0.0455 | 117.4× | 99.15% | 1.68× | 420.3 W |
-| A3_m16_grs_kv | 16 macros，12.5 GB/s，KV 51.2 GB/s | 7.568 | 0.151 | 36.56 | 0.0357 | 149.7× | 99.33% | 2.86× | 718.4 W |
-| A4_col | 列切分 QKV（2400 die，49×49），0.4 GB/s | 18.405 | 0.507 | 45.02 | 0.0440 | 121.6× | 99.18% | 1.18× | 295.0 W |
-| A5_col_grs | 列切分 QKV，12.5 GB/s | 11.958 | 0.127 | 45.02 | 0.0440 | 121.6× | 99.18% | 1.81× | 454.0 W |
-| B0_ref | 8 macros，0.4 GB/s | 4.247 | 0.245 | 9.75 | 0.0195 | 194.7× | 99.49% | 5.85× | 444.8 W |
-| B1_m16 | 16 macros，0.4 GB/s | 4.118 | 0.236 | 8.16 | 0.0163 | 232.8× | 99.57% | 6.03× | 459.1 W |
-| B2_grs | 8 macros，12.5 GB/s | 2.181 | 0.066 | 9.75 | 0.0195 | 194.7× | 99.49% | 11.38× | 866.0 W |
-| B3_m16_grs_kv | 16 macros，12.5 GB/s，KV 51.2 GB/s | 1.484 | 0.065 | 8.16 | 0.0163 | 232.8× | 99.57% | 16.73× | 1273.8 W |
+| A0_ref | 8 macros, 0.4 GB/s | 33.558 | 1.402 | 46.64 | 0.0455 | 117.4× | 99.15% | 0.64× | 161.7 W |
+| A1_m16 | 16 macros, 0.4 GB/s | 24.758 | 0.886 | 36.56 | 0.0357 | 149.7× | 99.33% | 0.87× | 219.6 W |
+| A2_grs | 8 macros, 12.5 GB/s | 12.914 | 0.186 | 46.64 | 0.0455 | 117.4× | 99.15% | 1.68× | 420.3 W |
+| A3_m16_grs_kv | 16 macros, 12.5 GB/s, K/V 51.2 GB/s | 7.568 | 0.151 | 36.56 | 0.0357 | 149.7× | 99.33% | 2.86× | 718.4 W |
+| A4_col | column-split QKV (2400 dies, 49×49), 0.4 GB/s | 18.405 | 0.507 | 45.02 | 0.0440 | 121.6× | 99.18% | 1.18× | 295.0 W |
+| A5_col_grs | column-split QKV, 12.5 GB/s | 11.958 | 0.127 | 45.02 | 0.0440 | 121.6× | 99.18% | 1.81× | 454.0 W |
+| B0_ref | 8 macros, 0.4 GB/s | 4.247 | 0.245 | 9.75 | 0.0195 | 194.7× | 99.49% | 5.85× | 444.8 W |
+| B1_m16 | 16 macros, 0.4 GB/s | 4.118 | 0.236 | 8.16 | 0.0163 | 232.8× | 99.57% | 6.03× | 459.1 W |
+| B2_grs | 8 macros, 12.5 GB/s | 2.181 | 0.066 | 9.75 | 0.0195 | 194.7× | 99.49% | 11.38× | 866.0 W |
+| B3_m16_grs_kv | 16 macros, 12.5 GB/s, K/V 51.2 GB/s | 1.484 | 0.065 | 8.16 | 0.0163 | 232.8× | 99.57% | 16.73× | 1273.8 W |
 
-B 组为 541 个请求按长度频次加权的均值，比值为均值之比；A 组为单请求。
+Group B values are means over the 541 requests weighted by length frequency, and the ratios are ratios of means; group A is a single request.
 
-**时间分项（请求占比）。** A0：互联 65.9%、KV 内存 28.1%、CIM 计算 5.3%；decode 每 token 约 31.5 ms，其中交接 20.4 ms、KV 重读 9.2 ms（上下文均值约 600 token，246 MB / 25.6 GB/s）、CIM 1.6 ms。交接的 20.4 ms 按类型分：qkv→数字单元 15.1 ms（40 层；行切分的 10 个 qkv die 各送一行 15360 列的 2 B 部分和，每层 307 KB，最忙链路 153,600 字 / 0.4 GB/s）、ffn1→ffn2 2.2 ms、out_proj→ffn1 1.6 ms、单元→out_proj 1.4 ms、跨层 0.08 ms。改用列切分 QKV（A4）后 qkv→单元每层只送 15 KB，decode 交接降到约 7.6 ms/token，请求时间 18.4 s，已快于 A100（1.18×），能量基本不变。prefill 只占 4%。B0：互联 51.8%、KV 31.4%、CIM 14.6%。把 mesh 提到 GRS 档后交接项缩到 6–12%，KV 重读成为主项（A2 73%、B2 61%）；再把 KV 带宽提到 51.2 GB/s 后 CIM 计算占比升到 23–42%。
+**Time components (shares of the request).**
 
-**能量分项。** 所有配置中 CIM 阵列及外围占 50–66%，KV 内存 18–33%，互联 6–22%（0.4 与 12.5 GB/s 下互联能量相同，按字节计价），模型末端 1–6%（Gemma 的 LM head 128 die 每 token 1.0 mJ）。16 macros 使 die 数减半、互联能量降一半以上，总能量降 16–22%。
+- **A0:** interconnect 65.9%, K/V memory 28.1%, CIM compute 5.3%. A decode token takes about 31.5 ms:
+  - hand-offs 20.4 ms;
+  - K/V re-reads 9.2 ms (mean context about 600 tokens, 246 MB / 25.6 GB/s);
+  - CIM 1.6 ms.
+- **A0 hand-offs by type** (20.4 ms in total):
+  - qkv → digital unit 15.1 ms over 40 layers. The 10 row-split qkv dies each send one row of 15360 columns of 2-byte partial sums, 307 KB per layer; the busiest link carries 153,600 words at 0.4 GB/s.
+  - ffn1 → ffn2 2.2 ms; out_proj → ffn1 1.6 ms; unit → out_proj 1.4 ms; across layers 0.08 ms.
+- **A4, column-split QKV:** qkv → unit sends only 15 KB per layer, and the decode hand-offs fall to about 7.6 ms/token. The request takes 18.4 s, faster than the A100 (1.18×), at essentially unchanged energy. Prefill is only 4%.
+- **B0:** interconnect 51.8%, K/V 31.4%, CIM 14.6%.
+- **Faster links and memory:** at the GRS mesh tier, the hand-offs shrink to 6–12% and the K/V re-reads become the main term (A2 73%, B2 61%). With 51.2 GB/s K/V bandwidth on top, the CIM compute share rises to 23–42%.
 
-**解读。** 能耗差两个数量级是动态能量对 GPU 实测功率的比较：GPU 侧包含整卡 / 整板静态功耗，CIM 侧没有。按 P_remaining,max，只要整个 CIM 系统在请求期间的平均后台功率低于 162 W（A0）或 445 W（B0），能效优势仍然成立；对 2200 + 64 个 ReRAM die 加一个数字单元的封装，这个预算的量级是宽裕的，但需要静态功耗参数才能给出总能量估计。时间上，OPT-13B 在参考 0.4 GB/s mesh 下比 A100 慢（0.64×）：decode 每 token 的 199 次交接在 0.4 GB/s 链路上要 20 ms，这是通信敏感实验里同一个瓶颈；GRS 档链路和更宽的 die 把它压到 A100 的 2.9 倍速度；列切分 QKV 在 0.4 GB/s 下即可持平以上（1.18×）。Gemma 对 Thor 在参考配置就快 5.9×，因为 Thor 本身每 token 约 50 ms。
+**Energy components.** Across all configurations:
 
-## 4. 边界与假设
+| component | share |
+| --- | --- |
+| CIM arrays and periphery | 50–66% |
+| K/V memory | 18–33% |
+| interconnect | 6–22% |
+| model end | 1–6% |
 
-- 精度：CIM 8-bit 权重/激活、2 B 部分和、16-bit 数字中间量、KV 1 B；A100 点的 dtype 未报告（PNM 为 FP16）；Hydra Q8_0 为 8-bit 块量化权重、8-bit 量化激活、FP32 累加。
-- GRS 档配置复用 0.4 GB/s 下搜索的布局并重新定价（不重新搜索）；通信在这些配置里只占 6–12%，重新搜索的影响有限。
-- 模型末端：LM head 额外 die 按常驻计容量，其交接按端口下界估计（placement-free）；embedding 表放在单元内存。
-- 未建模：静态 / 后台功耗、PHY 常开功耗、阶段切换搬运（固定映射下为零）、GPU 侧 tokenizer / 采样之外的主机开销。
-- 单元 KV 为单通道串行读写模型（读写不并发），与既有设定一致。
+The interconnect energy is the same at 0.4 and 12.5 GB/s because it is priced per byte. In the model end, Gemma's 128-die LM head costs 1.0 mJ per token. With 16 macros the die count halves, the interconnect energy falls by more than half, and the total energy falls by 16–22%.
 
-## 5. 交付清单
+**Reading.** The two-orders-of-magnitude energy gap compares dynamic energy with measured GPU power. The GPU side includes the card's or board's static power; the CIM side does not. By P_remaining,max, the efficiency advantage holds as long as the whole CIM system's mean background power during the request stays below 162 W (A0) or 445 W (B0). For a package of 2200 + 64 ReRAM dies and one digital unit, that budget is generous, but a total-energy estimate needs static power parameters.
 
-`gpu_baselines.csv`（12 行）、`sources/hydra_requests.csv`（541 行）、`sources/hydra_input_lengths.csv`（84 行）、`cim_requests.csv`（10 配置；A 组每配置 1 行，B 组 84 行）、每配置的 `cim_requests_<id>_meta.json`（布局 ID、T 复现核对、资源）、`comparison_summary.csv`（10 行，含分项占比与 P_remaining）、`configs/resources.csv`。
+In time, OPT-13B on the reference 0.4 GB/s mesh is slower than the A100 (0.64×). A decode token's 199 hand-offs take 20 ms on 0.4 GB/s links, the same bottleneck as in the communication-sensitivity experiments. GRS-tier links and wider dies bring it to 2.9× the A100's speed, and column-split QKV already matches it at 0.4 GB/s (1.18×). Gemma against Thor is 5.9× faster in the reference configuration, because Thor itself takes about 50 ms per token.
 
-## 6. 配置扫描（2026-10-21 补充）
+## 4. Boundaries and assumptions
 
-`scripts/sweep.py` 在固定布局上重新定价四个轴（无重新搜索）：每 die 宏数 4 / 8 / 16 / 32（各自的实测 account 与已确认 / 探索布局）；器件行速率 NeuRRAM 10.14 µs（参考）、ISAAC 1.6 µs（设计点）、HERMES 4-phase 0.52 µs、HERMES 1-phase 0.133 µs（由公开峰值推得；能量按每次运算不变处理）；mesh 每方向带宽 0.4（HERMES 类）、1.6、4.0（ISAAC 类片上链路）、12.5 GB/s（Simba GRS）；KV 内存带宽 25.6（LPDDR4 两通道）、51.2（LPDDR5 两通道）、136 GB/s（一个 LPDDR5X ×128 封装，CXL-PNM 论文 Table I）。OPT-13B 另含 8 宏列切分 QKV。共 432 点，数据 `sweep/sweep_all.csv`，透视表 `sweep/sweep_tables.md`。
+- **Precision.** CIM: 8-bit weights and activations, 2-byte partial sums, 16-bit digital intermediates, K/V 1 byte. The A100 point's dtype is not reported (the PNM side is FP16). Hydra Q8_0: 8-bit block-quantized weights, 8-bit quantized activations, FP32 accumulation.
+- **GRS-tier configurations** reuse the layout searched at 0.4 GB/s and re-price it without a new search. Communication is only 6–12% in these configurations, so a new search would have a limited effect.
+- **Model end.** The LM head's extra dies count against capacity as resident. Its hand-offs are estimated at the port bound, placement-free. The embedding table sits in the unit memory.
+- **Not modelled:** static / background power, PHY always-on power, phase-switch data movement (zero under a fixed mapping), and host overhead on the GPU side beyond tokenizer and sampling.
+- **Unit K/V** is a single-channel serial read/write model (reads and writes do not overlap), as in the existing setting.
 
-要点：
-- 能量只随容量与切分变化（速率与带宽不改变每次运算和每字节的能量）：OPT-13B 73.5 / 46.6 / 36.6 / 33.3 J（4 / 8 / 16 / 32 宏），Gemma 13.6 / 9.8 / 8.2 / 7.6 J；能效倍数 75–164×（OPT-13B）、140–252×（Gemma）。
-- 时间上三条轴的作用顺序：mesh 带宽（0.4 → 1.6 GB/s 把 OPT-13B 参考点从 33.6 s 降到 17.1 s）、KV 带宽（decode 每 token 重读 KV：25.6 → 136 GB/s 在 12.5 GB/s mesh 下从 12.9 s 降到 5.3 s）、容量（32 宏在 0.4 GB/s 下 16.5 s）；器件速率影响最小（prefill 与 decode 的 CIM 计算只占 5–15%，四档速率在参考 mesh 下只差 5%）。
-- OPT-13B 在 240 个点中 211 个快于 A100；慢于 A100 的都是 0.4 GB/s mesh 下的行切分配置（以及 4 宏在 1.6 GB/s 的一个点）。列切分 QKV 在 0.4 GB/s 下已达 1.18×。最快组合（32 宏、HERMES 1-phase、12.5 GB/s、136 GB/s KV）2.32 s，9.3×。
-- Gemma 全部 192 点快于 Thor：参考 5.85×，最快 58.7×（0.42 s）。
+## 5. Deliverables
+
+| file | content |
+| --- | --- |
+| `gpu_baselines.csv` | 12 rows |
+| `sources/hydra_requests.csv` | 541 rows |
+| `sources/hydra_input_lengths.csv` | 84 rows |
+| `cim_requests.csv` | 10 configurations: one row per group A configuration, 84 per group B configuration |
+| `cim_requests_<id>_meta.json` | per configuration: layout id, T reproduction check, resources |
+| `comparison_summary.csv` | 10 rows, with component shares and P_remaining |
+| `configs/resources.csv` | the resource table |
+
+## 6. Configuration sweep (added 2026-10-21)
+
+`scripts/sweep.py` re-prices fixed layouts along four axes, without a new search:
+
+| axis | values |
+| --- | --- |
+| macros per die | 4 / 8 / 16 / 32, each with its measured accounts and its confirmed / exploration layouts |
+| device row rate | NeuRRAM 10.14 µs (reference), ISAAC 1.6 µs (design point), HERMES 4-phase 0.52 µs, HERMES 1-phase 0.133 µs (derived from the published peaks; energy per operation unchanged) |
+| mesh bandwidth per direction | 0.4 (HERMES class), 1.6, 4.0 (ISAAC-class on-chip link), 12.5 GB/s (Simba GRS) |
+| K/V memory bandwidth | 25.6 (two LPDDR4 channels), 51.2 (two LPDDR5 channels), 136 GB/s (one LPDDR5X ×128 package, CXL-PNM paper Table I) |
+
+OPT-13B also has the 8-macro column-split QKV. In total there are 432 points; the data are in `sweep/sweep_all.csv` and the pivot tables in `sweep/sweep_tables.md`.
+
+Findings:
+
+- **Energy** changes only with capacity and partitioning; rate and bandwidth do not change the energy per operation or per byte.
+  - OPT-13B: 73.5 / 46.6 / 36.6 / 33.3 J at 4 / 8 / 16 / 32 macros.
+  - Gemma: 13.6 / 9.8 / 8.2 / 7.6 J.
+  - GPU/CIM ratio: 75–164× (OPT-13B), 140–252× (Gemma).
+- **Time**: the axes matter in this order.
+  - Mesh bandwidth: 0.4 → 1.6 GB/s takes the OPT-13B reference point from 33.6 s to 17.1 s.
+  - K/V bandwidth: decode re-reads the K/V every token; 25.6 → 136 GB/s takes the 12.5 GB/s-mesh point from 12.9 s to 5.3 s.
+  - Capacity: 32 macros at 0.4 GB/s gives 16.5 s.
+  - Device rate matters least: CIM compute is only 5–15% of prefill and decode, and the four rates differ by only 5% on the reference mesh.
+- **OPT-13B against the A100:** 211 of 240 points are faster. All the slower points are row-split configurations on the 0.4 GB/s mesh, plus one 4-macro point at 1.6 GB/s. Column-split QKV reaches 1.18× already at 0.4 GB/s. The fastest combination (32 macros, HERMES 1-phase, 12.5 GB/s, 136 GB/s K/V) takes 2.32 s, 9.3×.
+- **Gemma against Thor:** all 192 points are faster; the reference is 5.85×, the fastest 58.7× (0.42 s).

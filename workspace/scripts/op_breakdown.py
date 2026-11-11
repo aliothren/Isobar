@@ -6,7 +6,7 @@ this script reports the operator's LATENCY and ENERGY and their breakdown.
 Nothing is merged into coarse categories: every CiMLoop component, every
 overlay term and every analytic term is its own row, with a group label
 only as an annotation. Items the platform does NOT model are listed too,
-with the value replaced by the marker "未建模故未统计" -- they are never
+with the value replaced by the marker "not modelled, not counted" -- they are never
 silently absent.
 
 Conventions (stated on every output):
@@ -45,38 +45,38 @@ import sys
 
 sys.path.insert(0, "/home/workspace")
 
-UNMODELED = "未建模故未统计"
-OFFLOADED = "已卸载至片外单元(见\"attention 在片外单元\"行)"
+UNMODELED = "not modelled, not counted"
+OFFLOADED = "offloaded to the off-chip unit (see the \"attention on the off-chip unit\" row)"
 from scripts import fabric as _fabric_mod   # noqa: E402
 CYC_DEFAULT = _fabric_mod.default().device.cycle_seconds   # O17a: the fabric's device, not a literal
 ATTN_OPS = ("qk^t", "av")                 # leave the chip under offload (with their K/V write)
-CONDITIONS = {"on_chip": "attention 在片上", "offloaded": "attention 卸载(端到端:片上 + 片外单元)"}
+CONDITIONS = {"on_chip": "attention on chip", "offloaded": "attention offloaded (end to end: on chip + off-chip unit)"}
 # the model's operator TYPES the platform does not simulate (whole-model view)
 MODEL_UNMODELED_TYPES = []          # O24 filled the non-matmul rows (C19)
-TYPE_LABEL = {"attention_unit": "attention 在片外单元(QKᵀ + softmax + AV,K/V 在单元存储)",
-              "qkv_proj": "Q/K/V 投影(qkv_proj)", "qk^t": "注意力分数 QKᵀ(qk^t,含 K 写)",
-              "av": "注意力加权 AV(av,含 V 写)", "out_proj": "输出投影(out_proj)",
-              "ffn1": "FFN 第一层(ffn1)", "ffn2": "FFN 第二层(ffn2)",
-              "softmax": "softmax(数字单元)", "gelu": "GELU(FFN 激活,数字单元)",
-              "layernorm": "LayerNorm ×2(数字单元)", "residual": "残差加 ×2(数字单元)",
-              "embedding": "embedding 查表(片外读,整模型一次)",
-              "lm_head": "LM head(矩阵乘,最后一个 token,整模型一次)"}
+TYPE_LABEL = {"attention_unit": "attention on the off-chip unit (QKᵀ + softmax + AV, K/V in the unit memory)",
+              "qkv_proj": "Q/K/V projection (qkv_proj)", "qk^t": "attention scores QKᵀ (qk^t, with K write)",
+              "av": "attention weighting AV (av, with V write)", "out_proj": "output projection (out_proj)",
+              "ffn1": "FFN first layer (ffn1)", "ffn2": "FFN second layer (ffn2)",
+              "softmax": "softmax (digital unit)", "gelu": "GELU (FFN activation, digital unit)",
+              "layernorm": "LayerNorm ×2 (digital unit)", "residual": "residual add ×2 (digital unit)",
+              "embedding": "embedding lookup (off-chip read, once per model)",
+              "lm_head": "LM head (matmul, last token, once per model)"}
 PER_MODEL_OPS = ("embedding", "lm_head")      # counted once, not x n_layers
 
 # component -> group annotation (annotation ONLY; rows are never merged)
 GROUP = {
-    "cim_unit": "模拟计算", "integrator": "模拟计算", "wordline_cap": "模拟计算",
-    "wordline_drivers": "模拟计算", "row_drivers": "模拟计算",
-    "column_drivers": "模拟计算", "weight_drivers": "模拟计算",
-    "virtual_bitwise_mac": "模拟计算", "inter_1bit_x_1bit_mac_spatial": "模拟计算",
-    "inter_row_spatial": "模拟计算", "inter_column_spatial": "模拟计算",
-    "adc": "转换", "sample": "转换", "shift_add": "转换",
-    "glb": "缓冲", "input_buffer": "缓冲", "output_buffer": "缓冲",
-    "chip2chip_data_staging": "缓冲",
-    "router": "片上网络", "inter_macro_in_die_spatial": "片上网络",
-    "inter_core_in_macro_spatial": "片上网络",
-    "inter_crossbar_in_core_spatial": "片上网络",
-    "chip2chip_link": "片外端口", "here_to_fix_a_bug": "其他",
+    "cim_unit": "analog compute", "integrator": "analog compute", "wordline_cap": "analog compute",
+    "wordline_drivers": "analog compute", "row_drivers": "analog compute",
+    "column_drivers": "analog compute", "weight_drivers": "analog compute",
+    "virtual_bitwise_mac": "analog compute", "inter_1bit_x_1bit_mac_spatial": "analog compute",
+    "inter_row_spatial": "analog compute", "inter_column_spatial": "analog compute",
+    "adc": "conversion", "sample": "conversion", "shift_add": "conversion",
+    "glb": "buffer", "input_buffer": "buffer", "output_buffer": "buffer",
+    "chip2chip_data_staging": "buffer",
+    "router": "on-die network", "inter_macro_in_die_spatial": "on-die network",
+    "inter_core_in_macro_spatial": "on-die network",
+    "inter_crossbar_in_core_spatial": "on-die network",
+    "chip2chip_link": "off-chip port", "here_to_fix_a_bug": "other",
 }
 # links that carry NO energy model in the calibrated die (FIXLIST O1)
 UNPRICED = {"inter_core_in_macro_spatial", "inter_crossbar_in_core_spatial",
@@ -92,14 +92,14 @@ SCHEMES = {
 }
 
 ENERGY_UNMODELED = [
-    ("片外单元的内部结构(缓冲、控制、量化)", "O9 按黑盒接口计:速率、平均开销、K/V 存储、链路"),
-    ("core/crossbar 级链路的距离能量", "FIXLIST O1: 部件存在但无能量模型(DR-1 输入未填),下表对应行为 0"),
-    ("长上下文 K/V 超容量(>~8k token)的跨 die 分片", "FIXLIST O14"),
+    ("internal structure of the off-chip unit (buffers, control, quantisation)", "priced through its black-box interface: rate, mean overhead, K/V memory, link"),
+    ("distance energy of the core/crossbar links", "the component exists but has no energy model (input not provided); its rows below are 0"),
+    ("cross-die sharding of a long-context K/V beyond capacity (>~8k tokens)", "FIXLIST O14"),
 ]
 LATENCY_UNMODELED = [
-    ("网络排队(等峰负载向量不可区分)", "只取最忙一根线的占用;O7 区间已给两端"),
-    ("片外单元内部的计算/访存重叠", "O9 假设单元内计算与 K/V 访问串行"),
-    ("流水气泡 / 不平衡", "流水口径假设完美 microbatch 流水"),
+    ("network queueing (load vectors with equal peaks are not distinguished)", "only the busiest wire's occupancy is taken; the overlap bracket gives both ends"),
+    ("compute / memory overlap inside the off-chip unit", "assumes the unit's compute and K/V access are serial"),
+    ("pipeline bubbles / imbalance", "the pipeline view assumes perfect microbatch pipelining"),
 ]
 
 
@@ -121,36 +121,36 @@ def energy_items(levels, overlay_rows, cimloop_J, write_J=0.0, rewrite_J=0.0,
         comp_sum += e
         note = ""
         if name in UNPRICED and e == 0.0:
-            note = "无能量模型(未计价, O1)"
-        items.append({"group": GROUP.get(name, "其他"), "item": f"部件 {name}",
+            note = "no energy model (not priced)"
+        items.append({"group": GROUP.get(name, "other"), "item": f"component {name}",
                       "en": name, "value": e, "unit": "J", "note": note})
     # placement re-pricing beyond the flat CiMLoop charge, per component
     ov_sum = 0.0
     for name, fanout, base, hops_ratio, pa in overlay_rows:
         delta = pa - base
         ov_sum += delta
-        items.append({"group": GROUP.get(name, "片上网络"),
-                      "item": f"placement 距离重定价增量 {name}",
+        items.append({"group": GROUP.get(name, "on-die network"),
+                      "item": f"placement distance repricing increment {name}",
                       "en": f"placement re-pricing {name}",
                       "value": delta, "unit": "J",
-                      "note": f"平均跳数/参考跳数 = {hops_ratio:.3f}"})
-    items.append({"group": "写入", "item": "K/V 写编程能量", "en": "K/V write",
+                      "note": f"mean hops / reference hops = {hops_ratio:.3f}"})
+    items.append({"group": "write", "item": "K/V write programming energy", "en": "K/V write",
                   "value": write_J, "unit": "J",
-                  "note": "" if write_J else "静态算子不写"})
-    items.append({"group": "写入", "item": "权重重写能量(时序重写策略)",
+                  "note": "" if write_J else "static operators do not write"})
+    items.append({"group": "write", "item": "weight rewrite energy (temporal rewrite policy)",
                   "en": "weight rewrite", "value": rewrite_J, "unit": "J",
-                  "note": "" if rewrite_J else "本配置未触发重写"})
-    items.append({"group": "D2D", "item": "die 间交接盈余能量(超出平坦充值的跳数)",
+                  "note": "" if rewrite_J else "no rewrite in this configuration"})
+    items.append({"group": "D2D", "item": "die-to-die hand-off surplus energy (hops beyond the flat charge)",
                   "en": "D2D hand-off surplus", "value": d2d_surplus_J,
                   "unit": "J", "note": d2d_note})
     residual = cimloop_J - comp_sum
-    items.append({"group": "其他", "item": "未归类残差(CiMLoop 总能量 − 各部件行之和)",
+    items.append({"group": "other", "item": "unattributed residual (CiMLoop total − sum of the component rows)",
                   "en": "unlisted residual", "value": residual, "unit": "J",
-                  "note": "CiMLoop 的算子总量 = 汇总表里每-compute 能量(有限精度)"
-                          "× compute 数,与各部件 Energy (total) 行的精确和相差"
-                          "即为该表的舍入(≤0.5%);已发表总量沿用 CiMLoop 口径"})
+                  "note": "CiMLoop's operator total = the summary table's per-compute energy (finite precision) "
+                          "× computes; its difference from the exact sum of the components' Energy (total) lines "
+                          "is that table's rounding (≤0.5%); reported totals keep the CiMLoop convention"})
     for name, why in ENERGY_UNMODELED:
-        items.append({"group": "未建模", "item": name, "en": name, "value": UNMODELED,
+        items.append({"group": "not modelled", "item": name, "en": name, "value": UNMODELED,
                       "unit": "", "note": why})
     return items, residual
 
@@ -169,28 +169,28 @@ def latency_items(compute_s, write_s, serial_s, prop_s, d2d_s=0.0,
     tot_max = write_s + max(compute_s, serial_s) + prop_s
     tot_sum = write_s + compute_s + serial_s + prop_s
     items = [
-        {"group": "计算", "item": "阵列计算(Timeloop 周期)", "en": "compute",
+        {"group": "compute", "item": "array compute (Timeloop cycles)", "en": "compute",
          "value": compute_s, "unit": "s", "note": ""},
-        {"group": "写入", "item": "K/V 写(串行,在计算前)", "en": "K/V write",
-         "value": write_s, "unit": "s", "note": "" if write_s else "静态算子不写"},
-        {"group": "片上网络", "item": "最忙线占用(串行化)",
+        {"group": "write", "item": "K/V write (serial, before compute)", "en": "K/V write",
+         "value": write_s, "unit": "s", "note": "" if write_s else "static operators do not write"},
+        {"group": "on-die network", "item": "busiest-wire occupancy (serialization)",
          "en": "busiest-wire occupancy", "value": serial_s, "unit": "s",
-         "note": "占用量,不是暴露量;= 给定路由下任意调度的下界 × 调度松弛因子(平台输入 schedule_slack,当前 "
-                 f"{_slack():g};O26)"},
-        {"group": "片上网络", "item": "网络暴露量(完美重叠端 = max(计算,占用) − 计算)",
+         "note": "occupancy, not exposure; = the lower bound of any schedule for the given routing × the schedule "
+                 f"slack (platform input schedule_slack, currently {_slack():g})"},
+        {"group": "on-die network", "item": "network exposure (perfect-overlap end = max(compute, occupancy) − compute)",
          "en": "network exposed (perfect overlap)", "value": exposed_max,
-         "unit": "s", "note": "此前发表口径"},
-        {"group": "片上网络", "item": "网络暴露量(零重叠端 = 占用)",
+         "unit": "s", "note": "the end reported by default"},
+        {"group": "on-die network", "item": "network exposure (zero-overlap end = occupancy)",
          "en": "network exposed (zero overlap)", "value": serial_s, "unit": "s",
-         "note": "O7 区间上端"},
-        {"group": "传播", "item": "距离传播延迟", "en": "propagation",
+         "note": "upper end of the overlap bracket"},
+        {"group": "propagation", "item": "distance propagation delay", "en": "propagation",
          "value": prop_s, "unit": "s", "note": ""},
-        {"group": "D2D", "item": "die 间交接传输(本算子产出的隐状态)",
+        {"group": "D2D", "item": "die-to-die hand-off transfer (hidden state produced by this operator)",
          "en": "D2D hand-off (occupancy)", "value": d2d_s, "unit": "s",
          "note": d2d_note},
     ]
     for name, why in LATENCY_UNMODELED:
-        items.append({"group": "未建模", "item": name, "en": name, "value": UNMODELED,
+        items.append({"group": "not modelled", "item": name, "en": name, "value": UNMODELED,
                       "unit": "", "note": why})
     totals = {"perfect_overlap_s": tot_max, "zero_overlap_s": tot_sum}
     return items, totals
@@ -212,9 +212,9 @@ def _d2d_per_boundary(fab, cfg, S, phase):
     try:
         die = fab.level("die")
     except KeyError:
-        return 0.0, 0.0, "单 die 配置:无 die 间交接"
+        return 0.0, 0.0, "single-die configuration: no die-to-die hand-off"
     if die.per_parent <= 1:
-        return 0.0, 0.0, "单 die 配置:无 die 间交接"
+        return 0.0, 0.0, "single-die configuration: no die-to-die hand-off"
     n = die.per_parent
     ucfg = lw.GptConfig(d_model=cfg.d_model, n_heads=cfg.n_heads, d_ff=cfg.d_ff,
                         n_layers=n, name=f"units{n}")
@@ -228,35 +228,35 @@ def _d2d_per_boundary(fab, cfg, S, phase):
     bw = die.link.bandwidth_words_per_cycle
     if not bw:
         return 0.0, d["energy_J"] / max(d["n_boundaries"], 1), \
-            "die 链路未设带宽(出厂默认):传输时间记 0"
+            "die link without a bandwidth (shipped default): transfer time counted as 0"
     t = words / bw * CYC_DEFAULT
     return t, d["energy_J"] / max(d["n_boundaries"], 1), \
-        f"蛇形摆放,{n} 单元链,die 链路 {bw:,.0f} 词/周期;单遍口径下藏在整栈计算后"
+        f"snake seating, {n}-unit chain, die link {bw:,.0f} words/cycle; hidden behind the stack's compute in the single-pass view"
 
 
 def ledger_for_elementwise(eo, cost, digital):
     """Ledger entry of one non-matmul operator (O24): energy = glb passes +
     digital arithmetic, latency = digital time (serial with the matmuls)."""
     e_items = [
-        {"group": "缓冲", "item": f"glb 读写({eo.glb_passes} 趟 × {eo.elements:,} 元素)",
+        {"group": "buffer", "item": f"glb read/write ({eo.glb_passes} passes × {eo.elements:,} elements)",
          "en": "glb passes", "value": cost["glb_J"], "unit": "J",
          "note": f"glb {lw_glb_note()}"},
-        {"group": "数字单元", "item": "数字单元算术(加/乘/查表)", "en": "digital arithmetic",
+        {"group": "digital unit", "item": "digital-unit arithmetic (add / mul / lookup)", "en": "digital arithmetic",
          "value": cost["arith_J"], "unit": "J",
-         "note": f"每元素 {eo.adds:g} 加 + {eo.muls:g} 乘 + {eo.luts:g} 查表;{digital.calibration}"},
+         "note": f"per element {eo.adds:g} adds + {eo.muls:g} muls + {eo.luts:g} lookups; {digital.calibration}"},
     ]
     for name, why in ENERGY_UNMODELED:
-        e_items.append({"group": "未建模", "item": name, "en": name, "value": UNMODELED,
+        e_items.append({"group": "not modelled", "item": name, "en": name, "value": UNMODELED,
                         "unit": "", "note": why})
     l_items = [
-        {"group": "数字单元", "item": f"数字单元计算({eo.arith_ops:,.0f} 次算术 ÷ {digital.lanes} 通道 × {digital.clock_hz/1e9:g} GHz)",
+        {"group": "digital unit", "item": f"digital-unit compute ({eo.arith_ops:,.0f} operations ÷ {digital.lanes} lanes × {digital.clock_hz/1e9:g} GHz)",
          "en": "digital compute", "value": cost["latency_s"], "unit": "s",
-         "note": "与相邻矩阵乘串行(假设,已陈述)"},
-        {"group": "片上网络", "item": "最忙线占用(串行化)", "en": "busiest-wire occupancy",
-         "value": 0.0, "unit": "s", "note": "数字单元挂在 glb 旁,不走片上网络(假设)"},
+         "note": "serial with the adjacent matmuls (stated assumption)"},
+        {"group": "on-die network", "item": "busiest-wire occupancy (serialization)", "en": "busiest-wire occupancy",
+         "value": 0.0, "unit": "s", "note": "the digital unit sits next to the glb and does not use the on-die network (assumption)"},
     ]
     for name, why in LATENCY_UNMODELED:
-        l_items.append({"group": "未建模", "item": name, "en": name, "value": UNMODELED,
+        l_items.append({"group": "not modelled", "item": name, "en": name, "value": UNMODELED,
                         "unit": "", "note": why})
     return {"op": eo.name, "kind": "elementwise",
             "shape": {"elements": eo.elements, "after": eo.after},
@@ -271,26 +271,26 @@ def ledger_for_attention_unit(cost, unit):
     """Ledger entry of the offloaded attention on the external unit (O9),
     per layer: link streams, unit compute, K/V memory, per-call overhead."""
     e_items = [
-        {"group": "片外单元", "item": f"单元计算({cost['macs']:,} 次乘加 + softmax {cost['softmax_ops']:,} 次算术)× {unit.pj_per_mac:g} pJ",
+        {"group": "off-chip unit", "item": f"unit compute ({cost['macs']:,} MACs + softmax {cost['softmax_ops']:,} operations) × {unit.pj_per_mac:g} pJ",
          "en": "unit compute", "value": cost["compute_J"], "unit": "J", "note": unit.calibration},
-        {"group": "片外单元", "item": f"K/V 存储读写({cost['kv_write_words']:,} 写 + {cost['kv_read_words']:,} 读)",
+        {"group": "off-chip unit", "item": f"K/V memory read/write ({cost['kv_write_words']:,} writes + {cost['kv_read_words']:,} reads)",
          "en": "unit K/V memory", "value": cost["kv_J"], "unit": "J", "note": ""},
-        {"group": "链路", "item": "die↔单元链路(Q 出、K/V 出、attention 输出回)",
+        {"group": "link", "item": "die↔unit link (Q out, K/V out, attention output back)",
          "en": "die-unit link", "value": cost["link_J"], "unit": "J",
-         "note": f"按 die 摆放下到接入点的平均 {cost['link_hops']:g} 跳全程计价(这些词不在 CiMLoop 账里)"},
+         "note": f"priced over the mean {cost['link_hops']:g} hops from the dies to the attach point (these words are not in the CiMLoop account)"},
     ]
     l_items = [
-        {"group": "链路", "item": "Q + K/V 送出(die → 单元)", "en": "link out",
+        {"group": "link", "item": "Q + K/V out (die → unit)", "en": "link out",
          "value": cost["link_out_s"], "unit": "s", "note": ""},
-        {"group": "片外单元", "item": "单元计算(含每次调用固定开销)", "en": "unit compute",
+        {"group": "off-chip unit", "item": "unit compute (including the fixed per-call overhead)", "en": "unit compute",
          "value": cost["compute_s"], "unit": "s", "note": ""},
-        {"group": "片外单元", "item": "K/V 存储读写(读全部已存上下文)", "en": "unit K/V memory",
-         "value": cost["kv_s"], "unit": "s", "note": "与计算串行(假设)"},
-        {"group": "链路", "item": "attention 输出送回(单元 → die)", "en": "link back",
+        {"group": "off-chip unit", "item": "K/V memory read/write (reads the whole stored context)", "en": "unit K/V memory",
+         "value": cost["kv_s"], "unit": "s", "note": "serial with compute (assumption)"},
+        {"group": "link", "item": "attention output back (unit → die)", "en": "link back",
          "value": cost["link_back_s"], "unit": "s", "note": ""},
     ]
     for name, why in LATENCY_UNMODELED:
-        l_items.append({"group": "未建模", "item": name, "en": name, "value": UNMODELED,
+        l_items.append({"group": "not modelled", "item": name, "en": name, "value": UNMODELED,
                         "unit": "", "note": why})
     return {"op": "attention_unit", "kind": "offloaded_unit",
             "shape": {"macs": cost["macs"], "kv_read_words": cost["kv_read_words"]},
@@ -304,11 +304,11 @@ def ledger_for_attention_unit(cost, unit):
 
 def ledger_for_embedding(emb):
     lat = emb["latency_s"]
-    e_items = [{"group": "片外", "item": f"片外读 {emb['words']:,} 词 × DRAM 每词能量",
+    e_items = [{"group": "off-chip", "item": f"off-chip read of {emb['words']:,} words × DRAM energy per word",
                 "en": "off-chip read", "value": emb["energy_J"], "unit": "J", "note": ""}]
-    l_items = [{"group": "片外", "item": "片外读传输", "en": "off-chip read",
+    l_items = [{"group": "off-chip", "item": "off-chip read transfer", "en": "off-chip read",
                 "value": lat if lat is not None else 0.0, "unit": "s",
-                "note": "" if emb["timed"] else "片外端口带宽未设(fabric.offchip_bandwidth_words_per_cycle):计价不计时"}]
+                "note": "" if emb["timed"] else "off-chip port bandwidth not set (fabric.offchip_bandwidth_words_per_cycle): priced, not timed"}]
     return {"op": "embedding", "kind": "offchip_read", "shape": {"words": emb["words"]},
             "energy_total_J": emb["energy_J"], "energy_residual_J": 0.0,
             "energy_items": e_items,
@@ -322,16 +322,16 @@ def ledger_marker(name, kind, why):
     marker."""
     return {"op": name, "kind": kind, "shape": {}, "energy_total_J": 0.0,
             "energy_residual_J": 0.0,
-            "energy_items": [{"group": "未统计", "item": why, "en": "not counted",
+            "energy_items": [{"group": "not counted", "item": why, "en": "not counted",
                               "value": UNMODELED, "unit": "", "note": why}],
             "latency_total_s": {"perfect_overlap_s": 0.0, "zero_overlap_s": 0.0},
-            "latency_items": [{"group": "未统计", "item": why, "en": "not counted",
+            "latency_items": [{"group": "not counted", "item": why, "en": "not counted",
                                "value": UNMODELED, "unit": "", "note": why}],
             "network_bound": False, "bottleneck_wire": None, "marker": why}
 
 
 def lw_glb_note():
-    return "每词访问能量取自同一 die 的 CiMLoop 校准值(ffn1 fixture 15.47 pJ/词)"
+    return "access energy per word from the CiMLoop calibration of the same die (ffn1 run: 15.47 pJ/word)"
 
 
 def ledger_for_op(r, phase, fab_scheme, cyc, d2d):
@@ -344,7 +344,7 @@ def ledger_for_op(r, phase, fab_scheme, cyc, d2d):
     rewrite_J = r["rewrite"]["energy_J"] if r.get("rewrite") else 0.0
     t_d2d, e_d2d, note = d2d
     ends_unit = op.name in ("out_proj", "ffn2")     # the two-dies-per-layer seating
-    d2d_note = note if ends_unit else "本算子不在单元边界(交接归 out_proj / ffn2)"
+    d2d_note = note if ends_unit else "not at a unit boundary (the hand-off belongs to out_proj / ffn2)"
     e_items, resid = energy_items(r["levels"], r["analysis"]["rows"],
                                   r["compute_J"], r["write_J"], rewrite_J,
                                   e_d2d if ends_unit else 0.0, d2d_note)
@@ -400,9 +400,9 @@ def type_table(ops, n_layers, condition):
                      "energy_J": e, "energy_share": e / E if E else 0.0,
                      "latency_s": l1, "latency_share": l1 / L1 if L1 else 0.0,
                      "latency_zero_overlap_s": l2, "note": note})
-    rows.append({"type": "已统计合计(矩阵乘 + 数字单元算子 + 片外读)", "op": "", "energy_J": E,
+    rows.append({"type": "counted total (matmuls + digital-unit operators + off-chip reads)", "op": "", "energy_J": E,
                  "energy_share": 1.0, "latency_s": L1, "latency_share": 1.0,
-                 "latency_zero_overlap_s": L2, "note": "占比以此为分母"})
+                 "latency_zero_overlap_s": L2, "note": "denominator of the shares"})
     for name, why in MODEL_UNMODELED_TYPES:
         rows.append({"type": name, "op": "", "energy_J": UNMODELED, "energy_share": "",
                      "latency_s": UNMODELED, "latency_share": "",
@@ -429,18 +429,18 @@ def write_outputs(result, out_dir):
         from scripts import fabric as _fm
         result["fabric"] = _fm.provenance(_fm.default())
         json.dump(result, f, indent=1, ensure_ascii=False)
-    md = ["# 按算子的开销账本", "",
-          f"模型 {result['model']},S={result['S']},{result['n_layers']} 层;"
-          f"基线:{result['basis']};走线方案 {result['scheme']},链路带宽 "
-          f"{result['bw_words_per_cycle']:,.0f} 词/周期(平台输入);记账:{result['wire_accounting']};"
-          f"最忙线占用 = 给定路由下任意调度的下界 × 调度松弛 {result.get('schedule_slack', 1.0):g}(O26)。",
-          "每行一项,不合并;标 **" + UNMODELED + "** 的项平台未建模。", ""]
+    md = ["# Per-operator cost ledger", "",
+          f"Model {result['model']}, S = {result['S']}, {result['n_layers']} layers; "
+          f"basis: {result['basis']}; wiring scheme {result['scheme']}, link bandwidth "
+          f"{result['bw_words_per_cycle']:,.0f} words/cycle (platform input); accounting: {result['wire_accounting']}; "
+          f"busiest-wire occupancy = the lower bound of any schedule for the given routing × the schedule slack {result.get('schedule_slack', 1.0):g}.",
+          "One row per item, nothing merged; items marked **" + UNMODELED + "** are not modelled by the platform.", ""]
     for phase, ph in result["phases"].items():
         n = result["n_layers"]
         md += [f"## {phase}", ""]
         for cond, tt in ph["type_tables"].items():
-            md += [f"### 算子类型 × 整模型占比 —— {tt['condition']}", "",
-                   "| 算子类型 | 整模型能量(mJ) | 能量占比 | 整模型延迟(ms,完美重叠端) | 延迟占比 | 整模型延迟(ms,零重叠端) | 备注 |",
+            md += [f"### Operator types, whole-model shares -- {tt['condition']}", "",
+                   "| operator type | whole-model energy (mJ) | energy share | whole-model latency (ms, perfect overlap) | latency share | whole-model latency (ms, zero overlap) | note |",
                    "|---|---|---|---|---|---|---|"]
             for r in tt["rows"]:
                 if isinstance(r["energy_J"], str):
@@ -450,8 +450,8 @@ def write_outputs(result, out_dir):
                               f"{r['latency_s']*1e3:,.2f} | {r['latency_share']:.1%} | "
                               f"{r['latency_zero_overlap_s']*1e3:,.2f} | {r['note']} |")
             md.append("")
-        md += ["### 每算子总量(一层 / ×层数,逐算子数据与条件无关)", "",
-               "| 算子 | 类型 | 总能量(µJ) | 整模型能量(mJ) | 延迟·完美重叠端(ms) | 延迟·零重叠端(ms) | 整模型延迟·完美重叠端(ms) | 网络受限 |",
+        md += ["### Per-operator totals (one layer / × layers; the per-operator data do not depend on the condition)", "",
+               "| operator | kind | total energy (µJ) | whole-model energy (mJ) | latency, perfect overlap (ms) | latency, zero overlap (ms) | whole-model latency, perfect overlap (ms) | network-bound |",
                "|---|---|---|---|---|---|---|---|"]
         for o in ph["ops"]:
             md.append(f"| {o['op']} | {o['kind']} | {o['energy_total_J']*1e6:,.2f} | "
@@ -459,22 +459,22 @@ def write_outputs(result, out_dir):
                       f"{o['latency_total_s']['perfect_overlap_s']*1e3:,.4f} | "
                       f"{o['latency_total_s']['zero_overlap_s']*1e3:,.4f} | "
                       f"{o['latency_total_s']['perfect_overlap_s']*n*1e3:,.2f} | "
-                      f"{'是' if o['network_bound'] else '否'} |")
+                      f"{'yes' if o['network_bound'] else 'no'} |")
         E = sum(o["energy_total_J"] for o in ph["ops"]) * n
         L1 = sum(o["latency_total_s"]["perfect_overlap_s"] for o in ph["ops"]) * n
         L2 = sum(o["latency_total_s"]["zero_overlap_s"] for o in ph["ops"]) * n
-        md += ["", f"整模型合计:能量 {E*1e3:,.3f} mJ;延迟 {L1*1e3:,.2f} ms(完美重叠端)"
-               f" / {L2*1e3:,.2f} ms(零重叠端)。", ""]
+        md += ["", f"Whole-model total: energy {E*1e3:,.3f} mJ; latency {L1*1e3:,.2f} ms (perfect overlap)"
+               f" / {L2*1e3:,.2f} ms (zero overlap).", ""]
         for o in ph["ops"]:
             shape = ",".join(f"{k}={v:,}" if isinstance(v, int) else f"{k}={v}"
                              for k, v in o["shape"].items())
             md += [f"### {phase} · {o['op']}({o['kind']}{',' + shape if shape else ''})", "",
-                   "能量:", "", "| 组 | 项 | 值 | 占算子总能量 | 备注 |", "|---|---|---|---|---|"]
+                   "Energy:", "", "| group | item | value | share of the operator's energy | note |", "|---|---|---|---|---|"]
             for it in o["energy_items"]:
                 share = "" if it["value"] == UNMODELED or o["energy_total_J"] == 0 \
                     else f"{it['value']/o['energy_total_J']:.2%}"
                 md.append(f"| {it['group']} | {it['item']} | {_num(it['value'], it['unit'])} | {share} | {it['note']} |")
-            md += ["", "延迟:", "", "| 组 | 项 | 值 | 备注 |", "|---|---|---|---|"]
+            md += ["", "Latency:", "", "| group | item | value | note |", "|---|---|---|---|"]
             for it in o["latency_items"]:
                 md.append(f"| {it['group']} | {it['item']} | {_num(it['value'], it['unit'])} | {it['note']} |")
             md.append("")
@@ -564,11 +564,11 @@ def make_figures(result, out_dir):
         plt.close(fig)
         # ---- latency: exposed view (critical path) per op
         fig, ax = plt.subplots(figsize=(10, 4.8))
-        seq = [("K/V 写(串行,在计算前)", "K/V write"),
-               ("阵列计算(Timeloop 周期)", "compute"),
-               ("网络暴露量(完美重叠端 = max(计算,占用) − 计算)", "network exposed (perfect overlap)"),
-               ("距离传播延迟", "propagation"),
-               ("die 间交接传输(本算子产出的隐状态)", "D2D hand-off (occupancy)"),
+        seq = [("K/V write (serial, before compute)", "K/V write"),
+               ("array compute (Timeloop cycles)", "compute"),
+               ("network exposure (perfect-overlap end = max(compute, occupancy) − compute)", "network exposed (perfect overlap)"),
+               ("distance propagation delay", "propagation"),
+               ("die-to-die hand-off transfer (hidden state produced by this operator)", "D2D hand-off (occupancy)"),
                ("digital compute", "digital compute (elementwise ops)"),
                ("off-chip read", "off-chip read (embedding)")]
         # English labels only in figures (the container's fonts lack CJK);
@@ -585,7 +585,7 @@ def make_figures(result, out_dir):
                 continue
             ax.bar(names, vals, bottom=bottom, color=c, label=lbl)
             bottom += vals
-        occ = np.array([lval(o, "最忙线占用(串行化)") for o in ops]) * 1e3
+        occ = np.array([lval(o, "busiest-wire occupancy (serialization)") for o in ops]) * 1e3
         ax.plot(names, occ, "kv", ms=6, label="busiest-wire occupancy (not exposed)")
         ax.set_ylabel("latency per op, one layer (ms)")
         ax.set_title(f"{result['model']} {phase}: latency per operator -- critical path "
@@ -666,14 +666,14 @@ def main(argv=None):
                       "marker row (run under CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml)",
                       flush=True)
                 ops.append(ledger_marker("lm_head", "static",
-                                         f"LM head 需 {need} 个 die,当前 fabric 只有 {have} 个:未统计;"
-                                         "用 CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml 运行"))
+                                         f"the LM head needs {need} dies, the current fabric has {have}: not counted; "
+                                         "run with CIMSIM_FABRIC=models/fabric/mlx300_multidie48.yaml"))
             else:
                 print(f"  {phase:<7} {lm.name:<9} (static, {need} dies, once per model)",
                       flush=True)
                 r = lw.run_op(lm, phase=phase, overcapacity="spatial_multi_die")
                 ops.append(ledger_for_op(r, phase, fab_scheme, r["result"].cycle_seconds,
-                                         (0.0, 0.0, "整模型末端算子,无交接")))
+                                         (0.0, 0.0, "model-end operator, no hand-off")))
         result["phases"][phase] = {
             "ops": ops,
             "type_tables": {c: type_table(ops, cfg.n_layers, c) for c in CONDITIONS}}

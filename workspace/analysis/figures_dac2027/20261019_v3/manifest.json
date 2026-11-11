@@ -3,21 +3,12 @@
  "code_version": "b9e5416+uncommitted-scripts",
  "products": [
   {
-   "name": "fig2_platform",
+   "name": "fig4_discrimination",
    "kind": "composites",
    "files": [
-    "composites/fig2_platform.pdf",
-    "composites/fig2_platform.svg",
-    "preview/fig2_platform.png"
-   ]
-  },
-  {
-   "name": "fig2a_platform",
-   "kind": "panels",
-   "files": [
-    "panels/fig2a_platform.pdf",
-    "panels/fig2a_platform.svg",
-    "preview/fig2a_platform.png"
+    "composites/fig4_discrimination.pdf",
+    "composites/fig4_discrimination.svg",
+    "preview/fig4_discrimination.png"
    ]
   }
  ]

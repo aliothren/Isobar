@@ -35,7 +35,7 @@ def test_energy_items_conserve_the_total():
     approx(resid, 5e-9, 1e-9)
     names = {i["item"] for i in items}
     for c in lv:
-        assert f"部件 {c}" in names, c
+        assert f"component {c}" in names, c
         assert c in GROUP, f"component {c} has no group annotation"
 
 
@@ -59,17 +59,17 @@ def test_latency_items_compose_to_both_bracket_ends():
         val = {i["item"]: i["value"] for i in items if i["value"] != UNMODELED}
         approx(tot["perfect_overlap_s"], 0.5e-3 + max(comp, ser) + 1e-7, 1e-12)
         approx(tot["zero_overlap_s"], 0.5e-3 + comp + ser + 1e-7, 1e-12)
-        exposed = val["网络暴露量(完美重叠端 = max(计算,占用) − 计算)"]
+        exposed = val["network exposure (perfect-overlap end = max(compute, occupancy) − compute)"]
         approx(exposed, max(comp, ser) - comp, 1e-12)
-        assert val["网络暴露量(零重叠端 = 占用)"] == ser
-        assert val["die 间交接传输(本算子产出的隐状态)"] == 2.9e-3
+        assert val["network exposure (zero-overlap end = occupancy)"] == ser
+        assert val["die-to-die hand-off transfer (hidden state produced by this operator)"] == 2.9e-3
 
 
 def test_unpriced_links_are_flagged():
     """A link component with zero energy (FIXLIST O1) is a row with the
     'unpriced' note, not a missing row."""
     items, _ = energy_items(_levels(), [], 1.0)
-    flagged = [i for i in items if "未计价" in i["note"]]
+    flagged = [i for i in items if "not priced" in i["note"]]
     assert flagged, "no unpriced-link rows found in the ffn1 fixture"
     assert all(i["value"] == 0.0 for i in flagged)
 

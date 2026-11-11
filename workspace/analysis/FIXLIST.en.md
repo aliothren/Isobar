@@ -1153,7 +1153,7 @@ and +13.4 ms (+1.1%) per model -- glb passes dominate the energy
 an order of magnitude below; decode: negligible. The digital unit's
 width decides the latency share, so `analyze_digital_sensitivity.py`
 sweeps lanes x clock (8-256 lanes, 0.5-2 GHz) for the real chip to be
-read off the curve. The ledger's "未建模故未统计" rows for these operators
+read off the curve. The ledger's "not modelled, not counted" rows for these operators
 are now numbers; group 20 pins element counts, scaling, the offload
 predicate, the stage single-source and the generic magnitudes. v4 fixture
 (matmul rows bit-identical to v3, plus the four elementwise rows).
@@ -1164,9 +1164,9 @@ predicate, the stage single-source and the generic magnitudes. v4 fixture
 one mapper run per operator) and writes, under `analysis/op_breakdown/`,
 a whole-model view per operator TYPE (the six matmuls x n_layers, shares
 of the counted total, under both conditions -- attention on chip /
-offloaded, where qk^t and av carry the marker "已卸载至片外单元,片上不统计"
+offloaded, where qk^t and av carry the marker "offloaded to the off-chip unit, not counted on chip"
 -- plus rows for softmax, GELU, LayerNorm, residual adds and embedding/LM
-head carrying "未建模故未统计"), then per-operator totals, then every cost
+head carrying "not modelled, not counted"), then per-operator totals, then every cost
 item on its own row: all 24 CiMLoop components (zero-energy links flagged
 "unpriced, O1"), the placement re-pricing per component, K/V write, weight
 rewrite, D2D hand-off surplus, and an explicit residual row (CiMLoop's

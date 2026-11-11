@@ -1,126 +1,60 @@
-# cimsim: a placement-aware system-level simulator for LLM inference on ReRAM compute-in-memory
+# Isobar: a simulation framework for topology-aware mapping on analog CIM chiplet systems
 
-cimsim models an LLM inference machine built from ReRAM compute-in-memory
-(CIM) dies as a **system**: package, die, macro, core, crossbar, with the
-weights resident in the crossbars and only activations and partial sums
-moving at run time. Its central object is the **physical placement** of the
-mapped operators on that hierarchy, the level that macro-level CIM modelling
-stops short of. The simulator prices what placement changes, the loads on
-shared links and ports, and combines them with the compute, write and
-digital costs into whole-model latency and dynamic energy. A phase diagram
-says under which device and link conditions placement decides the cost, and
-a deployment search chooses a placement when it does.
+This repository is the development tree of **Isobar**, the framework of the paper
 
-The simulator is built on [CiMLoop](https://github.com/mit-emze/cimloop)
-(Timeloop + Accelergy + CIM extensions), whose per-operator mapping and
-calibrated macro model are used unchanged as the lower layer. Everything
-above it is an overlay in `workspace/`.
+> **Scaling Up Analog CIM: A Simulation Framework for Topology-Aware Mapping**
+> Yuxin Ren, Danella Zhao, Huanrui Yang — The University of Arizona
+> ([Isobar_Arxiv.pdf](Isobar_Arxiv.pdf))
 
-## Results, frozen 2026-09-22
+It keeps the full history of the work: every script, record and figure set. The **`release` branch** holds the same final code reorganised for distribution, together with its documentation, the final figures and the paper; nothing in it depends on this branch's history.
 
-Main configuration: a 2.7B-class model (d 2560, 32 layers), 512-token
-serial prefill, 544 of 576 dies on a 24x24 mesh with XY routing, the
-NeuRRAM row time of 10.14 us, ports at twice the link rate (kappa = 2),
-0.4 GB/s per link direction (12.5 GB/s as the contrast).
+Isobar models LLM inference on ReRAM compute-in-memory (CIM) chiplet systems. The system has a package of CIM dies on a 2-D mesh, macros of RRAM crossbars on each die, and digital units with their own K/V memory for the input-dependent attention. Weights are resident, so only activations and partial sums move. The framework derives every hand-off between operators from the legal CIM decompositions and routes it onto links, die ports and digital-unit interfaces. It prices each mapping p = (γ, α, β) as T = R + H and searches over the mapping. Per-operator costs come from CiMLoop (Timeloop + Accelergy) runs of a NeuRRAM-class macro.
 
-| quantity | value | against |
-|---|---|---|
-| placement-search latency reduction, prefill | **9.91 %** (range over seeds 9.66 to 10.12 %) | the strongest evaluated baseline, a random fill at 2118.71 ms |
-| the same, against the default stacked fill | 54.5 % | 4192.54 ms |
-| the same at 12.5 GB/s | 0.70 % | strongest baseline at that bandwidth |
-| decode, re-scored, no separate search | 1.57 % | strongest baseline |
-| dynamic energy of the selected layout | -0.26 % | strongest baseline, 2.5229 J |
-| objective ablation: distance and hop proxies select layouts | 11.4 % / 11.2 % slower | the resource-aware objective's best endpoint |
-| intra-die assignment, GPT-2-medium class layer | 9.02 % lower layer latency | the contiguous assignment |
-| placement-dependent bandwidth band, package level | 0.535 to 1.421 GB/s (2.66x) | seven named seating rules at the NeuRRAM rate |
-| placement-dependent band, intra-die level | 0.606 to 1.616 GB/s (2.67x) | all 70 macro seatings, exhaustive |
+## Final results (paper)
 
-Every number has a ledger row with its numerator, denominator and
-statistic in [`workspace/analysis/main_config_results.md`](workspace/analysis/main_config_results.md)
-and a one-line entry in [`workspace/analysis/paper_numbers.md`](workspace/analysis/paper_numbers.md).
-The test suite pins them (443 tests).
+| result | value |
+|---|---|
+| Gemma-7B prefill, 1,232 dies, 0.4 GB/s links: searched mapping vs. the strongest baseline (prescribed rules + 500 random layouts) | communication −23.3%, end-to-end latency −18.6%, dynamic energy −0.65% |
+| the same against the default fill | 77.7% lower latency |
+| bandwidth the strongest baseline needs to match the searched mapping's communication time | 0.52 GB/s (+30.4%) |
+| OPT-6.7B / Gemma-7B / OPT-13B in three resource configurations (8 macros, 16 macros, four head-group units) | communication −14.8 to −24.0%, end-to-end −10.6 to −18.7% (seed medians) |
+| bandwidth envelope B₊/B₋ at the reference CIM speed | 2.67× over 70 intra-die macro assignments, 4.17× over six Gemma-7B package layouts |
+| silicon reference (Simba seating experiment) | 2.40× predicted vs. 2.53× measured, 5.1% error |
+| BookSim rank agreement (three candidate libraries) | Spearman ρ 0.966 / 0.984 / 0.973 |
+| selection quality against BookSim | Isobar 0.3–12.2% above the library optimum, word-hops 40.4–51.7% |
+| incremental evaluation / full search, 512–2,200 dies | 1.4–15.9 ms per move (26–38× faster than a full evaluation); 2.5–127.7 s per search |
+| OPT-13B QKV split on a 49 × 49 mesh, row vs. column | 13.39 → 11.22 s (η 17.5%) vs. 5.16 → 4.10 s (η 25.1%); QKV-to-unit traffic 6.29 vs. 0.315 GB |
+| modeled CIM dynamic energy per request vs. GPU | OPT-13B 58.61 J (93×) / 48.53 J (113×) vs. A100; Gemma-7B 11.45 J (166×) / 9.85 J (193×) vs. Jetson AGX Thor |
 
-## What the platform computes
+[`workspace/analysis/paper_numbers.md`](workspace/analysis/paper_numbers.md) gives every number with its workload, configuration, denominator, statistic and source file. [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md) is the account of the framework and the results.
 
-- **Inputs.** The workload, the operator tiling with its tensor
-  dependencies (produced by CiMLoop's mapper, taken as given), and the
-  hardware and execution configuration (fabric geometry, link and port
-  capacities, device row time, execution mode).
-- **One evaluation of a candidate deployment.** The block partition fixes
-  the logical communication; the die and macro placements fix the routed
-  paths under the fixed XY rule; the loads on every link direction and every
-  die port are accumulated per hand-off; the busiest resource of each
-  hand-off, in link-time units with ports at the declared ratio, is
-  combined with the execution relation (maximum within a stage, sum over
-  stages for the package; overlap with compute inside a die) and with the
-  compute, write and digital-unit costs into latency and dynamic energy.
-  The cost model is written out in [`formulation.md`](formulation.md).
-- **Phase analysis.** The same evaluation swept over device rate and link
-  bandwidth over a set of placements gives the placement phase diagram,
-  whose boundaries are the placement extrema of the communication cost.
-- **Deployment search.** A dynamic program over block cuts, simulated
-  annealing over die placement, and enumeration inside a die, all scoring
-  candidates with the same evaluation, incrementally.
-- **External references.** Published silicon placement measurements
-  (Simba), a cycle-level router simulator (BookSim) on the same candidate
-  placements, and the published link rates of HERMES and ISAAC projected
-  onto the instance.
+## Where the final data and figures are
 
-## Getting started
+| what | where |
+|---|---|
+| per-operator accounts | `workspace/analysis/scale_2p7b_per_op.json` (2.7B-class reference), `workspace/analysis/v4/accounts/` (models), `workspace/analysis/v4/models/model_end_costs.json` (LM head) |
+| deployment records | `workspace/analysis/v4/<unit>/configs.jsonl` (`analysis/v4` links to `/data/yuxinr/cimloop/analysis_v4`) |
+| BookSim libraries | `workspace/analysis/v3/e3_offload/`, `workspace/analysis/v3/e3_k2/` |
+| the tables behind the figures and tables | `workspace/analysis/v7/` and `workspace/analysis/v6/` (described in `v7/plot_data_dictionary.md`) |
+| the final figures | `workspace/analysis/figures_dac2027/20261019_v3/composites/` ([README](workspace/analysis/figures_dac2027/README.md)) |
+| the GPU energy comparison (Table III) | `workspace/gpu_comparison/` (`REPORT_gpu_comparison.md`, `AUDIT_energy.md`) |
 
-The simulator runs inside the CiMLoop container.
-
-```bash
-docker compose up -d                       # container cimloop-tutorial-1
-docker exec cimloop-tutorial-1 bash -c "cd /home/workspace && python3 tests/run_tests.py"
-```
-
-Regenerating the frozen results, from `/home/workspace` inside the container:
-
-```bash
-python3 scripts/kappa_geometry_sweep.py     # the search per port ratio and geometry
-python3 scripts/main_config_export.py       # the main-configuration table and ledger
-python3 scripts/mechanism_table.py          # resource loads behind the ranking
-python3 scripts/energy_export.py            # dynamic energy of the frozen layouts
-ISOBAR_KAPPA=2 python3 scripts/fig_phase_isobar.py        # the phase diagram
-python3 scripts/plot_dac2027_v2.py --run-id 20260921_v2   # the paper figure set
-```
-
-Container-written files are owned by root; change ownership before editing
-them on the host. Clear `__pycache__` in the container before running a
-script edited on the host.
+[`docs/02_final_pipeline.md`](docs/02_final_pipeline.md) lists the commands that produced each of them.
 
 ## Repository map
 
-| path | what it holds | guide |
+| path | content | guide |
 |---|---|---|
-| `workspace/analysis/` | results, records, figures and the documents that carry them | [README](workspace/analysis/README.md) |
-| `workspace/scripts/` | the platform (fabric, placement, interconnect, workload, evaluator, search) and every analysis script | [README](workspace/scripts/README.md) |
-| `workspace/models/` | CiMLoop's device, circuit, architecture and workload models, plus the fabric descriptions of this work | [README](workspace/models/README.md) |
-| `workspace/tests/` | the guardrail suite that pins every published number | [README](workspace/tests/README.md) |
-| `workspace/tools/` | BookSim, the router simulator used as an external reference | [README](workspace/tools/README.md) |
-| `workspace/tutorials/` | CiMLoop's tutorial notebooks | [README](workspace/tutorials/README.md) |
-| `workspace/outputs/` | Timeloop mapper output directories, regenerated by the runs | [README](workspace/outputs/README.md) |
-| `io_study/` | the upstream CiMLoop tree kept for reference | [README](io_study/README.md) |
-| `formulation.md` | the cost model as frozen | |
-| `EXTERNAL_DEPENDENCIES.md` | external tools pinned by version, not committed | |
-
-## Documents
-
-- [`docs/`](docs/README.md): the user guide: setup, the fabric file, the workload account, evaluating a deployment, running the search, the phase diagram, BookSim checks, regenerating results.
-- [`workspace/analysis/SUMMARY.en.md`](workspace/analysis/SUMMARY.en.md): the account of the platform and its results, written to the stance the paper takes.
-- [`workspace/analysis/main_config_results.md`](workspace/analysis/main_config_results.md), [`paper_numbers.md`](workspace/analysis/paper_numbers.md), [`METRICS.md`](workspace/analysis/METRICS.md): the frozen numbers, their denominators and statistics.
-- [`workspace/analysis/ANCHORS.md`](workspace/analysis/ANCHORS.md): every published bandwidth and device figure used as a reference, with its source and status.
-- [`workspace/analysis/SEARCH_SPEC.en.md`](workspace/analysis/SEARCH_SPEC.en.md): the search's specification as implemented.
-- [`workspace/analysis/FIXLIST.en.md`](workspace/analysis/FIXLIST.en.md): the chronological record of every model change and correction.
-- [`workspace/analysis/figures_dac2027/`](workspace/analysis/figures_dac2027/README.md): the paper figure sets with their data and captions.
+| `docs/` | setup and the final pipeline on this branch | [README](docs/README.md) |
+| `formulation.md` | the cost model | |
+| `workspace/scripts/` | the framework and every analysis script | [README](workspace/scripts/README.md) |
+| `workspace/analysis/` | records, exports, figures and the documents that carry them | [README](workspace/analysis/README.md) |
+| `workspace/models/` | CiMLoop models and the fabric files of this work | [fabric README](workspace/models/fabric/README.md) |
+| `workspace/gpu_comparison/` | full-request energy against GPU baselines | `REPORT_gpu_comparison.md` |
+| `workspace/tests/` | the guardrail suite of the platform modules | [README](workspace/tests/README.md) |
+| `workspace/tools/` | BookSim 2 (built locally, patched) | [README](workspace/tools/README.md) |
+| `workspace/tutorials/`, `io_study/` | CiMLoop's tutorials and the upstream tree, for reference | |
 
 ## Relation to CiMLoop, dependencies, license
 
-cimsim is a fork of CiMLoop and keeps its structure, models and license.
-CiMLoop's own tutorials and model guides remain under `workspace/tutorials/`
-and `workspace/models/`. External tools that are not committed (NeuroSim,
-BookSim sources) are listed with pinned versions in
-[`EXTERNAL_DEPENDENCIES.md`](EXTERNAL_DEPENDENCIES.md). The license is in
-[`LICENSE`](LICENSE); the upstream citations are in
-[`citations.bib`](citations.bib).
+Isobar is a fork of [CiMLoop](https://github.com/mit-emze/cimloop) and keeps its structure, models and MIT license; CiMLoop's per-operator mapping and calibrated macro model are used unchanged as the lower layer. External tools that are not committed (BookSim sources, NeuroSim) are listed in [`EXTERNAL_DEPENDENCIES.md`](EXTERNAL_DEPENDENCIES.md). Upstream citations: [`citations.bib`](citations.bib).

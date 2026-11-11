@@ -1,49 +1,79 @@
-# Numbers for the paper (S9, 2026-09-17)
+# Numbers of the paper
 
-Every entry: workload · hardware configuration · level · denominator · statistic. Sources: FIXLIST S9 and the JSON artifacts named there.
+Every number of the final paper, with its workload, configuration, denominator, statistic and the file it is read from. Paths are relative to `workspace/analysis/`. The reference configuration is:
 
-## Main result
+- links at 0.4 GB/s per direction, CIM die ports at κ = 2 (0.8 GB/s);
+- XY routing, 20 ns per hop;
+- 8 macros per die, NeuRRAM row time 10.14 µs;
+- one central digital unit: 2 TMAC/s, K/V memory 2 GB at 25.6 GB/s, 12.5 GB/s interface, 8 MB workspace;
+- batch 1, 512-token prefill.
 
-| # | number | workload | hardware / execution | level | denominator | statistic |
-|---|---|---|---|---|---|---|
-| 1 | **9.9%** latency reduction | 2.7B, batch 1, S = 512, prefill | 24×24 mesh, XY, 544/576 dies, NeuRRAM row time, 0.4 GB/s, κ = 2 | whole model | strongest baseline (random_s3, 2119 ms) | median of 3 seeds (best over 3 starts); range 9.7–10.1% |
-| 2 | 54% | same | same | whole model | A4 default (stacked) fill, 4193 ms | same |
-| 3 | 0.70% | same | same at 12.5 GB/s | whole model | strongest baseline | same |
-| 4 | 1.57% | decode: 1 token over 512-token cache | same at 0.4 GB/s | whole model | strongest baseline | same; no decode search (ranking 0.987) |
+## Gemma-7B main case (Fig. 5)
 
-## Sensitivity and mechanism
+Gemma-7B, 1,232 dies on a 36 × 36 mesh. Confirmation protocol: 500 random layouts, seeds 5–14, objective H / H_b. The best baseline is `random_s209`; the search representative is `sa_random_best_s5`, the median seed's best run.
 
-| # | number | meaning | denominator | source |
-|---|---|---|---|---|
-| 5 | 1.86% / 9.9% / 9.92% | gain at κ = 1 / 2 / 4 | that cell's strongest baseline | kappa_geometry_sweep, main_config_results |
-| 6 | 6.7% | hardware gain of κ 1→2 itself (best baseline), not placement | κ = 1 best baseline | kappa_geometry_sweep |
-| 7 | 9.8% | gain on the 12×48 geometry, κ = 2 | that cell's strongest baseline | kappa_geometry_sweep |
-| 8 | 2.66× | package envelope B₊/B₋, κ = 2 (κ = 1: 2.37×) | min over 7 rules | phase_diagram_isobar_k2 |
-| 9 | B₋ 0.535 / B₊ 1.421 GB/s | placement-dependent band at the NeuRRAM rate, κ = 2 | — | same |
-| 10 | η = 17.5%, r = 56.5% → G = 9.9% | fixed pair at 0.4 GB/s; G = η·r identity | reference = random_s3 | bw_slice_k2 |
-| 11 | 11.4% / 11.2% | loss avoided vs distance / hop proxies at κ = 2 | resource-aware endpoint | objective_ablation_k2 |
-| 12 | 2.67×; B₋ 0.606 / B₊ 1.616 GB/s | intra-die envelope (A3 ffn die, exhaustive) and its per-op masking thresholds at the NeuRRAM rate; 0.4 GB/s below B₋, ≥ 1.62 above B₊ | min / max over 70 seatings ÷ per-op compute | phase_diagram_isobar (F-FIG1a) |
-| 13 | 9.0% (9.5% without package term) | intra-die β gain, 355M-class layer at 0.4 GB/s | shipped seating's layer time | intra_die_integration |
-| 14 | ρ 0.962; +12–31% | packet judge on the synthetic fan-out batch (κ = 1, 24×24, 17 dies/stage) | best random draw under BookSim | b_fanout_24x24_rerank |
-| 15 | 1.34 ms / 37 ms / ~2 s | incremental score / full score / one 1200-step run, 2.7B, 544 dies | — | timing_probe, kappa_geometry_sweep |
+| number | meaning | denominator | file |
+|---|---|---|---|
+| −23.3% | communication time of the representative | best baseline, H 2.623 s | `v7/gemma_checks.json` (`pair.eta_comm`) |
+| −18.6% | end-to-end latency | best baseline, T 3.290 s | same (`pair.G_actual_pair`) |
+| 77.7% | latency below the default fill (12.00 → 2.68 s) | default fill | `v7/gemma_panel_a.csv` |
+| −0.65% | dynamic energy | best baseline | `v7/gemma_checks.json` (`energy.dE_pair`) |
+| 81.8% | share of the saving in the out_proj→FFN1 and FFN1→FFN2 hand-offs | total saving 611 ms | `v6/gemma_stage_delta.csv` |
+| 0.52 GB/s (+30.4%) | bandwidth the best baseline needs to match the representative's H at 0.4 GB/s | 0.4 GB/s | `v6/gemma_bandwidth_equivalence.csv` |
+| −14.4% E, +29.1% T | least-Manhattan rule | best random layout | `v6/gemma_candidates.csv` |
 
-Not to be combined: #14 is a communication-batch time, not the 2.7B whole model; #13 is layer-level on another instance; #6 is hardware, not placement.
+## Across models and configurations (Fig. 6)
 
-## Provenance and mechanism pointers (S10)
+OPT-1.3B, OPT-6.7B, Gemma-7B and OPT-13B, prefill 512, confirmation protocol, in three configurations:
 
-- Every percentage above has a ledger row in `main_config_results.md` (numerator layout, denominator layout, absolute ms, statistic); #2's denominator, the A4 default fill, is the sequential rule (identical loads), 4192.5 ms at κ = 2.
-- The random sample is the five declared seeds (0–4), spread 1.6% at 0.4 GB/s (2118.7–2153.1 ms); the strongest baseline random_s3 is its minimum. The headline is not a gain over the random median.
-- Why random beats the adapted rules and the search beats random: `mechanism_table.md` (flows stacked on the busiest ffn2 link: 25 → 10 → 8–10 → 5; word-hops 4 G vs 22 G).
-- Fig. 1(a) and the A3 case are one instance (gpt2-medium class, d 1024, S 512, 2×4 macro mesh): `intra_die_correspondence.md` gives the identity table, per-op states at 0.4 GB/s, and how max(compute, serialization) makes the panel's boundaries the masking thresholds.
-- Baseline scope: `baseline_provenance.md`.
+- (a) 8 macros per die, central unit;
+- (b) 16 macros per die, central unit;
+- (c) 8 macros per die, four head-group units sharing the reference resources.
 
-## Dynamic energy (S10 section 6; `energy_export.md`)
+| number | meaning | statistic | file |
+|---|---|---|---|
+| 14.8–24.0% | communication saving vs. the best baseline, OPT-6.7B / Gemma-7B / OPT-13B, nine cells | seed median | `v7/ninecell_metrics.csv` |
+| 10.6–18.7% | end-to-end saving, same cells | seed median | same |
+| bar labels (+22.1 … +33.3%; OPT-1.3B 26.5%, 0.0%, 26.8%) | communication saving of the search median over the random-pool median | medians | `figures_dac2027/20261019_v3/data/fig6_ninecell.csv` |
 
-| # | number | meaning | denominator | source |
-|---|---|---|---|---|
-| 16 | +0.26% (range +0.10…+0.56% over 9 endpoints) | system dynamic energy change of the headline layout vs the strongest baseline; communication energy +2.94% | random_s3, 2.5229 J | energy_export |
-| 17 | 9.0% / 1.8% | communication share of dynamic energy, dispersed (random_s3) / compact rules | that layout's E | energy_export |
-| 18 | +7.33% energy, 20.4% latency | clustered (E-best of the set) vs random_s3: the compact-vs-dispersed trade-off | random_s3 | energy_export |
-| 19 | not modelled | intra-die (A3) energy: no pJ/word on the macro link, no per-op energy for d = 1024 | — | energy_export |
+## Phase diagram (Fig. 1)
 
-Model: E = per-op CiMLoop energy + elementwise (digital unit) + payload words × max(XY hops, 1) × 10 pJ/word (Simba GRS band midpoint); static power not modelled; independent of B and κ. Named "dynamic energy" throughout.
+| number | meaning | file |
+|---|---|---|
+| 2.67× | intra-die envelope B₊/B₋ over the 70 macro assignments of the FFN die at the reference rate | `v7/intradie_phase_curves.csv` |
+| 4.17× | package envelope over six Gemma-7B layouts at the reference rate | `v7/phase_boundary_curves.csv` |
+| 20% contour | total-latency spread across the evaluated layouts | `v7/phase_grid.csv` |
+| projected designs | ISAAC, HERMES (1- and 4-phase), NeuRRAM at 0.4 and 12.5 GB/s, Mythic M1076, Simba | `v7/phase_projection_points.csv` |
+
+## Validation and cost (Figs. 3, 4)
+
+| number | meaning | file |
+|---|---|---|
+| 2.40× vs. 2.53×, 5.1% error | Simba seating: protocol estimate vs. measured latency ratio, farthest / adjacent seating; resource bound 1.007× | `v7/silicon_reference.csv` |
+| ρ 0.966 / 0.984 / 0.973 | Spearman rank correlation with BookSim: one-layer prefill, one-layer decode, two-layer prefill | `v7/booksim_library_summary.csv` |
+| 1.94 vs. 1.82 | B/A communication-time ratio of two equal-word-hops layouts: Isobar vs. BookSim | `v7/equivalent_candidate_groups.csv` |
+| 0.3–12.2% vs. 40.4–51.7% | BookSim time of the layout selected by Isobar vs. by word-hops, above the library minimum | `v7/booksim_selection_by_objective.csv` |
+| 1.4–15.9 ms, 26–38× | incremental update per move and speed-up over a full evaluation, 512–2,200 dies | `v7/runtime_summary.csv` |
+| 2.5 / 8.1 / 43.9 / 127.7 s | one representative search: 2.7B reference, OPT-6.7B, Gemma-7B, OPT-13B | `v7/search_trajectories.json` |
+
+## Configuration dependence (Fig. 7, Table II)
+
+Fig. 7 uses the exploration protocol: 100 random layouts, seeds 0–4.
+
+| number | meaning | file |
+|---|---|---|
+| η 23.3%, r₀ 79.7%, G 18.6% at 0.4 GB/s | bandwidth response of the fixed Gemma pair; the crossover envelope 1.63–6.79 GB/s | `v7/gemma_bandwidth_response.csv` |
+| 3.33 / 3.46 / 3.03 s → 2.68 / 2.88 / 2.46 s | Gemma-7B backbone time, baseline → search: one unit, four layer-group units, four head-group units | `v7/resource_organization_comparison.csv` |
+| 17.5% (prefill), 2.6% (decode) | Gemma-7B backbone saving at 4096 tokens | `v7/workload_length_sweep.csv` |
+| Row: 2,200 dies, 6.29 GB, 13.39 → 11.22 s, η 17.5%; Column: 2,400 dies, 0.315 GB, 5.16 → 4.10 s, η 25.1% | OPT-13B QKV split on a 49 × 49 mesh (confirmation protocol) | `v7/qkv_common_grid_comparison.csv` |
+
+## GPU comparison (Table III)
+
+Modeled CIM dynamic energy per request against reported GPU energy, at batch 1 with a 16-bit K/V cache. OPT-13B is compared with one A100 (64 input : 1024 output tokens, 5473.7 J); Gemma-7B with a Jetson AGX Thor board (13–345 input : 500 output tokens, mean 1898.7 J).
+
+| configuration | CIM energy | GPU / CIM | file |
+|---|---|---|---|
+| OPT-13B, 8 macros | 58.61 J | 93× | `../gpu_comparison/comparison_summary.csv` (`A0_ref_kv16`) |
+| OPT-13B, 16 macros | 48.53 J | 113× | same (`A1_m16_kv16`) |
+| Gemma-7B, 8 macros | 11.45 J | 166× | same (`B0_ref_kv16`) |
+| Gemma-7B, 16 macros | 9.85 J | 193× | same (`B1_m16_kv16`) |
