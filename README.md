@@ -5,7 +5,8 @@ Isobar is a simulation framework for **topology-aware mapping in analog compute-
 This repository contains the framework, the experiment scripts, and instructions for reproducing the results of the paper
 
 > **Scaling Up Analog CIM: A Simulation Framework for Topology-Aware Mapping**
-> Yuxin Ren, Danella Zhao, Huanrui Yang. The University of Arizona. ([paper/Isobar_Arxiv.pdf](paper/Isobar_Arxiv.pdf))
+>
+> [[arXiv](https://arxiv.org/abs/2611.08399)] [[PDF](paper/Isobar_Arxiv.pdf)]
 
 ## What you can do with it
 
@@ -53,6 +54,14 @@ workspace/
   outputs/        temporary CiMLoop run folders of the measurements (not tracked)
 ```
 
-## Citation and license
+## Citation
 
-See [CITATION.bib](CITATION.bib). Isobar builds on CiMLoop, Timeloop and Accelergy and uses BookSim 2 for validation. MIT license, see [LICENSE](LICENSE).
+If you use Isobar, please cite the paper; the BibTeX entry is in [CITATION.bib](CITATION.bib). Isobar builds on CiMLoop, Timeloop and Accelergy and uses BookSim 2 for validation; their references are in the same file.
+
+## Acknowledgment
+
+We thank TetraMem, Inc. for the research collaboration grant and the computation resources that supported this work.
+
+## License
+
+MIT license, see [LICENSE](LICENSE).
